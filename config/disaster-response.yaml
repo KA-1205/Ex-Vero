@@ -1,0 +1,21 @@
+adapters:
+  - name: text
+    modality: text
+    model: BAAI/bge-small-en-v1.5
+    # dim will be derived from the model
+
+policy:
+  novelty_threshold_high: 0.98
+  novelty_threshold_low: 0.70
+  urgency_keywords:
+    - "structural collapse"
+    - "gas"
+    - "no pulse"
+    - "bleeding"
+    - "unconscious"
+  urgency_threshold: 0.8
+  pii_patterns:
+    - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN
+    - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # email
+  required_fields: ["status", "timestamp", "reporter_device_id"]
+  bandwidth: "FULL"

@@ -1,0 +1,22 @@
+[project]
+name = "edge-node"
+version = "0.1.0"
+description = "Aegis Edge — offline-first edge memory kernel device node"
+readme = "README.md"
+authors = [
+    { name = "Kartik Arora", email = "kartikarora.1205@outlook.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.141.1",
+    "fastembed>=0.8.1",
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
+    "qdrant-edge-py==0.8.0",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"

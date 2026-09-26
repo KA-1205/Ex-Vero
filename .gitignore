@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Local runtime state — shards and WAL are machine-specific, never committed
+shards/
+*.wal
+
+# Local config overrides. The committed config/*.yaml are the per-vertical
+# configs and are tracked; anything machine-local is not.
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
