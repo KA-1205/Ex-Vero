@@ -8,7 +8,7 @@ import edge_node.main as main
 from edge_node.main import generate_point_id
 from edge_node.registry import load_adapters
 from edge_node.adapter import TextAdapter
-from qdrant_edge import EdgeConfig, EdgeVectorParams, Distance
+from qdrant_edge import EdgeConfig, EdgeVectorParams, Distance, EdgeSparseVectorParams, Modifier
 import yaml
 
 def test_adapter_loading():
@@ -50,8 +50,10 @@ def test_capture_and_query_same_process():
             config_path = str(main.DEFAULT_CONFIG_PATH)
             main.adapters = load_adapters(config_path)
             vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
+            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
             main.edge_config = EdgeConfig(
                 vectors=vectors,
+                sparse_vectors=sparse_vectors,
                 max_search_threads=2,
                 search_pool_core=0,
             )
@@ -62,6 +64,9 @@ def test_capture_and_query_same_process():
             policy_config = full_config.get('policy', {})
             from edge_node.decision_engine import DecisionEngine
             main.decision_engine = DecisionEngine(policy_config)
+            # Initialize BM25 (needed for capture)
+            from qdrant_edge import Bm25
+            main.bm25 = Bm25()
             # Also clear feed
             from edge_node.decision_engine import clear_feed
             clear_feed()
@@ -142,3 +147,71 @@ def test_shard_dimension_mismatch():
     # We'll skip this for now because it requires mocking the adapter dim.
     # We'll mark it as skipped.
     pass
+
+
+def test_hybrid_search():
+    # Test that hybrid (dense+BM25) query works and returns results.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            # Initialize app state similar to previous test
+            config_path = str(main.DEFAULT_CONFIG_PATH)
+            main.adapters = load_adapters(config_path)
+            vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
+            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
+            main.edge_config = EdgeConfig(
+                vectors=vectors,
+                sparse_vectors=sparse_vectors,
+                max_search_threads=2,
+                search_pool_core=0,
+            )
+            main.device_shards = {}
+            with open(config_path, 'r') as f:
+                full_config = yaml.safe_load(f)
+            policy_config = full_config.get('policy', {})
+            from edge_node.decision_engine import DecisionEngine
+            main.decision_engine = DecisionEngine(policy_config)
+            from qdrant_edge import Bm25
+            main.bm25 = Bm25()
+            from edge_node.decision_engine import clear_feed
+            clear_feed()
+            
+            client = TestClient(main.app)
+            device_id = "test_device"
+            
+            # Capture a document with a term that is likely unknown to the dense model but will match via BM25
+            doc_text = "quantumfluxinator"
+            capture_response = client.post(
+                f"/devices/{device_id}/capture",
+                json={
+                    "device_id": device_id,
+                    "corroboration_key": "key1",
+                    "value": doc_text
+                }
+            )
+            assert capture_response.status_code == 200
+            capture_data = capture_response.json()
+            point_id = capture_data["id"]
+            assert point_id is not None
+            
+            # Query using the same term (should match via BM25)
+            query_response = client.post(
+                f"/devices/{device_id}/query",
+                json={
+                    "device_id": device_id,
+                    "text": "quantumfluxinator"
+                }
+            )
+            assert query_response.status_code == 200
+            query_data = query_response.json()
+            assert "results" in query_data
+            assert len(query_data["results"]) > 0
+            # Check that the captured point is in results
+            found = any(res["id"] == point_id for res in query_data["results"])
+            assert found, f"Point {point_id} not found in hybrid query results"
+            # Latency should be positive
+            assert query_data["latency_ms"] > 0
+            
+        finally:
+            os.chdir(old_cwd)
