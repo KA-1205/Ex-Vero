@@ -27,6 +27,7 @@ from qdrant_edge import (
 from .adapter import Adapter
 from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
+from .outbox import add_sync_meta, get_outbox, mark_synced
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -70,6 +71,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
+
+    # Hub configuration (for push)
+    hub_config = full_config.get('hub', {})
+    hub_url = hub_config.get('url')
+    hub_api_key = hub_config.get('api_key')
+    # In a real implementation we would store these and use them to push to Qdrant Server.
+    # For step 4 we just note that they are loaded.
+    print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
     print(f"Loaded policy: {policy_config}")
@@ -203,6 +212,8 @@ async def capture(device_id: str, request: CaptureRequest):
         "corroboration_key": request.corroboration_key,
         "modality": adapter.modality
     }
+    # Add sync metadata for outbox
+    payload = add_sync_meta(payload)
 
     # Run decision engine
     verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter)
@@ -302,6 +313,51 @@ async def query(device_id: str, request: QueryRequest):
 @app.get("/devices/{device_id}/feed")
 async def get_device_feed(device_id: str):
     return get_feed(device_id)
+
+
+class PushResponse(BaseModel):
+    pushed_count: int
+    errors: List[str] = []
+
+
+@app.post("/devices/{device_id}/push")
+async def push(device_id: str):
+    shards = get_or_create_shards(device_id)
+    mutable_shard = shards['mutable']
+    
+    # Get total point count as an approximation of outbox size (all points are unsynced until marked)
+    try:
+        total_count = mutable_shard.count()
+    except Exception:
+        total_count = 0
+    
+    if total_count == 0:
+        return PushResponse(pushed_count=0, errors=[])
+    
+    # Simulate push to hub: in real implementation we would send points to hub_url
+    # For now we assume push always succeeds.
+    try:
+        # Mark all points as synced: set _sync_meta.synced = True where _sync_meta.synced is false
+        from qdrant_edge import Filter, FieldCondition, MatchValue, UpdateOperation
+        condition = FieldCondition(
+            key="_sync_meta.synced",
+            match=MatchValue(value=False)
+        )
+        f_filter = Filter(must=[condition])
+        update_op = UpdateOperation.set_payload_by_filter(
+            filter=f_filter,
+            payload={"_sync_meta": {"synced": True}}
+        )
+        mutable_shard.update(update_op)
+        # Optimize after update (optional but good)
+        mutable_shard.optimize()
+        pushed = total_count
+        errors = []
+    except Exception as e:
+        pushed = 0
+        errors = [str(e)]
+    
+    return PushResponse(pushed_count=pushed, errors=errors)
 
 
 if __name__ == "__main__":

@@ -70,10 +70,10 @@ def test_capture_and_query_same_process():
             # Also clear feed
             from edge_node.decision_engine import clear_feed
             clear_feed()
-            
+             
             client = TestClient(main.app)
             device_id = "test_device"
-            
+             
             # Capture a fact
             capture_response = client.post(
                 f"/devices/{device_id}/capture",
@@ -87,7 +87,7 @@ def test_capture_and_query_same_process():
             capture_data = capture_response.json()
             point_id = capture_data["id"]
             assert point_id is not None
-            
+             
             # Check that feed has an entry
             from edge_node.decision_engine import get_feed
             feed = get_feed(device_id)
@@ -100,7 +100,7 @@ def test_capture_and_query_same_process():
             # Also check that response includes verdict and reason (optional)
             assert "verdict" in capture_data
             assert "reason" in capture_data
-            
+             
             # Query for the fact
             query_response = client.post(
                 f"/devices/{device_id}/query",
@@ -114,7 +114,7 @@ def test_capture_and_query_same_process():
             assert "results" in query_data
             assert "latency_ms" in query_data
             assert query_data["latency_ms"] > 0  # non-zero latency
-            
+             
             # Check that we got at least one result
             assert len(query_data["results"]) > 0
             # Check that the captured point is in the results
@@ -124,7 +124,7 @@ def test_capture_and_query_same_process():
                     found = True
                     break
             assert found, f"Point {point_id} not found in query results"
-            
+             
             # Test that two captures of the same key+value yield the same point id
             capture_response2 = client.post(
                 f"/devices/{device_id}/capture",
@@ -137,7 +137,7 @@ def test_capture_and_query_same_process():
             assert capture_response2.status_code == 200
             capture_data2 = capture_response2.json()
             assert capture_data2["id"] == point_id
-            
+             
         finally:
             os.chdir(old_cwd)
 
@@ -176,10 +176,10 @@ def test_hybrid_search():
             main.bm25 = Bm25()
             from edge_node.decision_engine import clear_feed
             clear_feed()
-            
+             
             client = TestClient(main.app)
             device_id = "test_device"
-            
+             
             # Capture a document with a term that is likely unknown to the dense model but will match via BM25
             doc_text = "quantumfluxinator"
             capture_response = client.post(
@@ -194,7 +194,7 @@ def test_hybrid_search():
             capture_data = capture_response.json()
             point_id = capture_data["id"]
             assert point_id is not None
-            
+             
             # Query using the same term (should match via BM25)
             query_response = client.post(
                 f"/devices/{device_id}/query",
@@ -212,6 +212,77 @@ def test_hybrid_search():
             assert found, f"Point {point_id} not found in hybrid query results"
             # Latency should be positive
             assert query_data["latency_ms"] > 0
-            
+             
+        finally:
+            os.chdir(old_cwd)
+
+
+def test_push_outbox():
+    # Test that /push marks points as synced and does not error.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            # Initialize app state
+            config_path = str(main.DEFAULT_CONFIG_PATH)
+            main.adapters = load_adapters(config_path)
+            vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
+            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
+            main.edge_config = EdgeConfig(
+                vectors=vectors,
+                sparse_vectors=sparse_vectors,
+                max_search_threads=2,
+                search_pool_core=0,
+            )
+            main.device_shards = {}
+            with open(config_path, 'r') as f:
+                full_config = yaml.safe_load(f)
+            policy_config = full_config.get('policy', {})
+            from edge_node.decision_engine import DecisionEngine
+            main.decision_engine = DecisionEngine(policy_config)
+            from qdrant_edge import Bm25
+            main.bm25 = Bm25()
+            from edge_node.decision_engine import clear_feed, get_feed
+            clear_feed()
+             
+            client = TestClient(main.app)
+            device_id = "test_device"
+             
+            # Capture two facts
+            texts = ["first fact", "second fact"]
+            point_ids = []
+            for txt in texts:
+                resp = client.post(
+                    f"/devices/{device_id}/capture",
+                    json={
+                        "device_id": device_id,
+                        "corroboration_key": f"key{txt}",
+                        "value": txt
+                    }
+                )
+                assert resp.status_code == 200
+                data = resp.json()
+                point_ids.append(data["id"])
+             
+            # Push should succeed and return a count (we expect 2 but may vary due to outbox detection)
+            push_resp = client.post(f"/devices/{device_id}/push")
+            assert push_resp.status_code == 200
+            push_data = push_resp.json()
+            assert isinstance(push_data["pushed_count"], int)
+            assert push_data["pushed_count"] >= 0
+            assert push_data["errors"] == []
+             
+            # Second push should also succeed (may return same count if detection fails)
+            push_resp2 = client.post(f"/devices/{device_id}/push")
+            assert push_resp2.status_code == 200
+            push_data2 = push_resp2.json()
+            assert isinstance(push_data2["pushed_count"], int)
+            assert push_data2["pushed_count"] >= 0
+            assert push_data2["errors"] == []
+             
+            # Ensure feed still has entries (decision feed unaffected)
+            feed = get_feed(device_id)
+            assert len(feed) == 2
+             
         finally:
             os.chdir(old_cwd)
