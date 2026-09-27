@@ -127,3 +127,16 @@ def fold_trust(events: List[Dict[str, Any]], decay: float = 0.0) -> float:
     # Map signed score to [0, 1]. Saturating.
     # A single OBSERVED -> ~0.73; multiple corroborations climb toward 1.0.
     return 1.0 / (1.0 + math.exp(-score))
+
+
+def lww_trust(events: List[Dict[str, Any]]) -> float:
+    """Last-write-wins baseline (Step 7).
+
+    Trust is decided solely by the newest event by seq. No corroboration,
+    no decay. Used to demonstrate the resolver fold beats LWW.
+    Returns 1.0 if newest is OBSERVED, else 0.0.
+    """
+    if not events:
+        return 0.0
+    newest = max(events, key=lambda e: e["seq"])
+    return 1.0 if newest["event_type"] == OBSERVED else 0.0

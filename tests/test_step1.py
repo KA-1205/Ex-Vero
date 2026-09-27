@@ -464,3 +464,66 @@ def test_fold_is_pure_order_independent():
     assert len(results) == 1  # order independent
     # newest is RETRACTED -> trust 0
     assert next(iter(results)) == 0.0
+
+
+def test_trust_decay_from_config():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init_app_state()
+            client = TestClient(main.app)
+            device_id = "dev_decay"
+            cap = client.post(f"/devices/{device_id}/capture",
+                              json={"device_id": device_id,
+                                    "corroboration_key": "k",
+                                    "value": "gas leak reported"})
+            pid = cap.json()["id"]
+            client.post(f"/devices/{device_id}/push")
+            data = client.get(f"/devices/{device_id}/trust/{pid}").json()
+            # decay must be surfaced and match config (0.3)
+            assert "decay" in data
+            assert abs(data["decay"] - 0.3) < 1e-9
+            # lww_trust also surfaced
+            assert "lww_trust" in data
+        finally:
+            os.chdir(old_cwd)
+
+
+def test_resolver_beats_lww_benchmark():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init_app_state()
+            client = TestClient(main.app)
+            resp = client.get("/benchmark/resolver-vs-lww")
+            assert resp.status_code == 200
+            data = resp.json()
+            # LWW is flat 1.0 regardless of corroboration count.
+            assert data["lww_1obs"] == 1.0
+            assert data["lww_5obs"] == 1.0
+            assert data["lww_gain_from_corroboration"] == 0.0
+            # Resolver confidence climbs with corroboration.
+            assert data["resolver_5obs"] > data["resolver_1obs"]
+            assert data["resolver_gain_from_corroboration"] > 0.0
+            # The whole point: resolver distinguishes corroboration, LWW cannot.
+            assert data["resolver_distinguishes_corroboration"] is True
+        finally:
+            os.chdir(old_cwd)
+
+
+def test_lww_baseline_unit():
+    from edge_node.consensus import lww_trust, fold_trust, OBSERVED, RETRACTED
+    evs = [
+        {"point_id": 1, "event_type": OBSERVED, "seq": 1, "device_ts": "a"},
+        {"point_id": 1, "event_type": OBSERVED, "seq": 2, "device_ts": "b"},
+        {"point_id": 1, "event_type": RETRACTED, "seq": 3, "device_ts": "c"},
+    ]
+    # newest is retraction -> both 0
+    assert lww_trust(evs) == 0.0
+    assert fold_trust(evs, decay=0.3) == 0.0
+    # drop the retraction -> both positive, resolver >= lww is not guaranteed but both > 0
+    evs2 = evs[:2]
+    assert lww_trust(evs2) == 1.0
+    assert fold_trust(evs2, decay=0.3) > 0.5

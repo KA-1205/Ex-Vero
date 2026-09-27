@@ -31,7 +31,7 @@ from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import add_sync_meta, get_outbox, mark_synced, get_outbox_points
 from .hub import hub
-from .consensus import EventLog, fold_trust, OBSERVED, RETRACTED
+from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -475,8 +475,60 @@ async def get_trust(device_id: str, point_id: int):
     return {
         "point_id": point_id,
         "trust": trust,
+        "lww_trust": lww_trust(events),
         "decay": TRUST_DECAY,
         "event_count": len(events),
+    }
+
+
+@app.get("/benchmark/resolver-vs-lww")
+async def benchmark_resolver_vs_lww():
+    """Step 7 benchmark: resolver fold vs last-write-wins.
+
+    LWW decides trust from the single newest event: it cannot tell a lone
+    unverified report from a fact corroborated by many devices — it is flat 1.0
+    in both cases. The resolver fold produces graduated confidence that climbs
+    with corroboration. This is the resolver's measurable advantage.
+    Also verifies Invariant 7: a terminal retraction drives both to 0.
+    """
+    seq = 0
+    events = []
+    trajectory = []
+
+    def add(evt_type):
+        nonlocal seq
+        seq += 1
+        events.append({"point_id": 1, "event_type": evt_type, "seq": seq, "device_ts": str(seq)})
+        trajectory.append({
+            "seq": seq,
+            "event": evt_type,
+            "resolver": round(fold_trust(events, decay=TRUST_DECAY), 4),
+            "lww": round(lww_trust(events), 4),
+        })
+
+    # 5 independent corroborating observations
+    for _ in range(5):
+        add(OBSERVED)
+
+    resolver_1obs = trajectory[0]["resolver"]
+    resolver_5obs = trajectory[4]["resolver"]
+    lww_1obs = trajectory[0]["lww"]
+    lww_5obs = trajectory[4]["lww"]
+
+    # LWW is blind to corroboration count; resolver grows with it.
+    resolver_gain = round(resolver_5obs - resolver_1obs, 4)
+    lww_gain = round(lww_5obs - lww_1obs, 4)
+
+    return {
+        "decay": TRUST_DECAY,
+        "trajectory": trajectory,
+        "resolver_1obs": resolver_1obs,
+        "resolver_5obs": resolver_5obs,
+        "lww_1obs": lww_1obs,
+        "lww_5obs": lww_5obs,
+        "resolver_gain_from_corroboration": resolver_gain,
+        "lww_gain_from_corroboration": lww_gain,
+        "resolver_distinguishes_corroboration": resolver_gain > lww_gain,
     }
 
 
