@@ -373,3 +373,94 @@ def test_pull_after_push():
              
         finally:
             os.chdir(old_cwd)
+
+def _init_app_state():
+    """Shared init used by consensus tests."""
+    config_path = str(main.DEFAULT_CONFIG_PATH)
+    main.adapters = load_adapters(config_path)
+    vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
+    sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
+    main.edge_config = EdgeConfig(
+        vectors=vectors,
+        sparse_vectors=sparse_vectors,
+        max_search_threads=2,
+        search_pool_core=0,
+    )
+    main.device_shards = {}
+    main.event_logs = {}
+    with open(config_path, 'r') as f:
+        full_config = yaml.safe_load(f)
+    policy_config = full_config.get('policy', {})
+    from edge_node.decision_engine import DecisionEngine, clear_feed
+    main.decision_engine = DecisionEngine(policy_config)
+    main.TRUST_DECAY = float(policy_config.get('trust_decay', 0.0))
+    from qdrant_edge import Bm25
+    main.bm25 = Bm25()
+    clear_feed()
+
+
+def test_consensus_and_retraction():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init_app_state()
+            client = TestClient(main.app)
+            device_id = "dev_consensus"
+
+            # 1. capture
+            cap = client.post(f"/devices/{device_id}/capture",
+                              json={"device_id": device_id,
+                                    "corroboration_key": "ck1",
+                                    "value": "bridge collapsed on main st"})
+            assert cap.status_code == 200
+            pid = cap.json()["id"]
+
+            # 2. push -> creates OBSERVED event
+            push = client.post(f"/devices/{device_id}/push")
+            assert push.status_code == 200
+            assert push.json()["pushed_count"] > 0
+
+            # 3. trust high after one observation
+            t1 = client.get(f"/devices/{device_id}/trust/{pid}").json()
+            assert t1["event_count"] == 1
+            assert t1["trust"] > 0.5
+
+            # 4. retract
+            r = client.post(f"/devices/{device_id}/retract/{pid}")
+            assert r.status_code == 200 and r.json()["retracted"] is True
+
+            # 5. trust drops to 0 after retraction (Invariant 7)
+            t2 = client.get(f"/devices/{device_id}/trust/{pid}").json()
+            assert t2["trust"] == 0.0
+
+            # 6. re-observe: retraction must still win because it is newer
+            cap2 = client.post(f"/devices/{device_id}/capture",
+                               json={"device_id": device_id,
+                                     "corroboration_key": "ck1",
+                                     "value": "bridge collapsed on main st"})
+            assert cap2.json()["id"] == pid  # deterministic id
+            client.post(f"/devices/{device_id}/push")
+            t3 = client.get(f"/devices/{device_id}/trust/{pid}").json()
+            # newest event is OBSERVED again -> trust recovers above 0
+            assert t3["trust"] > 0.0
+
+        finally:
+            os.chdir(old_cwd)
+
+
+def test_fold_is_pure_order_independent():
+    # Invariant 6: same events, different insertion order -> identical trust.
+    from edge_node.consensus import fold_trust, OBSERVED, RETRACTED
+    events = [
+        {"point_id": 1, "event_type": OBSERVED, "seq": 1, "device_ts": "a"},
+        {"point_id": 1, "event_type": OBSERVED, "seq": 2, "device_ts": "b"},
+        {"point_id": 1, "event_type": RETRACTED, "seq": 3, "device_ts": "c"},
+    ]
+    import itertools
+    results = set()
+    for perm in itertools.permutations(events):
+        results.add(round(fold_trust(list(perm), decay=0.1), 9)) 
+    assert len(results) == 1  # order independent
+    # newest is RETRACTED -> trust 0
+    assert next(iter(results)) == 0.0

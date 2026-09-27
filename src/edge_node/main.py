@@ -24,11 +24,14 @@ from qdrant_edge import (
     Modifier,
     EdgeSparseVectorParams,
 )
+from datetime import datetime
+
 from .adapter import Adapter
 from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import add_sync_meta, get_outbox, mark_synced, get_outbox_points
 from .hub import hub
+from .consensus import EventLog, fold_trust, OBSERVED, RETRACTED
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -41,12 +44,14 @@ edge_config: EdgeConfig = None
 decision_engine: DecisionEngine = None
 bm25: Bm25 = None
 device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard}
+event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
+TRUST_DECAY: float = 0.0
 SHARD_BASE_PATH = "./shards"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25
+    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -70,6 +75,9 @@ async def lifespan(app: FastAPI):
     policy_config = full_config.get('policy', {})
     decision_engine = DecisionEngine(policy_config)
 
+    # Trust decay constant (Step 7)
+    TRUST_DECAY = float(policy_config.get('trust_decay', 0.0))
+
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
 
@@ -77,12 +85,11 @@ async def lifespan(app: FastAPI):
     hub_config = full_config.get('hub', {})
     hub_url = hub_config.get('url')
     hub_api_key = hub_config.get('api_key')
-    # In a real implementation we would store these and use them to push to Qdrant Server.
-    # For step 4 we just note that they are loaded.
     print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
     print(f"Loaded policy: {policy_config}")
+    print(f"Trust decay: {TRUST_DECAY}")
     print("BM25 initialized")
     yield
 
@@ -193,6 +200,23 @@ def get_or_create_shards(device_id: str):
         'unsynced_ids': set()
     }
     return device_shards[device_id]
+
+
+def get_or_create_event_log(device_id: str) -> EventLog:
+    """Create/load the append-only fact_events shard for a device."""
+    global event_logs
+    if device_id in event_logs:
+        return event_logs[device_id]
+    path = get_shard_path(device_id, "events")
+    cfg = EventLog.build_config()
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+        shard = EdgeShard.create(path, cfg)
+    else:
+        shard = EdgeShard.load(path)
+    log = EventLog(shard)
+    event_logs[device_id] = log
+    return log
 
 
 @app.post("/devices/{device_id}/capture")
@@ -372,6 +396,11 @@ async def push(device_id: str):
         mutable_shard.update(update_op)
         # Optimize after update (optional but good)
         mutable_shard.optimize()
+        # Append an OBSERVED event per pushed point (Step 6: event-sourced consensus)
+        event_log = get_or_create_event_log(device_id)
+        now = datetime.utcnow().isoformat() + "Z"
+        for pid in point_ids:
+            event_log.append(pid, OBSERVED, device_ts=now)
         # Clear unsynced set
         unsynced_set.clear()
         pushed = len(point_ids)
@@ -413,6 +442,42 @@ async def pull(device_id: str):
         errors = [str(e)]
     
     return PullResponse(pulled_count=pulled, errors=errors)
+
+
+class RetractResponse(BaseModel):
+    retracted: bool
+    point_id: int
+
+
+@app.post("/devices/{device_id}/retract/{point_id}")
+async def retract(device_id: str, point_id: int):
+    """Append a RETRACTED event to the fact_events log (Step 6)."""
+    event_log = get_or_create_event_log(device_id)
+    now = datetime.utcnow().isoformat() + "Z"
+    event_log.append(point_id, RETRACTED, device_ts=now)
+    return RetractResponse(retracted=True, point_id=point_id)
+
+
+@app.get("/devices/{device_id}/events/{point_id}")
+async def get_events(device_id: str, point_id: int):
+    event_log = get_or_create_event_log(device_id)
+    events = event_log.events_for(point_id)
+    events.sort(key=lambda e: e["seq"])
+    return {"point_id": point_id, "events": events}
+
+
+@app.get("/devices/{device_id}/trust/{point_id}")
+async def get_trust(device_id: str, point_id: int):
+    """Return the consensus trust score for a fact (Steps 6 & 7)."""
+    event_log = get_or_create_event_log(device_id)
+    events = event_log.events_for(point_id)
+    trust = fold_trust(events, decay=TRUST_DECAY)
+    return {
+        "point_id": point_id,
+        "trust": trust,
+        "decay": TRUST_DECAY,
+        "event_count": len(events),
+    }
 
 
 if __name__ == "__main__":
