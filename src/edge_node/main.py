@@ -1,6 +1,6 @@
 import os
 import hashlib
-from typing import List, Dict
+from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import fastembed
@@ -32,6 +32,7 @@ from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed,
 from .outbox import add_sync_meta, get_outbox, mark_synced, get_outbox_points
 from .hub import hub
 from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
+from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -46,12 +47,13 @@ bm25: Bm25 = None
 device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard}
 event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
 TRUST_DECAY: float = 0.0
+CONFLICT_THRESHOLD: float = 0.5
 SHARD_BASE_PATH = "./shards"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY
+    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY, CONFLICT_THRESHOLD
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -78,6 +80,10 @@ async def lifespan(app: FastAPI):
     # Trust decay constant (Step 7)
     TRUST_DECAY = float(policy_config.get('trust_decay', 0.0))
 
+    # Semantic conflict detection threshold (Step 8)
+    conflict_config = full_config.get('conflict', {})
+    CONFLICT_THRESHOLD = float(conflict_config.get('similarity_threshold', 0.5))
+
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
 
@@ -101,6 +107,8 @@ class CaptureRequest(BaseModel):
     device_id: str
     corroboration_key: str
     value: str  # the text to capture
+    zone: Optional[str] = None    # hard guard for semantic conflict detection
+    entity: Optional[str] = None  # e.g. hazard type
 
 
 class QueryRequest(BaseModel):
@@ -239,6 +247,10 @@ async def capture(device_id: str, request: CaptureRequest):
         "corroboration_key": request.corroboration_key,
         "modality": adapter.modality
     }
+    if request.zone is not None:
+        payload["zone"] = request.zone
+    if request.entity is not None:
+        payload["entity"] = request.entity
     # Add sync metadata for outbox
     payload = add_sync_meta(payload)
     
@@ -249,6 +261,19 @@ async def capture(device_id: str, request: CaptureRequest):
     
     # Compute BM25 sparse vector for the document (embed_document)
     sparse_vector = bm25.embed_document(request.value)
+
+    # Semantic conflict detection BEFORE inserting the new point (Step 8),
+    # so we compare only against prior reports, never the point itself.
+    conflicts = detect_conflicts(
+        shard=mutable_shard,
+        dense_vector=dense_vector,
+        sparse_vector=sparse_vector,
+        dense_name=adapter.name,
+        new_point_id=point_id,
+        new_payload=payload,
+        similarity_threshold=CONFLICT_THRESHOLD,
+    )
+    register_conflicts(device_id, conflicts)
     
     # Create a point with both dense and sparse vectors
     point = Point(
@@ -270,7 +295,13 @@ async def capture(device_id: str, request: CaptureRequest):
     # Optimize after write batch (invariant 2)
     mutable_shard.optimize()
     
-    return {"id": point_id, "payload": payload, "verdict": verdict, "reason": reason}
+    return {
+        "id": point_id,
+        "payload": payload,
+        "verdict": verdict,
+        "reason": reason,
+        "conflicts": conflicts,
+    }
 
 
 @app.post("/devices/{device_id}/query")
@@ -530,6 +561,12 @@ async def benchmark_resolver_vs_lww():
         "lww_gain_from_corroboration": lww_gain,
         "resolver_distinguishes_corroboration": resolver_gain > lww_gain,
     }
+
+
+@app.get("/devices/{device_id}/conflicts")
+async def list_conflicts(device_id: str):
+    """Return POSSIBLE_CONFLICT candidates the exact-key scheme would miss (Step 8)."""
+    return {"device_id": device_id, "conflicts": get_conflicts(device_id)}
 
 
 if __name__ == "__main__":

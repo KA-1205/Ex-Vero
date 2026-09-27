@@ -21,6 +21,12 @@ policy:
   bandwidth: "FULL"
   trust_decay: 0.3
 
+conflict:
+  # Fused (RRF) score above which two same-zone reports with different keys
+  # are flagged as POSSIBLE_CONFLICT for human review. RRF scores are small
+  # (~1/(k+rank) per leg), so this threshold lives near 0.01, not 0.5.
+  similarity_threshold: 0.01
+
 hub:
   url: "http://localhost:6333"
   api_key: ""

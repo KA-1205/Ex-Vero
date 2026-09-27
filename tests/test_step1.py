@@ -397,6 +397,11 @@ def _init_app_state():
     from qdrant_edge import Bm25
     main.bm25 = Bm25()
     clear_feed()
+    from edge_node.conflicts import clear_conflicts
+    clear_conflicts()
+    # conflict threshold from config
+    conflict_config = full_config.get('conflict', {})
+    main.CONFLICT_THRESHOLD = float(conflict_config.get('similarity_threshold', 0.5))
 
 
 def test_consensus_and_retraction():
@@ -527,3 +532,68 @@ def test_lww_baseline_unit():
     evs2 = evs[:2]
     assert lww_trust(evs2) == 1.0
     assert fold_trust(evs2, decay=0.3) > 0.5
+
+
+def test_semantic_conflict_detection():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init_app_state()
+            client = TestClient(main.app)
+            device_id = "dev_conflict"
+
+            # First report: Zone C gas leak, key A
+            r1 = client.post(f"/devices/{device_id}/capture",
+                             json={"device_id": device_id,
+                                   "corroboration_key": "reportA",
+                                   "value": "strong gas leak reported in the east stairwell",
+                                   "zone": "C",
+                                   "entity": "gas"})
+            assert r1.status_code == 200
+            assert r1.json()["conflicts"] == []  # nothing to conflict with yet
+
+            # Second report: same zone C, DIFFERENT key, similar wording ->
+            # exact-key scheme would miss this; semantic path must flag it.
+            r2 = client.post(f"/devices/{device_id}/capture",
+                             json={"device_id": device_id,
+                                   "corroboration_key": "reportB",
+                                   "value": "gas smell and possible leak near the east stairs",
+                                   "zone": "C",
+                                   "entity": "gas"})
+            assert r2.status_code == 200
+            conflicts = r2.json()["conflicts"]
+            assert len(conflicts) >= 1
+            c = conflicts[0]
+            assert c["status"] == "POSSIBLE_CONFLICT"
+            assert c["new_key"] == "reportB"
+            assert c["existing_key"] == "reportA"
+            assert c["zone"] == "C"
+
+            # Third report in a DIFFERENT zone must NOT conflict (hard zone guard),
+            # even with near-identical wording.
+            r3 = client.post(f"/devices/{device_id}/capture",
+                             json={"device_id": device_id,
+                                   "corroboration_key": "reportD",
+                                   "value": "gas smell and possible leak near the east stairs",
+                                   "zone": "D",
+                                   "entity": "gas"})
+            assert r3.status_code == 200
+            assert r3.json()["conflicts"] == []
+
+            # Conflicts endpoint accumulates the flagged candidate.
+            listing = client.get(f"/devices/{device_id}/conflicts").json()
+            assert len(listing["conflicts"]) >= 1
+
+
+        finally:
+            os.chdir(old_cwd)
+
+
+def test_conflict_zone_guard_unit():
+    from edge_node.conflicts import _same_zone
+    assert _same_zone("C", "C") is True
+    assert _same_zone("C", "c") is True
+    assert _same_zone("C", "D") is False
+    assert _same_zone(None, "C") is False
+    assert _same_zone("C", None) is False
