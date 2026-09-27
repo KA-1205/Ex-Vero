@@ -7,6 +7,7 @@ The outbox is a filtered view over the mutable Edge shard:
 We implement:
 - add_sync_meta(payload) -> payload with default _sync_meta = {"synced": False}
 - get_outbox(shard, limit) -> list of (point_id, point) where not synced
+- get_outbox_points(shard, limit) -> list of point objects where not synced
 - mark_synced(shard, point_ids) -> UpdateOperation to set _sync_meta.synced = True
 """
 
@@ -58,6 +59,13 @@ def get_outbox(shard: EdgeShard, limit: int = 100) -> List[Tuple[int, Point]]:
     except Exception as e:
         # On any error, return empty list to avoid breaking push
         return []
+
+def get_outbox_points(shard: EdgeShard, limit: int = 100) -> List[Point]:
+    """
+    Return list of Point objects where _sync_meta.synced is False.
+    """
+    outbox = get_outbox(shard, limit)
+    return [point for _, point in outbox]
 
 def mark_synced(shard: EdgeShard, point_ids: List[int]) -> UpdateOperation:
     """

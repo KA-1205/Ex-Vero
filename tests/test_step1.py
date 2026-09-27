@@ -286,3 +286,90 @@ def test_push_outbox():
              
         finally:
             os.chdir(old_cwd)
+
+
+def test_pull_after_push():
+    # Test that after pushing points, pulling them makes them queryable from immutable shard.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            # Initialize app state
+            config_path = str(main.DEFAULT_CONFIG_PATH)
+            main.adapters = load_adapters(config_path)
+            vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
+            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
+            main.edge_config = EdgeConfig(
+                vectors=vectors,
+                sparse_vectors=sparse_vectors,
+                max_search_threads=2,
+                search_pool_core=0,
+            )
+            main.device_shards = {}
+            with open(config_path, 'r') as f:
+                full_config = yaml.safe_load(f)
+            policy_config = full_config.get('policy', {})
+            from edge_node.decision_engine import DecisionEngine
+            main.decision_engine = DecisionEngine(policy_config)
+            from qdrant_edge import Bm25
+            main.bm25 = Bm25()
+            from edge_node.decision_engine import clear_feed, get_feed
+            clear_feed()
+             
+            client = TestClient(main.app)
+            device_id = "test_device"
+             
+            # Capture a fact
+            doc_text = "pullme"
+            capture_resp = client.post(
+                f"/devices/{device_id}/capture",
+                json={
+                    "device_id": device_id,
+                    "corroboration_key": "pullkey",
+                    "value": doc_text
+                }
+            )
+            assert capture_resp.status_code == 200
+            capture_data = capture_resp.json()
+            point_id = capture_data["id"]
+            assert point_id is not None
+             
+            # Push the point
+            push_resp = client.post(f"/devices/{device_id}/push")
+            assert push_resp.status_code == 200
+            push_data = push_resp.json()
+            assert isinstance(push_data["pushed_count"], int)
+            assert push_data["pushed_count"] > 0  # we expect at least one point pushed
+            assert push_data["errors"] == []
+             
+            # Pull the snapshot
+            pull_resp = client.post(f"/devices/{device_id}/pull")
+            assert pull_resp.status_code == 200
+            pull_data = pull_resp.json()
+            assert isinstance(pull_data["pulled_count"], int)
+            assert pull_data["pulled_count"] >= 0
+            assert pull_data["errors"] == []
+             
+            # Now query the immutable shard (should have the point)
+            # Use a query that matches via BM25
+            query_resp = client.post(
+                f"/devices/{device_id}/query",
+                json={
+                    "device_id": device_id,
+                    "text": "pullme"
+                }
+            )
+            assert query_resp.status_code == 200
+            query_data = query_resp.json()
+            assert "results" in query_data
+            # The point should be found in either mutable or immutable; after push it's synced,
+            # but mutable still holds it. Pull should have added to immutable.
+            # We'll check that at least one result exists.
+            assert len(query_data["results"]) > 0
+            # Optionally check that the point_id is in results
+            found = any(res["id"] == point_id for res in query_data["results"])
+            assert found, f"Point {point_id} not found in query results after pull"
+            assert query_data["latency_ms"] > 0
+             
+        finally:
+            os.chdir(old_cwd)

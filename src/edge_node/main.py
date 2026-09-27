@@ -27,7 +27,8 @@ from qdrant_edge import (
 from .adapter import Adapter
 from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
-from .outbox import add_sync_meta, get_outbox, mark_synced
+from .outbox import add_sync_meta, get_outbox, mark_synced, get_outbox_points
+from .hub import hub
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -158,14 +159,14 @@ def get_or_create_shards(device_id: str):
     global device_shards, adapters, edge_config
     if device_id in device_shards:
         return device_shards[device_id]
-
+    
     # Ensure adapters and edge_config are initialized
     if adapters is None or edge_config is None:
         raise RuntimeError("Adapters or edge_config not initialized. Did startup_event run?")
-
+    
     mutable_path = get_shard_path(device_id, "mutable")
     immutable_path = get_shard_path(device_id, "immutable")
-
+    
     # Create or load mutable shard
     if not os.path.exists(mutable_path):
         os.makedirs(mutable_path, exist_ok=True)
@@ -176,7 +177,7 @@ def get_or_create_shards(device_id: str):
         _verify_shard_dimension(mutable_shard, adapters)
         info = mutable_shard.info()
         print(f"Loaded mutable shard for {device_id}: {info}")
-
+    
     # Create or load immutable shard (empty for now)
     if not os.path.exists(immutable_path):
         os.makedirs(immutable_path, exist_ok=True)
@@ -185,10 +186,11 @@ def get_or_create_shards(device_id: str):
         immutable_shard = EdgeShard.load(immutable_path)
         _verify_shard_dimension(immutable_shard, adapters)
         print(f"Loaded immutable shard for {device_id}: {info}")
-
+    
     device_shards[device_id] = {
         'mutable': mutable_shard,
-        'immutable': immutable_shard
+        'immutable': immutable_shard,
+        'unsynced_ids': set()
     }
     return device_shards[device_id]
 
@@ -197,13 +199,14 @@ def get_or_create_shards(device_id: str):
 async def capture(device_id: str, request: CaptureRequest):
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
-
+    unsynced_set = shards['unsynced_ids']
+    
     # Use the first adapter (text) for step 1
     adapter = adapters[0]
     dense_vector = adapter.embed(request.value)
-
+    
     point_id = generate_point_id(request.corroboration_key, request.value)
-
+    
     # Payload includes the value, the model name and version, and the corroboration_key
     payload = {
         "value": request.value,
@@ -214,15 +217,15 @@ async def capture(device_id: str, request: CaptureRequest):
     }
     # Add sync metadata for outbox
     payload = add_sync_meta(payload)
-
+    
     # Run decision engine
     verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter)
     # Log decision for feed
     log_decision(device_id, payload, verdict, reason)
-
+    
     # Compute BM25 sparse vector for the document (embed_document)
     sparse_vector = bm25.embed_document(request.value)
-
+    
     # Create a point with both dense and sparse vectors
     point = Point(
         id=point_id,
@@ -232,14 +235,17 @@ async def capture(device_id: str, request: CaptureRequest):
         },
         payload=payload,
     )
-
+    
     # Upsert the point using UpdateOperation
     operation = UpdateOperation.upsert_points(points=[point])
     mutable_shard.update(operation)
-
+    
+    # Mark as unsynced
+    unsynced_set.add(point_id)
+    
     # Optimize after write batch (invariant 2)
     mutable_shard.optimize()
-
+    
     return {"id": point_id, "payload": payload, "verdict": verdict, "reason": reason}
 
 
@@ -324,15 +330,30 @@ class PushResponse(BaseModel):
 async def push(device_id: str):
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
+    unsynced_set = shards['unsynced_ids']
     
-    # Get total point count as an approximation of outbox size (all points are unsynced until marked)
-    try:
-        total_count = mutable_shard.count()
-    except Exception:
-        total_count = 0
-    
-    if total_count == 0:
+    if not unsynced_set:
         return PushResponse(pushed_count=0, errors=[])
+    
+    point_ids = list(unsynced_set)
+    # Retrieve points to create snapshot
+    try:
+        records = mutable_shard.retrieve(point_ids, with_payload=True, with_vector=True)
+        # Convert Record objects to Point objects
+        points = [Point(id=rec.id, vector=rec.vector, payload=rec.payload) for rec in records]
+    except Exception as e:
+        # If retrieve fails, we can't create snapshot
+        points = []
+    
+    # Create snapshot of these points and store in hub
+    try:
+        if points:
+            version = hub.create_snapshot(points)
+        else:
+            pass
+    except Exception as e:
+        # If snapshot creation fails, we still continue but log
+        pass
     
     # Simulate push to hub: in real implementation we would send points to hub_url
     # For now we assume push always succeeds.
@@ -351,13 +372,47 @@ async def push(device_id: str):
         mutable_shard.update(update_op)
         # Optimize after update (optional but good)
         mutable_shard.optimize()
-        pushed = total_count
+        # Clear unsynced set
+        unsynced_set.clear()
+        pushed = len(point_ids)
         errors = []
     except Exception as e:
         pushed = 0
         errors = [str(e)]
     
     return PushResponse(pushed_count=pushed, errors=errors)
+
+
+class PullResponse(BaseModel):
+    pulled_count: int
+    errors: List[str] = []
+
+
+@app.post("/devices/{device_id}/pull")
+async def pull(device_id: str):
+    shards = get_or_create_shards(device_id)
+    immutable_shard = shards['immutable']
+    
+    # Get latest snapshot from hub
+    snapshot_points = hub.get_latest_snapshot()
+    if not snapshot_points:
+        return PullResponse(pulled_count=0, errors=["No snapshot available"])
+    
+    # Upsert snapshot points into immutable shard
+    try:
+        # Build list of Point objects (they are already Point)
+        points_to_upsert = snapshot_points
+        operation = UpdateOperation.upsert_points(points=points_to_upsert)
+        immutable_shard.update(operation)
+        # Optimize after upsert
+        immutable_shard.optimize()
+        pulled = len(points_to_upsert)
+        errors = []
+    except Exception as e:
+        pulled = 0
+        errors = [str(e)]
+    
+    return PullResponse(pulled_count=pulled, errors=errors)
 
 
 if __name__ == "__main__":

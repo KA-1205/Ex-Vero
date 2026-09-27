@@ -19,3 +19,7 @@ policy:
     - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # email
   required_fields: ["status", "timestamp", "reporter_device_id"]
   bandwidth: "FULL"
+
+hub:
+  url: "http://localhost:6333"
+  api_key: ""
