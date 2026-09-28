@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-base text-ink font-sans antialiased;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  ::selection {
+    background: #3DDC84;
+    color: #0B0D0F;
+  }
+  /* visible keyboard focus, no soft glow */
+  :focus-visible {
+    outline: 1px solid #3DDC84;
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #07080A;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #22262B;
+    border: 2px solid #07080A;
+  }
+}
+
+@layer utilities {
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
