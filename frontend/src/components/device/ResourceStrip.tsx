@@ -16,7 +16,7 @@ export function ResourceStrip({ deviceId }: { deviceId: string }) {
   if (!latest) return null
 
   return (
-    <div className="border border-line bg-base-raised px-3 py-2 flex items-center gap-6 text-xs font-mono">
+    <div className="glass-card px-3 py-2 flex items-center gap-6 text-xs font-mono">
       <span className="text-ink-faint">TELEMETRY</span>
       <span className="text-ink-dim">
         CPU <MonoValue className="text-ink">{latest.cpu_pct}%</MonoValue>

@@ -18,7 +18,7 @@ export function SyncStrip({ deviceId }: { deviceId: string }) {
   const total = URGENT + ROUTINE + HELD || 1
 
   return (
-    <div className="border border-line bg-base-raised px-3 py-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+    <div className="glass-card px-3 py-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
       <div className="flex items-center gap-2">
         <span className="text-ink-dim font-mono">PENDING SYNC</span>
         <div className="flex h-2.5 w-40 border border-line overflow-hidden">

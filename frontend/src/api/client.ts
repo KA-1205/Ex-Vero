@@ -14,6 +14,7 @@ import type {
   QueryResult,
   SyncStatus,
   TelemetrySample,
+  WeatherConditions,
 } from '../types'
 import * as mock from './mock'
 
@@ -94,6 +95,40 @@ export async function fetchActivity(deviceId: string): Promise<ActivityEntry[]> 
 export async function fetchTelemetry(deviceId: string): Promise<TelemetrySample[]> {
   if (mock.USE_MOCKS) return mock.mockTelemetry(deviceId)
   return getJSON(`/devices/${deviceId}/telemetry`)
+}
+
+// --- Current weather for New Delhi (Open-Meteo) -----------------------------
+
+export async function fetchWeather(): Promise<WeatherConditions> {
+  const params = new URLSearchParams({
+    latitude: '28.6139',
+    longitude: '77.2090',
+    current: 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,visibility',
+    timezone: 'Asia/Kolkata',
+    wind_speed_unit: 'kmh',
+  })
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`)
+  if (!response.ok) throw new Error(`Weather request failed: ${response.status}`)
+  const payload = await response.json() as {
+    current: {
+      time: string
+      temperature_2m: number
+      apparent_temperature: number
+      relative_humidity_2m: number
+      weather_code: number
+      wind_speed_10m: number
+      visibility: number
+    }
+  }
+  return {
+    temperature_c: payload.current.temperature_2m,
+    apparent_temperature_c: payload.current.apparent_temperature,
+    relative_humidity_pct: payload.current.relative_humidity_2m,
+    wind_speed_kmh: payload.current.wind_speed_10m,
+    visibility_km: payload.current.visibility / 1000,
+    weather_code: payload.current.weather_code,
+    observed_at: payload.current.time,
+  }
 }
 
 // --- Local memory browser (backed by activity/sync until a dedicated

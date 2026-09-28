@@ -19,10 +19,10 @@ import type {
 export const USE_MOCKS = true
 
 const DEVICE_NAMES = [
-  { id: 'dev-01', name: 'Paramedic Tablet 01', kind: 'paramedic tablet' },
-  { id: 'dev-02', name: 'Kiosk — Shelter B', kind: 'kiosk' },
-  { id: 'dev-03', name: 'Field Pi Node 03', kind: 'pi node' },
-  { id: 'dev-04', name: 'Paramedic Tablet 02', kind: 'paramedic tablet' },
+  { id: 'dev-01', name: 'Paramedic Tablet 01', kind: 'paramedic tablet', latitude: 28.6329, longitude: 77.2195 },
+  { id: 'dev-02', name: 'Kiosk — Shelter B', kind: 'kiosk', latitude: 28.6129, longitude: 77.2295 },
+  { id: 'dev-03', name: 'Field Pi Node 03', kind: 'pi node', latitude: 28.6562, longitude: 77.2410 },
+  { id: 'dev-04', name: 'Paramedic Tablet 02', kind: 'paramedic tablet', latitude: 28.5933, longitude: 77.2190 },
 ]
 
 const REASONS = [
@@ -61,6 +61,8 @@ export function mockDevices(): DeviceSummary[] {
     memory_cap: 500,
     last_sync_at: new Date(Date.now() - r() * 1000 * 60 * 40).toISOString(),
     activity_sparkline: Array.from({ length: 20 }, () => Math.floor(r() * 10)),
+    latitude: d.latitude,
+    longitude: d.longitude,
   }))
 }
 

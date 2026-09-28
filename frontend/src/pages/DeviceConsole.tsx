@@ -21,10 +21,10 @@ export function DeviceConsole() {
   const [tab, setTab] = useState<Tab>('console')
 
   return (
-    <div className="p-4 flex flex-col gap-3 h-full">
+    <div className="p-4 flex flex-col gap-3 h-full min-h-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-mono">
-          <Link to="/demo" className="text-ink-dim hover:text-ink">
+          <Link to="/overview" className="text-ink-dim hover:text-ink">
             FLEET
           </Link>
           <span className="text-ink-faint">/</span>
@@ -54,6 +54,11 @@ export function DeviceConsole() {
             <DecisionFeed deviceId={deviceId} />
             <MemoryBrowser deviceId={deviceId} />
           </div>
+        </div>
+      )}
+
+      {tab === 'console' && (
+        <div className="pointer-events-none fixed bottom-0 left-[calc(13rem+1rem)] right-4 z-40 flex flex-col gap-3">
           <SyncStrip deviceId={deviceId} />
           <ResourceStrip deviceId={deviceId} />
         </div>

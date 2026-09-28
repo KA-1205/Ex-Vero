@@ -19,12 +19,12 @@ function Sparkline({ values }: { values: number[] }) {
   )
 }
 
-function DeviceTile({ device, onOpen }: { device: DeviceSummary; onOpen: () => void }) {
+export function DeviceTile({ device, onOpen }: { device: DeviceSummary; onOpen: () => void }) {
   const pct = Math.round((device.memory_used / device.memory_cap) * 100)
   return (
     <button
       onClick={onOpen}
-      className="text-left border border-line bg-base-raised p-3 hover:border-ink-faint transition-colors flex flex-col gap-2"
+      className="glass-card text-left p-3 hover:border-[#315C86] transition-colors flex flex-col gap-2"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -79,7 +79,7 @@ export function FleetOverview() {
             </div>
           )}
           {devices?.map((d) => (
-            <DeviceTile key={d.id} device={d} onOpen={() => navigate(`/demo/devices/${d.id}`)} />
+            <DeviceTile key={d.id} device={d} onOpen={() => navigate(`/overview/devices/${d.id}`)} />
           ))}
         </div>
       </Panel>

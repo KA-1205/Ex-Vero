@@ -5,7 +5,7 @@ import { ConnectivityPill, MonoValue } from '../components/primitives'
 // primitives as the rest of the app (base/ink/line/good/alert/pending,
 // font-mono, ConnectivityPill, hairline borders, no shadows/gradients) so it
 // doesn't fork the visual language. This will later be replaced with a
-// 3D-flow-style "about" page; the button top-right into /demo should stay.
+// 3D-flow-style "about" page; the button top-right into /overview should stay.
 const CLAIMS = [
   'CONFIG-DRIVEN MODEL ADAPTER REGISTRY',
   'N-WAY TRUST-WEIGHTED CONSENSUS',
@@ -15,8 +15,12 @@ const CLAIMS = [
 
 export function Landing() {
   return (
-    <div className="min-h-screen flex flex-col bg-base text-ink">
-      <header className="flex items-center justify-between px-4 py-2 border-b border-line">
+    <div className="relative isolate min-h-screen flex flex-col overflow-hidden bg-base text-ink">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-0 bg-[url('/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
+      />
+      <header className="relative z-10 flex items-center justify-between px-4 py-2 border-b border-line">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm font-semibold tracking-wide text-ink">
             AEGIS EDGE
@@ -26,14 +30,14 @@ export function Landing() {
           </span>
         </div>
         <Link
-          to="/demo"
+          to="/overview"
           className="px-3 py-1.5 text-xs font-mono border border-good text-good hover:bg-good hover:text-base transition-colors"
         >
           VIEW DEMO
         </Link>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-16 gap-10">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-16 gap-10">
         <div className="flex items-center gap-2">
           <ConnectivityPill state="ONLINE" />
           <span className="text-[11px] font-mono text-ink-faint">4 devices in fleet · demo ready</span>
@@ -60,7 +64,7 @@ export function Landing() {
           ))}
         </div>
 
-        <div className="border border-line bg-base-raised px-5 py-3 flex items-center gap-6 text-xs font-mono">
+        <div className="glass-card px-5 py-3 flex items-center gap-6 text-xs font-mono">
           <span className="text-ink-faint">RESOLVER ACCURACY</span>
           <MonoValue className="text-good">94%</MonoValue>
           <span className="text-ink-faint">VS LWW BASELINE</span>
@@ -68,7 +72,7 @@ export function Landing() {
         </div>
       </main>
 
-      <footer className="border-t border-line px-4 py-2 text-center">
+      <footer className="relative z-10 border-t border-line px-4 py-2 text-center">
         <span className="text-[11px] font-mono text-ink-faint">
           problem statement 03 (qdrant) — ai-powered edge memory &amp; intelligence platform
         </span>

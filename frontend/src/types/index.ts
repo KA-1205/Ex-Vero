@@ -38,6 +38,8 @@ export interface DeviceSummary {
   memory_cap: number
   last_sync_at: string | null // ISO timestamp
   activity_sparkline: number[] // recent decision-engine activity, most-recent-last
+  latitude?: number
+  longitude?: number
 }
 
 // --- WS /devices/{id}/events ---------------------------------------------
@@ -125,6 +127,16 @@ export interface TelemetrySample {
   ram_mb: number
   query_latency_ms: number
   model_load_ms?: number
+}
+
+export interface WeatherConditions {
+  temperature_c: number
+  apparent_temperature_c: number
+  relative_humidity_pct: number
+  wind_speed_kmh: number
+  visibility_km: number
+  weather_code: number
+  observed_at: string
 }
 
 // --- WS /consensus/events + Conflict Theater (3.4) ---------------------------

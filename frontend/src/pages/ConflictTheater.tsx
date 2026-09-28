@@ -9,7 +9,7 @@ const DEVICE_B = { id: 'dev-03', name: 'Field Pi Node 03', value: 'Zone C — ga
 
 function DeviceSide({ name, id, value, reconnected }: { name: string; id: string; value: string; reconnected: boolean }) {
   return (
-    <div className="flex-1 border border-line bg-base-raised p-3">
+    <div className="glass-card flex-1 p-3">
       <div className="flex items-center justify-between mb-2">
         <div>
           <div className="text-sm font-medium">{name}</div>
@@ -23,7 +23,7 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
           {reconnected ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
-      <div className="border border-line bg-base-sunken p-2 text-sm">{value}</div>
+      <div className="rounded-md border border-[#AABBC8] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
     </div>
   )
 }
@@ -106,7 +106,7 @@ export function ConflictTheater() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {resolved.claims.map((c) => (
-                  <div key={c.device_id} className="border border-line p-2 text-xs">
+                  <div key={c.device_id} className="glass-card p-2 text-xs">
                     <div className="font-mono text-ink-faint">{c.device_id}</div>
                     <div className="text-ink my-1">{c.value}</div>
                     <div className="text-ink-dim">

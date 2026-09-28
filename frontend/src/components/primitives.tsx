@@ -1,23 +1,28 @@
-// Shared visual primitives implementing the design direction in frontend.md §2:
-// sharp corners, hairline borders, no shadows, no gradients, mono for data.
+// Shared visual primitives for the light glass-console interface.
 import type { ReactNode } from 'react'
 
 export function Panel({
   title,
+  number,
   action,
   children,
   className = '',
 }: {
   title?: string
+  number?: string
   action?: ReactNode
   children: ReactNode
   className?: string
 }) {
   return (
-    <div className={`border border-line bg-base-raised flex flex-col ${className}`}>
+    <div className={`glass-card flex flex-col ${className}`}>
       {title && (
-        <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <h2 className="text-xs font-semibold tracking-wide text-ink-dim">{title}</h2>
+        <div className={`flex items-center justify-between border-b border-[#AABBC8] ${number ? 'min-h-[36px] px-0 py-0' : 'px-3 py-2'}`}>
+          <div className="flex h-full min-w-0 items-stretch">
+            {number && <span className="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] text-ink">{number}</span>}
+            {number && <span className="w-2 shrink-0 bg-[#234C7D]" />}
+            <h2 className={`flex items-center text-xs font-semibold tracking-wide text-ink-dim ${number ? 'px-3' : ''}`}>{title}</h2>
+          </div>
           {action}
         </div>
       )}
