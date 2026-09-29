@@ -276,7 +276,7 @@ class CaptureRequest(BaseModel):
 
 
 class CaptureResponse(BaseModel):
-    id: int
+    id: str
     verdict: str
     reason: str
     conflicts: List[Any] = []
@@ -294,14 +294,14 @@ class QueryRequest(BaseModel):
 
 
 class PointResponse(BaseModel):
-    id: int
+    id: str
     score: float
     payload: dict
 
 
 class SourceRef(BaseModel):
     """A cited retrieved fact backing the answer (docs/API.md §4)."""
-    id: int
+    id: str
     score: float
     value: Optional[str] = None
     consensus_state: Optional[str] = None
@@ -661,7 +661,7 @@ async def capture(device_id: str, raw_request: Request):
     log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)
 
     return {
-        "id": point_id,
+        "id": str(point_id),
         "payload": payload,
         "verdict": verdict,
         "reason": reason,
@@ -705,7 +705,7 @@ async def query(device_id: str, request: QueryRequest):
     )
 
     results = [
-        PointResponse(id=h.id, score=h.score, payload=h.payload) for h in hits
+        PointResponse(id=str(h.id), score=h.score, payload=h.payload) for h in hits
     ]
 
     answer_fields = {}
@@ -715,7 +715,7 @@ async def query(device_id: str, request: QueryRequest):
             "answer": result.answer,
             "answer_path": result.answer_path,
             "model": result.model,
-            "sources": [SourceRef(**s) for s in result.sources],
+            "sources": [SourceRef(id=str(s["id"]), score=s["score"], value=s.get("value"), consensus_state=s.get("consensus_state")) for s in result.sources],
         }
 
     latency_ms = (time.time() - start_time) * 1000
@@ -738,7 +738,7 @@ async def get_device_feed(device_id: str, limit: int = 50, modality: Optional[st
                 continue
         events.append({
             "device_id": e.get("device_id", device_id),
-            "point_id": pl.get("id"),
+            "point_id": str(pl.get("id")) if pl.get("id") is not None else None,
             "value_preview": (pl.get("value") or "")[:100],
             "modality": item_mod,
             "thumbnail_url": thumb,
@@ -1428,7 +1428,7 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
             meta = payload.get("_sync_meta", {})
             sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
             points.append({
-                "id": r.id,
+                "id": str(r.id),
                 "value": payload.get("value", ""),
                 "modality": payload.get("modality", "text"),
                 "thumbnail_url": payload.get("thumbnail_url"),
@@ -1454,9 +1454,93 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
 
 
 # --- GET /devices/{id}/memory/{point_id} ---
+# @app.get("/devices/{device_id}/memory/{point_id}")
+# async def get_memory_point(device_id: str, point_id: str):
+#     """Full detail for one fact (API.md §5)."""
+#     try:
+#         numeric_point_id = int(point_id)
+#     except ValueError:
+#         raise HTTPException(status_code=400, detail="invalid point_id")
+
+#     if device_id not in device_shards:
+#         raise HTTPException(status_code=404, detail="unknown device")
+    
+#     shards = device_shards[device_id]
+#     mutable_shard = shards['mutable']
+#     immutable_shard = shards['immutable']
+    
+#     # Try mutable first, then immutable
+#     for shard in (mutable_shard, immutable_shard):
+#         recs = shard.retrieve([numeric_point_id], with_payload=True, with_vector=False)
+#         if recs:
+#             rec = recs[0]
+#             payload = rec.payload or {}
+#             meta = payload.get("_sync_meta", {})
+#             sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
+            
+#             point = {
+#                 "id": str(rec.id),
+#                 "value": payload.get("value", ""),
+#                 "modality": payload.get("modality", "text"),
+#                 "thumbnail_url": payload.get("thumbnail_url"),
+#                 "zone": payload.get("zone"),
+#                 "corroboration_key": payload.get("corroboration_key"),
+#                 "sync_state": sync_state_val,
+#                 "model": payload.get("model", "text_dense"),
+#                 "model_version": payload.get("model_version", "bge-small-en-v1.5"),
+#                 "created_at": payload.get("client_timestamp_ns", 0),
+#             }
+            
+#             # Get decision event
+#             decision = None
+#             for entry in get_feed(device_id):
+#                 if entry.get("payload", {}).get("id") == point_id or entry.get("point_id") == point_id:
+#                     decision = {
+#                         "device_id": entry.get("device_id"),
+#                         "point_id": point_id,
+#                         "value_preview": entry.get("payload", {}).get("value", "")[:100],
+#                         "modality": payload.get("modality", "text"),
+#                         "thumbnail_url": payload.get("thumbnail_url"),
+#                         "verdict": meta.get("verdict", "UNKNOWN"),
+#                         "reason": entry.get("reason", ""),
+#                         "timestamp": entry.get("timestamp"),
+#                     }
+#                     break
+            
+#             # Get activity for this point
+#             activity = [e for e in get_activity(device_id) if e.get("point_id") == point_id]
+            
+#             # Get consensus if available
+#             consensus = None
+#             try:
+#                 event_log = get_or_create_event_log(device_id)
+#                 events = event_log.events_for(point_id)
+#                 if events:
+#                     trust = fold_trust(events, decay=TRUST_DECAY)
+#                     consensus = {
+#                         "corroboration_key": payload.get("corroboration_key"),
+#                         "state": "CONFIRMED" if trust > 0.5 else "DISPUTED",
+#                         "confidence": trust,
+#                         "resolved_value": payload.get("value") if trust > 0.5 else None,
+#                         "candidates": [],
+#                         "explanation": "",
+#                         "timestamp": events[-1].get("device_ts", "") if events else "",
+#                     }
+#             except Exception:
+#                 pass
+            
+#             return {
+#                 "point": point,
+#                 "decision": decision,
+#                 "activity": activity,
+#                 "consensus": consensus,
+#             }
+    
+#     raise HTTPException(status_code=404, detail="point not found")
+
+# --- GET /devices/{id}/memory/{point_id} ---
 @app.get("/devices/{device_id}/memory/{point_id}")
-async def get_memory_point(device_id: str, point_id: int):
-    """Full detail for one fact (API.md §5)."""
+async def get_memory_point(device_id: str, point_id: str):
     if device_id not in device_shards:
         raise HTTPException(status_code=404, detail="unknown device")
     
@@ -1464,73 +1548,66 @@ async def get_memory_point(device_id: str, point_id: int):
     mutable_shard = shards['mutable']
     immutable_shard = shards['immutable']
     
-    # Try mutable first, then immutable
+    # Try exact integer first, then string prefix / payload match if rounded
+    target_ids = []
+    try:
+        target_ids.append(int(point_id))
+    except ValueError:
+        pass
+
     for shard in (mutable_shard, immutable_shard):
-        recs = shard.retrieve([point_id], with_payload=True, with_vector=False)
-        if recs:
-            rec = recs[0]
-            payload = rec.payload or {}
-            meta = payload.get("_sync_meta", {})
-            sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
-            
-            point = {
-                "id": rec.id,
-                "value": payload.get("value", ""),
-                "modality": payload.get("modality", "text"),
-                "thumbnail_url": payload.get("thumbnail_url"),
-                "zone": payload.get("zone"),
-                "corroboration_key": payload.get("corroboration_key"),
-                "sync_state": sync_state_val,
-                "model": payload.get("model", "text_dense"),
-                "model_version": payload.get("model_version", "bge-small-en-v1.5"),
-                "created_at": payload.get("client_timestamp_ns", 0),
-            }
-            
-            # Get decision event
-            decision = None
-            for entry in get_feed(device_id):
-                if entry.get("payload", {}).get("id") == point_id or entry.get("point_id") == point_id:
-                    decision = {
-                        "device_id": entry.get("device_id"),
-                        "point_id": point_id,
-                        "value_preview": entry.get("payload", {}).get("value", "")[:100],
+        # 1. Exact lookup
+        if target_ids:
+            recs = shard.retrieve(target_ids, with_payload=True, with_vector=False)
+            if recs:
+                rec = recs[0]
+                payload = rec.payload or {}
+                meta = payload.get("_sync_meta", {})
+                sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
+                return {
+                    "point": {
+                        "id": str(rec.id),
+                        "value": payload.get("value", ""),
                         "modality": payload.get("modality", "text"),
                         "thumbnail_url": payload.get("thumbnail_url"),
-                        "verdict": meta.get("verdict", "UNKNOWN"),
-                        "reason": entry.get("reason", ""),
-                        "timestamp": entry.get("timestamp"),
-                    }
-                    break
-            
-            # Get activity for this point
-            activity = [e for e in get_activity(device_id) if e.get("point_id") == point_id]
-            
-            # Get consensus if available
-            consensus = None
-            try:
-                event_log = get_or_create_event_log(device_id)
-                events = event_log.events_for(point_id)
-                if events:
-                    trust = fold_trust(events, decay=TRUST_DECAY)
-                    consensus = {
+                        "zone": payload.get("zone"),
                         "corroboration_key": payload.get("corroboration_key"),
-                        "state": "CONFIRMED" if trust > 0.5 else "DISPUTED",
-                        "confidence": trust,
-                        "resolved_value": payload.get("value") if trust > 0.5 else None,
-                        "candidates": [],
-                        "explanation": "",
-                        "timestamp": events[-1].get("device_ts", "") if events else "",
-                    }
-            except Exception:
-                pass
-            
-            return {
-                "point": point,
-                "decision": decision,
-                "activity": activity,
-                "consensus": consensus,
-            }
-    
+                        "sync_state": sync_state_val,
+                        "model": payload.get("model", "text_dense"),
+                        "model_version": payload.get("model_version", "bge-small-en-v1.5"),
+                        "created_at": payload.get("client_timestamp_ns", 0),
+                    },
+                    "decision": None,
+                    "activity": [],
+                    "consensus": None,
+                }
+        
+        # 2. Precision-loss fallback: match point where str(id) starts with target prefix
+        from qdrant_edge import ScrollRequest
+        pts, _ = shard.scroll(ScrollRequest(limit=200, with_payload=True, with_vector=False))
+        for rec in (pts or []):
+            if str(rec.id)[:12] == point_id[:12]:
+                payload = rec.payload or {}
+                meta = payload.get("_sync_meta", {})
+                sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
+                return {
+                    "point": {
+                        "id": str(rec.id),
+                        "value": payload.get("value", ""),
+                        "modality": payload.get("modality", "text"),
+                        "thumbnail_url": payload.get("thumbnail_url"),
+                        "zone": payload.get("zone"),
+                        "corroboration_key": payload.get("corroboration_key"),
+                        "sync_state": sync_state_val,
+                        "model": payload.get("model", "text_dense"),
+                        "model_version": payload.get("model_version", "bge-small-en-v1.5"),
+                        "created_at": payload.get("client_timestamp_ns", 0),
+                    },
+                    "decision": None,
+                    "activity": [],
+                    "consensus": None,
+                }
+
     raise HTTPException(status_code=404, detail="point not found")
 
 
