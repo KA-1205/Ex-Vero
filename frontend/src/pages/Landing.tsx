@@ -15,7 +15,7 @@ const CLAIMS = [
 
 export function Landing() {
   return (
-    <div className="relative isolate min-h-screen flex flex-col overflow-hidden bg-base text-ink">
+    <div className="relative isolate min-h-screen flex flex-col overflow-hidden bg-[#C5D9E0] text-ink">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 bg-[url('/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
@@ -57,7 +57,7 @@ export function Landing() {
           {CLAIMS.map((c) => (
             <span
               key={c}
-              className="border border-line px-2.5 py-1 text-[10px] font-mono text-ink-dim tracking-wide"
+              className="border border-[#7890A5] bg-white/10 px-2.5 py-1 text-[10px] font-mono text-ink-dim tracking-wide"
             >
               {c}
             </span>
