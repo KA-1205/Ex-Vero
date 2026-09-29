@@ -198,6 +198,7 @@ async def lifespan(app: FastAPI):
     print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
+    print(f"Vision enabled: {any(a.modality == 'vision' for a in adapters)}")
     print(f"Loaded policy: {policy_config}")
     print(f"Trust decay: {TRUST_DECAY}")
     print(f"Memory cap: {MAX_LOCAL_POINTS}")
