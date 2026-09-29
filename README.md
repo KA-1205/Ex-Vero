@@ -1,137 +1,132 @@
+<div align="center">
+
 # Aegis Edge
 
-**An offline-first edge memory kernel that decides what's worth remembering, what's worth trusting, and what's worth sending to the cloud — demoed under disaster response, built to drop into any vertical unchanged.**
+**An offline-first edge memory kernel on Qdrant Edge — each device is a smart notepad that searches and answers offline, and a walkie-talkie that disputes and converges with the fleet when it reconnects.**
 
-Problem Statement 03 (Qdrant): AI-Powered Edge Memory & Intelligence Platform
+Built for Qdrant · Problem Statement 03 — AI-Powered Edge Memory & Intelligence Platform
 
-> [!NOTE]
-> Built on **Qdrant Edge**, which is **in beta** — announced as a private beta on 29 July 2025 and still in beta today, per Qdrant's own documentation. We pin the exact version and never float it. If you are comparing this to prior art, start with [Qdrant Edge](https://qdrant.tech/documentation/edge/) and its [sync guide](https://qdrant.tech/documentation/edge/edge-synchronization-guide/) rather than taking our description of it on faith.
+![Python](https://img.shields.io/badge/python-3.11%2B-3c873a?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Qdrant Edge](https://img.shields.io/badge/qdrant--edge--py-0.8.0%20pinned-8A2BE2?style=flat-square)
+![Qdrant Server](https://img.shields.io/badge/hub-Qdrant%20Server-8A2BE2?style=flat-square)
+![No SQL](https://img.shields.io/badge/datastore-Qdrant%20only-cc3836?style=flat-square)
 
-This is the entry point. `AGENTS.md` (problem definition + verified engine facts + build order) is what a coding agent should read first; `backend.md` and `frontend.md` are the build specs.
+[Overview](#overview) • [How it works](#how-it-works) • [The five demo moments](#the-five-demo-moments) • [Architecture](#architecture) • [Tech stack](#tech-stack) • [Docs](#docs)
+
+</div>
 
 ---
 
-## 1. The problem, in one paragraph
+## Overview
 
-Edge devices — kiosks, wearables, field tablets, robots — need instant local answers with no network, but they also keep learning new things locally that a shared cloud picture needs to know about. The naive version of this, sync everything with last-write-wins, breaks in real ways: it floods bad connections, it corrupts shared knowledge when two devices disagree, it lets deleted facts ghost back into existence, and it treats a dozen devices reporting on the same real-world event no differently than two.
+Edge devices — kiosks, wearables, field tablets, robots — need instant local answers with
+no network, but they also keep learning things locally that a shared cloud picture needs
+to know about. The naive version, *sync everything with last-write-wins*, breaks in real
+ways: it floods bad connections, it corrupts shared knowledge when two devices disagree,
+it lets deleted facts ghost back into existence, and it treats a dozen devices reporting
+the same event no differently than two.
 
-## 2. What we are building
+**Aegis Edge is the intelligence layer above the vector store that fixes those four
+things** — built entirely on Qdrant. Qdrant Edge is the on-device engine, Qdrant Server
+is the cloud hub, and Qdrant is the only datastore anywhere. No SQL, no second store.
 
-A generic **Edge Memory Kernel** with four parts, each mapped to a claim we can defend if a judge pushes on it:
-
-| Module | Claim |
-|---|---|
-| Decision Engine | Every captured fact is scored — novelty, urgency, sensitivity, completeness — before it is kept, queued, or dropped, and the reason is human-readable, not a black box. |
-| Model Adapter Registry | The kernel is model-agnostic and modality-agnostic via a config file. Same kernel, different vertical, zero code changes. |
-| Sync Protocol | Delta-only push, partial-snapshot pull, and a two-shard query path, so devices both publish and learn. |
-| Trust/Consensus Resolver | **The novel piece.** N-way, trust-weighted consensus over an append-only event log, with a visible confidence score and an explicit `DISPUTED` state when the system genuinely isn't sure. |
-
-Two design decisions carry most of the weight:
-
-- **The outbox is not a store.** It is a filtered `scroll` over the device's own mutable shard, so no fact is ever held in two places. Marking a point synced only *after* a successful push is what makes a crash mid-push harmless.
-- **Cloud memory is event-sourced.** Facts are immutable; a retraction is another event, not a delete. That is *why* a retracted fact cannot come back, rather than a promise that it won't.
+> [!NOTE]
+> The disaster-response fleet (paramedic tablets, triage kiosks) is **configuration, not
+> code**. Swap `config/disaster-response.yaml` for another vertical and the same kernel
+> runs unchanged — that is the claim this repo is built to defend.
 
 > [!IMPORTANT]
-> **Hybrid search means dense + sparse, fused.** It does not mean "vector search plus payload filters" — that is filtered search, and the two are different products. Qdrant Edge ships BM25 built in but does **not** fuse at query time, so we run the dense and sparse legs separately and fuse them with Reciprocal Rank Fusion. We report recall@5 for both.
+> **Qdrant Edge is in beta**, per Qdrant's live documentation. `qdrant-edge-py` is pinned
+> to `0.8.0` and never floated. The beta status is re-checked against the live docs before
+> any presentation.
 
-## 3. Prior art, and the gap we actually occupy
+## What it does
 
-We did not want to reinvent something that already ships, so we read the source rather than the marketing:
+| Module | What it owns |
+| --- | --- |
+| **Decision Engine** | Scores every captured fact — novelty, urgency, sensitivity, completeness — before it is kept, queued, or dropped, and emits a reason a non-expert can read. |
+| **Model Adapter Registry** | Model- and modality-agnostic through a config file: text embedding, cross-modal CLIP, BM25, and the answer model all swap by one YAML edit. Zero training, pretrained checkpoints only. |
+| **Sync Protocol** | Delta-only push and partial-snapshot pull against a real Qdrant Server, with a two-shard query path so devices both publish *and* learn. |
+| **Trust / Consensus Resolver** | N-way, trust-weighted consensus over an append-only event log, with a visible confidence score and an explicit `DISPUTED` state. The novel piece. |
+| **Answer layer (on-device RAG)** | Retrieve from Qdrant Edge, generate a grounded, sourced answer — a small local model offline, a cloud model online, one interface. |
 
-- **Qdrant Edge** — real, and the substrate we build on. An in-process embedded vector engine, Python and Rust bindings only, no background services, ~11 MB footprint. Its sync is a *pattern you assemble* from shard helpers plus your own transport, not a `.sync()` call.
-- **[`qdrant/qdrant-edge-demo`](https://github.com/qdrant/qdrant-edge-demo)** — real, public, and linked from the official sync guide. Qdrant's own smart-glasses demo: mutable + immutable shards, a persistent queue, partial-snapshot sync, CLIP embeddings. **This is the closest prior art to our sync layer and we cite it deliberately.** Our difference is everything above the transport: the decision layer, and multi-device reconciliation.
-- **[`qdrant-labs/edge-mission-control`](https://github.com/qdrant-labs/edge-mission-control)** — real, with a live demo. A home robot building searchable object memory: dense + BM25 RRF hybrid queries in one Edge shard, a cross-modal embedder so text queries return images, live facet counts, sub-millisecond latency on screen. **This is the closest prior art to our retrieval layer.**
-- **[Qdrant's "Memory at the Edge" post](https://qdrant.tech/blog/qdrant-edge-on-device-vector-search/)** (June 2026) — the vendor already owns the "local first, cloud when needed, sync between" narrative.
-- **[HyperspaceDB](https://github.com/YARlabs/hyperspace-db)** — real. Hyperbolic vector DB with a Merkle-tree delta-sync protocol for edge-to-cloud, WASM clients, 1-bit quantization. Solves efficient sync; does not do semantic conflict resolution.
-- **[Pocket RAG](https://arxiv.org/abs/2602.13229)** (arXiv 2602.13229) and **[EdgeRAG](https://arxiv.org/abs/2412.21023)** (arXiv 2412.21023) — real, published work on single-device offline RAG under tight memory budgets. Pocket RAG is also our reference for the on-device answer path.
-- **QdrantSync** — a small CLI for migrating collections between two Qdrant servers. Plumbing, not an intelligence layer.
+## How it works
 
-**The gap, stated honestly:** the two official Qdrant demos are single-device systems that sync to a hub. HyperspaceDB syncs efficiently but does not reason about what two devices are claiming. The arXiv work is single-device. **Nobody we found handles a fleet of devices simultaneously learning and having to trust or dispute each other's updates** — and that is the layer we build.
+Two ideas carry most of the weight:
 
-An earlier draft of this file cited two projects as verified prior art that we could not find traces of. They are removed rather than softened. If we cannot verify it, we do not cite it.
+- **The notepad.** Each device stores text and image facts in a local Qdrant Edge shard,
+  answers hybrid (dense + BM25, fused with RRF) queries offline in milliseconds, and
+  generates a grounded answer with on-device RAG — all with no network.
+- **The walkie-talkie.** Devices can't hear each other while offline; each just remembers
+  what it saw. On reconnect they push to a real Qdrant Server and the gateway folds every
+  report into one trusted picture. Three devices agreeing raises confidence; a device
+  that keeps being wrong loses trust; genuine disagreement is surfaced as `DISPUTED`, not
+  silently resolved; and a retraction can never ghost back.
 
-## 4. Architecture
+> [!NOTE]
+> **Everything measured is real; only the hardware and the network are emulated.** Each
+> device runs in a real CPU/RAM-limited container, telemetry is read from the real cgroup,
+> and the network layer injects real latency, a real byte cap, and real failures. Numbers
+> on screen are measured, never typed in.
+
+## The five demo moments
+
+1. Multiple devices, fully offline, answering instantly.
+2. A live decision feed narrating *why* — kept / queued / synced / rejected — in plain language.
+3. Two devices disagreeing offline, converging on reconnect into one trusted answer with a visible confidence score.
+4. A safety-critical fact jumping the sync queue ahead of routine ones on a degraded link.
+5. Real latency and memory numbers from the emulated constrained target, on screen, measured.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph EDGE["Edge Node — one process, no server"]
+    subgraph EDGE["Edge Node — one process, CPU/RAM-limited container"]
         CAP[Capture: text / image] --> ADPT[Model Adapter Registry]
         ADPT --> MUT[mutable Edge Shard]
         MUT --> DE[Decision Engine]
         DE -->|verdict + plain-language reason| FEED[Live Decision Feed]
-        MUT -->|scroll: synced == false| OBX[Outbox view]
-        MUT --> QRY
-        IMM[immutable Edge Shard] --> QRY[Hybrid query: dense + BM25, fused with RRF]
-        QRY --> ANS[Answer: local model, or cloud when connected]
+        MUT --> QRY[Hybrid query: dense + BM25, RRF]
+        IMM[immutable Edge Shard] --> QRY
+        QRY --> RAG[On-device RAG: retrieve → augment → generate]
     end
-    OBX -->|delta push — mark synced only after success| GATE[Cloud Gateway]
-    GATE --> SCHEMA[Schema Middleware]
-    SCHEMA --> FOLD[Consensus Fold]
+    MUT -->|delta push, mark-after-ack| GATE[Cloud Gateway]
+    GATE --> FOLD[Consensus Fold]
     FOLD --> HUB[(Qdrant Server — fact_events, append-only)]
     HUB -.partial snapshot pull.-> IMM
     FOLD --> DASH[Command Dashboard]
     FOLD --> THEATER[Conflict Theater]
 ```
 
-No SQL in the runtime path, and none needed: the Decision Engine, the outbox, the memory browser, the facet counts, and the consensus fold all read and write Qdrant. Pick the store by operation — Qdrant when the question is *"what is semantically near this?"*, and because the consensus layer appends immutable events rather than overwriting state, it needs no transactions.
+The network layer sits on the sync transport only — never on the query or answer path
+(enforced by a test), which is what makes "instant offline search" an architectural
+guarantee rather than lucky timing.
 
-Full detail: `backend.md` (kernel, decision rules, resolver, API contract) and `frontend.md` (screens, design direction, data contract).
+## Tech stack
 
-## 5. The five moments the demo has to land
+- **Device:** Python 3.11+ + FastAPI, one process per node, [`qdrant-edge-py`](https://pypi.org/project/qdrant-edge-py/) with a mutable + immutable `EdgeShard`. Dense text embeddings from [`fastembed`](https://github.com/qdrant/fastembed) (`BAAI/bge-small-en-v1.5`); cross-modal images via CLIP (`Qdrant/clip-ViT-B-32`); BM25 built into Qdrant Edge.
+- **Answer model:** [Ollama](https://ollama.com) running `qwen2.5:1.5b` offline; a cloud model online; both behind one `Generator` interface with an extractive fallback for tiny devices.
+- **Hub:** a real Qdrant Server (`qdrant/qdrant` via Docker) collection `fact_events`, append-only, plus a FastAPI gateway running the schema middleware and consensus fold.
+- **Frontend:** React + Vite + TypeScript + Tailwind, no component library — a thin renderer over the backend contract.
+- **Constrained target:** a real 1-CPU / 512 MB container today (swappable for a Raspberry Pi later with zero code change).
 
-1. Multiple devices, fully offline, answering instantly.
-2. A live decision feed narrating *why* — kept, queued, synced, rejected — in plain language.
-3. Two devices disagreeing offline, converging into one trusted answer with a visible confidence score on reconnect.
-4. A safety-critical fact jumping the sync queue ahead of routine ones on a degraded link.
-5. Real latency and memory numbers from a real constrained target, on screen, measured.
+## Docs
 
-If a feature doesn't serve one of these five, it doesn't ship before the deadline.
+| Document | Purpose |
+| --- | --- |
+| [`docs/00-problem-statement.md`](docs/00-problem-statement.md) | The sponsor brief — what we are building and why, with the acceptance bar per goal. |
+| [`docs/10-prd.md`](docs/10-prd.md) | Product & software requirements: FR/NFR, personas, acceptance criteria, traceability. |
+| [`docs/20-architecture.md`](docs/20-architecture.md) | System view: context, single-node, sync loop, and consensus-fold diagrams. |
+| [`docs/backend.md`](docs/backend.md) | Engineering spec: physical model, model registry, decision engine, real-server sync, consensus, answer layer, build phases. |
+| [`docs/frontend.md`](docs/frontend.md) | UI spec: screens, design direction, data contract. |
+| [`docs/API.md`](docs/API.md) | REST/WebSocket route contract for the frontend team. |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | Build guide: verified Qdrant Edge facts, silent traps, correctness invariants, build order. |
 
-## 6. Design direction
+## Project status
 
-Tactical ops console, not "AI product." Near-black base, monospace for all data, IDs, timestamps and scores, one alert-red and one green/amber accent, sharp corners, hairline borders, no gradients, no glass cards, no chat-bubble UI. Rationale in `frontend.md` §2.
-
-## 7. Tech stack
-
-- **Device:** Python 3.11+ + FastAPI, one process per node, [`qdrant-edge-py`](https://pypi.org/project/qdrant-edge-py/) with two `EdgeShard`s per device (mutable for local writes, immutable for the server snapshot). Dense embeddings from `fastembed`; BM25 from Edge's own built-in embedder. **No SQL on device.**
-- **Hub:** one Qdrant Server collection, `fact_events`, append-only, plus a FastAPI gateway running the schema middleware and consensus fold.
-- **Frontend:** React + Vite + TypeScript + Tailwind, no component library. A thin renderer over the backend contract — no model or policy logic in the browser.
-- **Models:** swappable via config, never hardcoded. One cross-modal embedder, so a text query can retrieve an image.
-- **Constrained target:** Raspberry Pi 4/5, or a 512 MB / 1-CPU container as an honest fallback.
-
-## 8. Build order
-
-1. Edge shard + capture + instant query, offline. No sync yet.
-2. Decision Engine — every verdict plus a reason string a non-expert can read.
-3. Hybrid search: BM25 leg + RRF fusion, with a measured dense-vs-hybrid recall@5.
-4. Outbox + push handshake — cut the network, capture, reconnect, cloud updates itself.
-5. Pull direction: the immutable shard from a partial snapshot, so a device learns a fact it never captured.
-6. Consensus fold + retractions, with a conflict injector so the disagreement is reproducible on demand.
-7. Trust decay made visible, plus the resolver-vs-last-write-wins benchmark.
-8. The answer layer: same question, two paths, UI shows which served it.
-9. Frontend, screen by screen per `frontend.md` — Conflict Theater last, and don't rush it.
-10. Rehearse the five moments, in order, on a timer.
-
-## 9. Known gaps and demo-scale limits
-
-We'd rather say these out loud than have a judge find them:
-
-- **The answer layer needs a bigger target than the 512 MB container.** A small local model answering offline needs a Pi-class or ≥4 GB host. Either commit to that as the constrained target or run generation on a subset of nodes and say which.
-- **The consensus fold is a `scroll` per `corroboration_key` per sync cycle.** Correct and fast to low thousands of events; not a design that scales past that. The hub also grows monotonically, by design, because deletions are events.
-- **The immutable shard is a full local copy of the hub collection, on every device.** Hub size × device count is the RAM budget, and nothing warns you when you cross it.
-- **Embedding drift** if edge and cloud ever run different-sized models. Fine while they share a model family; a real gap the moment they don't.
-- **No schema-version backfill for old app versions.** Plumbing, not a demo beat — stretch goal.
-- **No short-lived working-memory tier** distinct from the consolidated event log.
-
-## 10. Repository layout
-
-```
-/edge-node/       FastAPI service, Decision Engine, Model Adapter Registry, two shards
-/cloud-gateway/   schema middleware, consensus fold
-/frontend/        React app per frontend.md
-/config/          per-vertical YAML (disaster-response.yaml, retail.yaml, ...)
-AGENTS.md         problem definition, verified engine facts, build order — read first
-backend.md        engineering spec
-frontend.md       UI spec
-README.md         this file
-```
+Backend build phases 1–6 exist in `edge-node/` (capture, hybrid search, decision engine,
+outbox/push, snapshot pull, consensus fold, semantic conflict detection) with a passing
+test suite against an in-memory hub. In progress: promoting the hub to a real Qdrant
+Server, the network layer with measured effects, the on-device RAG answer layer, local
+memory eviction, telemetry from real cgroup stats, and the frontend.
