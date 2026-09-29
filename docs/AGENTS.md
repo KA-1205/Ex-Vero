@@ -58,8 +58,13 @@ vector store alone. See `00-problem-statement.md` §2 for the trap in goal 8.
   sync. We need all three, so we use `qdrant-edge-py`.
 - **No built-in `.sync()`.** Sync is a pattern assembled from shard helpers + our own
   transport, per Qdrant's sync guide (dual shard: mutable + immutable, partial snapshots).
-- **No query-time fusion.** Query one named vector field per request (`using=`). Run the
-  dense and BM25 legs separately and fuse rankings yourself (RRF).
+- **Query-time fusion IS supported (verified on 0.8.0, Phase 0).** A single `QueryRequest`
+  with two `Prefetch` legs (dense `using="text_dense"` + BM25 `using="text_bm25"`) and
+  `query=Fusion.Rrf(k=...)` genuinely blends both rankings — the probe proved the fused
+  order matches neither single leg and promotes the doc both legs rank. So server-side RRF
+  is allowed; we do **not** have to fuse in Python. (Query one named field per *leg* via
+  `using=`; the BM25 leg must use `embed_query`, not `embed_document`.) This supersedes the
+  earlier "no query-time fusion" claim, which does not hold for this pinned version.
 - **No background optimizer.** Nothing is indexed and no deleted space is reclaimed until
   you call `optimize()`.
 - **Dense embeddings come from `fastembed`** (or the team model); **BM25 is built into
@@ -70,6 +75,36 @@ vector store alone. See `00-problem-statement.md` §2 for the trap in goal 8.
 - **Config gotchas:** `EdgeConfig` rejects empty vectors+sparse; `create()` fails on a
   populated dir (use `load()` to reopen); the search pool defaults to 4 threads per core
   (set `max_search_threads` / `search_pool_core`).
+
+### 3.1 Phase 0 probe results — signatures verified callable on `qdrant-edge-py==0.8.0`
+Reproduce with `python tools/probe_edge_api.py` (test: `tests/test_probe.py`). Do not
+build a later phase on a call not in this list.
+
+- **Hybrid fusion:** `shard.query(QueryRequest(prefetches=[Prefetch(query=Query.Nearest(dense, using="text_dense")), Prefetch(query=Query.Nearest(bm25_sparse, using="text_bm25"))], query=Fusion.Rrf(k=60)))`
+  returns a `list[ScoredPoint]` fused by RRF. **Decision: Phase 3/hybrid uses server-side
+  fusion (not Python RRF).**
+- **Sync surface:**
+  - `EdgeShard.snapshot_manifest()` → `dict[str, dict]` keyed by segment UUID; each value has
+    `segment_id`, `segment_version`, `file_versions`.
+  - `EdgeShard.update_from_snapshot(snapshot_path, tmp_dir=None)` — takes a **filesystem path
+    string**, not bytes or a handle.
+  - `EdgeShard.unpack_snapshot(snapshot_path, target_path)` — static, two path args.
+  - `EdgeShard.create(path, config)` **raises** on a populated dir; `EdgeShard.load(path,
+    config=None)` reopens it.
+  - `UpdateOperation.upsert_points(points, condition=None, update_mode=None)`,
+    `delete_points_by_filter(filter)` (verified: point count drops),
+    `set_payload_by_filter(filter, payload, key=None)` (verified: payload mutated).
+- **Faceting & scroll:** `shard.facet(FacetRequest(key=...))` → `FacetResponse` with a `.hits`
+  list of `FacetHit(value, count)`. `shard.scroll(ScrollRequest(filter=Filter(...)))` accepts a
+  `Filter` and returns a `(list[Record], next_offset)` **tuple**. `scroll` sorts via
+  `order_by=OrderBy(key, direction)` **only when the key has a range index** (Integer/Float);
+  an unindexed key raises.
+- **⚠ Boolean-filter trap (found in Phase 0):** filtering a Python-`bool` payload field via
+  `FieldCondition(match=MatchValue(value=True/False))` matches **nothing** in `scroll`/`count`/
+  `set_payload_by_filter` — a silent zero — even though `facet` still counts the field. An
+  Integer (`0/1`) or Keyword (`"true"/"false"`) field filters correctly. **Decision: store
+  `_sync_meta.synced` as an Integer `0/1` (Integer-indexed), never a bool**, or the outbox
+  `scroll(synced==0)` would return nothing and the device would silently sync zero points.
 - **Sources:** Qdrant Edge overview, Edge API, BM25, Data Synchronization Patterns, and
   the Synchronize-with-a-Server guide on qdrant.tech/documentation/edge.
 
@@ -79,7 +114,8 @@ vector store alone. See `00-problem-statement.md` §2 for the trap in goal 8.
 
 | Trap | Symptom | Guard |
 |---|---|---|
-| Calling filtered search "hybrid" | dense and BM25 ranks never differ | two separate queries + your own RRF |
+| Calling filtered search "hybrid" | dense and BM25 ranks never differ | server-side `Prefetch`+`Fusion.Rrf` (verified to blend on 0.8.0, §3.1) — assert fused ≠ either leg |
+| Filtering a bool payload field | `scroll`/`count` on `synced==false` silently returns nothing; outbox never drains | store `_sync_meta.synced` as Integer `0/1`, Integer-indexed (§3.1) |
 | Forgetting `optimize()` | inserts seem to vanish; sparse index stale | `optimize()` after each write batch |
 | Marking synced before push | permanent silent data loss on a failed push | mark synced only after hub ack |
 | Random point IDs per device | dedupe is a no-op; duplicate query results | deterministic ID from `corroboration_key` + value hash, or propagate the hub event id |

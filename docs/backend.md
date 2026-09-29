@@ -349,6 +349,14 @@ both grounded in retrieved context with sources, and the UI shows the path.
 1. Dense leg: `Query.Nearest(dense_vec, using="text_dense")`.
 2. Sparse leg: BM25 `embed_query` → `Query.Nearest(sparse, using="text_bm25")`.
 3. Fuse with Reciprocal Rank Fusion; run over both shards; dedupe by point ID.
+
+> **Phase 0 reconcile (verified on `qdrant-edge-py==0.8.0`):** server-side fusion works —
+> one `QueryRequest` with two `Prefetch` legs and `query=Fusion.Rrf(k=...)` genuinely blends
+> the dense and BM25 rankings (the probe proved the fused order matches neither single leg).
+> So the fuse in step 3 is done **server-side per shard**, not with hand-rolled Python RRF.
+> We still fuse the two *shards'* result sets in Python and dedupe by point ID. This
+> supersedes the older "no query-time fusion" note. See `AGENTS.md` §3.1 and
+> `tools/probe_edge_api.py`.
 - Always `embed_query` for queries and `embed_document` for documents (BM25 weights
   them differently). Index every field we filter/facet on (`zone`, `modality`,
   `status`, `urgency_score`, `corroboration_key`, `device_id`, `synced`).
