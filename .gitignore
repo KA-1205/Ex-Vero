@@ -31,3 +31,8 @@ shards/
 
 # OS noise
 .DS_Store
+
+# ollama
+.ollama
+# qdrant local storage
+.qdrant/
