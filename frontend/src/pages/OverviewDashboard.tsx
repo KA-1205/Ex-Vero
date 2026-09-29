@@ -89,7 +89,7 @@ export function OverviewDashboard() {
       <header className="relative flex min-h-[105px] flex-wrap items-center justify-between gap-4 pt-3">
         <div className="min-w-0">
           <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">OVERVIEW</div>
-          <h1 className="mt-1 font-serif text-4xl xl:text-5xl leading-none tracking-tight text-ink">Field Command <span className="font-sans text-3xl text-[#315C86]">—</span></h1>
+          <h1 className="mt-1 font-serif text-4xl xl:text-5xl leading-none tracking-tight text-ink">Field Command</h1>
           <p className="mt-2 text-sm text-ink-dim">Real-time monitoring of your fleet and critical infrastructure.</p>
         </div>
         <div className="hidden md:flex min-w-[290px] flex-1 max-w-[520px] h-[88px] items-center border-l border-line pl-5">
