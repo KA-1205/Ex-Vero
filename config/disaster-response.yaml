@@ -17,7 +17,7 @@ policy:
   pii_patterns:
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN
     - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # email
-  required_fields: ["status", "timestamp", "reporter_device_id"]
+  required_fields: ["status", "client_timestamp_ns", "reporter_device_id"]
   bandwidth: "FULL"
   trust_decay: 0.3
 

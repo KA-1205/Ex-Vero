@@ -25,7 +25,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | # | Phase | Status |
 |---|-------|--------|
 | 0 | Edge API probe + doc reconcile | DONE |
-| 1 | Decision Engine fix | BROKEN |
+| 1 | Decision Engine fix | DONE |
 | 2 | Model Adapter Registry | TODO |
 | 3 | Real Qdrant Server hub + outbox | PARTIAL |
 | 4 | Partial-snapshot pull | WEAK |

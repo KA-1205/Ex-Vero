@@ -1,5 +1,6 @@
 import os
 import hashlib
+import time
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -251,17 +252,42 @@ async def capture(device_id: str, request: CaptureRequest):
         payload["zone"] = request.zone
     if request.entity is not None:
         payload["entity"] = request.entity
+    # Add required fields for completeness check
+    payload["status"] = "unverified"
+    payload["client_timestamp_ns"] = int(time.time() * 1_000_000_000)
+    payload["reporter_device_id"] = device_id
     # Add sync metadata for outbox
     payload = add_sync_meta(payload)
     
     # Run decision engine
-    verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter)
+    verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter, exclude_point_id=point_id)
     # Log decision for feed
     log_decision(device_id, payload, verdict, reason)
     
+    # Store verdict and sync_priority in _sync_meta for push ordering
+    if "_sync_meta" not in payload:
+        payload["_sync_meta"] = {}
+    payload["_sync_meta"]["verdict"] = verdict
+    # Determine base sync_priority from verdict
+    if verdict == "QUEUE_HIGH":
+        base_priority = "URGENT"
+    elif verdict in ["QUEUE_LOW", "REDACT_AND_QUEUE"]:
+        base_priority = "ROUTINE"
+    else:
+        base_priority = "HELD"
+    # Override to HELD if incomplete (regardless of verdict)
+    # Check completeness using the same logic as decision engine
+    missing = [f for f in ["status", "timestamp", "reporter_device_id"] if f not in payload]
+    if missing:
+        # Incomplete - override to HELD
+        payload["_sync_meta"]["sync_priority"] = "HELD"
+    else:
+        # Complete - use base priority from verdict
+        payload["_sync_meta"]["sync_priority"] = base_priority
+    
     # Compute BM25 sparse vector for the document (embed_document)
     sparse_vector = bm25.embed_document(request.value)
-
+    
     # Semantic conflict detection BEFORE inserting the new point (Step 8),
     # so we compare only against prior reports, never the point itself.
     conflicts = detect_conflicts(
@@ -289,8 +315,10 @@ async def capture(device_id: str, request: CaptureRequest):
     operation = UpdateOperation.upsert_points(points=[point])
     mutable_shard.update(operation)
     
-    # Mark as unsynced
-    unsynced_set.add(point_id)
+    # Mark as unsynced only if verdict allows syncing
+    # KEEP_LOCAL and REJECT should not be pushed
+    if verdict in ["QUEUE_HIGH", "QUEUE_LOW", "REDACT_AND_QUEUE"]:
+        unsynced_set.add(point_id)
     
     # Optimize after write batch (invariant 2)
     mutable_shard.optimize()
@@ -390,10 +418,32 @@ async def push(device_id: str):
     if not unsynced_set:
         return PushResponse(pushed_count=0, errors=[])
     
+    # Convert set to list and sort by priority: URGENT before ROUTINE
     point_ids = list(unsynced_set)
-    # Retrieve points to create snapshot
+    
+    # Retrieve points to get their sync_priority for sorting
     try:
-        records = mutable_shard.retrieve(point_ids, with_payload=True, with_vector=True)
+        records = mutable_shard.retrieve(point_ids, with_payload=True, with_vector=False)
+        # Create a list of (point_id, priority) tuples for sorting
+        point_priorities = []
+        for record in records:
+            point_id = record.id
+            sync_payload = record.payload.get("_sync_meta", {})
+            priority = sync_payload.get("sync_priority", "HELD")
+            # Convert priority to sort order: URGENT=0, ROUTINE=1, HELD=2 (though HELD shouldn't be in unsynced_set)
+            priority_order = {"URGENT": 0, "ROUTINE": 1, "HELD": 2}.get(priority, 2)
+            point_priorities.append((point_id, priority_order))
+        
+        # Sort by priority (URGENT first)
+        point_priorities.sort(key=lambda x: x[1])
+        sorted_point_ids = [point_id for point_id, _ in point_priorities]
+    except Exception as e:
+        # If retrieval fails, fall back to original order
+        sorted_point_ids = point_ids
+    
+    # Retrieve points to create snapshot (in priority order)
+    try:
+        records = mutable_shard.retrieve(sorted_point_ids, with_payload=True, with_vector=True)
         # Convert Record objects to Point objects
         points = [Point(id=rec.id, vector=rec.vector, payload=rec.payload) for rec in records]
     except Exception as e:
@@ -430,11 +480,11 @@ async def push(device_id: str):
         # Append an OBSERVED event per pushed point (Step 6: event-sourced consensus)
         event_log = get_or_create_event_log(device_id)
         now = datetime.utcnow().isoformat() + "Z"
-        for pid in point_ids:
+        for pid in sorted_point_ids:
             event_log.append(pid, OBSERVED, device_ts=now)
         # Clear unsynced set
         unsynced_set.clear()
-        pushed = len(point_ids)
+        pushed = len(sorted_point_ids)
         errors = []
     except Exception as e:
         pushed = 0
