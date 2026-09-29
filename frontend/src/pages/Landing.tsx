@@ -47,7 +47,7 @@ export function Landing() {
           <h1 className="font-mono text-5xl sm:text-7xl font-semibold tracking-tight text-ink">
             AEGIS EDGE
           </h1>
-          <p className="mt-5 text-sm sm:text-base text-ink-dim font-sans leading-relaxed">
+          <p className="mt-5 text-sm sm:text-base font-sans leading-relaxed" style={{ color: '#102A43' }}>
             An offline-first edge memory kernel that decides what's worth remembering,
             what's worth trusting, and what's worth sending to the cloud.
           </p>
