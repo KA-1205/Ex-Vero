@@ -1,8 +1,24 @@
-adapters:
-  - name: text
-    modality: text
-    model: BAAI/bge-small-en-v1.5
-    # dim will be derived from the model
+# Model Adapter Registry (backend.md §3.2). Which models run is declared here
+# and resolved into adapter objects at startup; swapping a model is a one-line
+# edit. `dim` is derived from the model, never hardcoded (fakes excepted).
+models:
+  embedders:
+    - name: text
+      modality: text
+      provider: fastembed
+      model: BAAI/bge-small-en-v1.5
+      version: bge-small-en-v1.5
+    # Cross-modal CLIP (text query -> photo) is available via the registry and
+    # covered by tests/test_registry.py; enable it here to index images:
+    # - name: image
+    #   modality: vision
+    #   provider: fastembed
+    #   model: Qdrant/clip-ViT-B-32
+    #   version: clip-ViT-B-32
+  sparse:
+    - name: text_bm25
+      provider: qdrant-edge   # BM25 is built into Qdrant Edge — no extra lib
+      modifier: idf
 
 policy:
   novelty_threshold_high: 0.98

@@ -26,7 +26,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 |---|-------|--------|
 | 0 | Edge API probe + doc reconcile | DONE |
 | 1 | Decision Engine fix | DONE |
-| 2 | Model Adapter Registry | TODO |
+| 2 | Model Adapter Registry | DONE |
 | 3 | Real Qdrant Server hub + outbox | PARTIAL |
 | 4 | Partial-snapshot pull | WEAK |
 | 5 | Multi-device consensus | HALF |
@@ -145,6 +145,16 @@ adapter with no code change; a wrong-modality payload raises; a zero vector rais
 **Guardrails:** the registry is the ONLY place that names concrete model classes. No model is
 imported anywhere else. Tests use `FakeEmbedder` (no downloads) except one guarded real-model
 test.
+
+**Result:** `adapter.py` now defines `Embedder`/`Generator` as `@runtime_checkable` Protocols
+plus `as_unit_vector()` (rejects zero/NaN/Inf), `FakeEmbedder`, `TextDenseAdapter`, and the
+cross-modal `ClipTextAdapter`/`ClipVisionAdapter` (one CLIP family → shared 512-dim space).
+`registry.from_config()` resolves the new `models:` schema (provider `fake`/`fastembed`, CLIP by
+modality); `load_adapters()` still reads the legacy `adapters:` schema for older tests. `dim` is
+read from the model, never hardcoded (fakes excepted). `main.py` now stamps the checkpoint
+`version` on every point (invariant 9) and no longer imports a model library. Config migrated to
+`models:`. Test: `tests/test_registry.py` (conformance §3.3 over fake + real dense + CLIP, config
+swap, wrong-modality/zero-vector raise, invariant 9). Full suite green (37).
 
 **Out of scope:** the generator implementation (phase 7 — only the `Generator` Protocol here).
 

@@ -4,7 +4,6 @@ import time
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import fastembed
 import yaml
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -244,7 +243,7 @@ async def capture(device_id: str, request: CaptureRequest):
     payload = {
         "value": request.value,
         "model": adapter.name,
-        "model_version": fastembed.__version__,
+        "model_version": adapter.version,
         "corroboration_key": request.corroboration_key,
         "modality": adapter.modality
     }
