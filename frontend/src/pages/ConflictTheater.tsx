@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
-import { fetchDevices, injectConflict, setRogueMode, subscribeConsensusEvents } from '../api/client'
+import { fetchDevices, injectConflict, mapConsensusEvent, setRogueMode, subscribeConsensusEvents } from '../api/client'
 import type { ConsensusEvent, DeviceSummary } from '../types'
 import { MonoValue, Panel } from '../components/primitives'
 
@@ -37,6 +37,7 @@ export function ConflictTheater() {
   const [resolving, setResolving] = useState(false)
   const [rogue, setRogue] = useState(false)
   const [message, setMessage] = useState('')
+  const [pendingConsensus, setPendingConsensus] = useState<ConsensusEvent | null>(null)
 
   useEffect(() => {
     void fetchDevices().then(setDevices).catch((error) => console.error('Unable to load conflict devices', error))
@@ -50,18 +51,29 @@ export function ConflictTheater() {
     setResolving(true)
     try { setMode('full') } catch (error) { setMessage(error instanceof Error ? error.message : 'Reconnect failed') }
     setReconnected(true)
+    if (pendingConsensus) {
+      setResolved(pendingConsensus)
+      setResolving(false)
+      return
+    }
+    setResolving(false)
     if (USE_MOCKS) window.setTimeout(() => { setResolved(mockConsensusEvents()[0]); setResolving(false) }, 1200)
   }
 
   function reset() {
     setReconnected(false)
     setResolved(null)
+    setPendingConsensus(null)
     setMode('offline')
   }
 
   async function inject() {
     setMessage('')
-    try { await injectConflict('zone_c.hazard', { [deviceA.id]: DEVICE_A.value, [deviceB.id]: DEVICE_B.value }); setMessage('Conflict injected. Both devices hold different values.') }
+    try {
+      const response = await injectConflict('zone_c.hazard', { [deviceA.id]: DEVICE_A.value, [deviceB.id]: DEVICE_B.value })
+      if (response.consensus) setPendingConsensus(mapConsensusEvent(response.consensus))
+      setMessage('Conflict injected. Click RECONNECT to resolve it.')
+    }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Conflict injection failed') }
   }
 
