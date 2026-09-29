@@ -35,10 +35,10 @@ const REASONS = [
 ]
 
 const VERDICTS: DecisionFeedEntry['verdict'][] = [
-  'KEPT_LOCAL',
-  'QUEUED',
-  'SYNCED_NOW',
-  'REJECTED',
+  'KEEP_LOCAL',
+  'QUEUE_LOW',
+  'QUEUE_HIGH',
+  'REJECT',
   'REDACT_AND_QUEUE',
 ]
 
@@ -73,6 +73,7 @@ export function mockDecisionFeed(deviceId: string, count = 12): DecisionFeedEntr
     return {
       id: `feed-${deviceId}-${i}`,
       device_id: deviceId,
+      point_id: i + 1,
       timestamp: new Date(Date.now() - i * 1000 * 45).toISOString(),
       content_preview:
         i % 3 === 0

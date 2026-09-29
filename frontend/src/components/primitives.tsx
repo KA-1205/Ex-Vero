@@ -48,6 +48,10 @@ export function ConnectivityPill({ state }: { state: 'ONLINE' | 'DEGRADED' | 'OF
 }
 
 const VERDICT_STYLES: Record<string, string> = {
+  KEEP_LOCAL: 'text-ink-dim border-line',
+  QUEUE_LOW: 'text-pending border-pending',
+  QUEUE_HIGH: 'text-alert border-alert',
+  REJECT: 'text-alert border-alert',
   KEPT_LOCAL: 'text-ink-dim border-line',
   QUEUED: 'text-pending border-pending',
   SYNCED_NOW: 'text-good border-good',

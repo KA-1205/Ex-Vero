@@ -52,6 +52,7 @@ export function SyncStrip({ deviceId }: { deviceId: string }) {
           {status.last_push_duration_ms ?? '—'} ms / {status.last_push_mode ?? '—'}
         </MonoValue>
       </div>
+      <div className="flex items-center gap-1 text-ink-dim">last pull <MonoValue>{status.last_pull_at ? `${new Date(status.last_pull_at).toLocaleTimeString()} · ${status.last_pull_points ?? 0} pts` : '—'}</MonoValue></div>
     </div>
   )
 }

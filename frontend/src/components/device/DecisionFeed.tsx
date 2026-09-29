@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react'
-import { subscribeDeviceEvents } from '../../api/client'
-import { mockDecisionFeed } from '../../api/mock'
+import { fetchDecisionFeed, subscribeDeviceEvents } from '../../api/client'
 import type { DecisionFeedEntry } from '../../types'
 import { MonoValue, Panel, VerdictBadge } from '../primitives'
 
 export function DecisionFeed({ deviceId }: { deviceId: string }) {
-  const [entries, setEntries] = useState<DecisionFeedEntry[]>(() => mockDecisionFeed(deviceId))
+  const [entries, setEntries] = useState<DecisionFeedEntry[]>([])
 
   useEffect(() => {
-    setEntries(mockDecisionFeed(deviceId))
-    const unsub = subscribeDeviceEvents(deviceId, (entry) => {
-      setEntries((prev) => [entry, ...prev].slice(0, 100))
+    let active = true
+    setEntries([])
+    void fetchDecisionFeed(deviceId).then((rows) => { if (active) setEntries(rows) }).catch((error) => console.error('Unable to load decision feed', error))
+    const unsub = subscribeDeviceEvents(deviceId, (frame) => {
+      if (frame.type !== 'decision') return
+      const data = frame.data
+      const entry: DecisionFeedEntry = { ...data, id: String(data.point_id), content_preview: data.value_preview }
+      setEntries((prev) => [entry, ...prev.filter((row) => row.id !== entry.id)].slice(0, 100))
     })
-    return unsub
+    return () => { active = false; unsub() }
   }, [deviceId])
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchMemoryRecords } from '../../api/client'
+import { fetchMemoryDetail, fetchMemoryRecords } from '../../api/client'
 import type { MemoryRecord, MemoryState } from '../../types'
 import { MonoValue, Panel } from '../primitives'
 
@@ -23,8 +23,10 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchMemoryRecords(deviceId).then(setRecords)
-  }, [deviceId])
+    let active = true
+    void fetchMemoryRecords(deviceId, { q: filter }).then((rows) => { if (active) setRecords(rows) }).catch((error) => console.error('Unable to load image memory', error))
+    return () => { active = false }
+  }, [deviceId, filter])
 
   const filtered = useMemo(
     () =>
@@ -51,7 +53,10 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
             return (
               <div key={r.id}>
                 <button
-                  onClick={() => setExpanded(isOpen ? null : r.id)}
+                  onClick={() => {
+                    setExpanded(isOpen ? null : r.id)
+                    if (!isOpen && !r.detail) void fetchMemoryDetail(deviceId, r.id).then((detail) => setRecords((rows) => rows.map((row) => row.id === r.id ? { ...row, detail, decision_reason: detail.decision.reason, sync_verdict: detail.decision.verdict } : row))).catch((error) => console.error('Unable to load image memory detail', error))
+                  }}
                   className="w-full text-left p-2 hover:bg-base-sunken flex items-start justify-between gap-2"
                 >
                   <div className="min-w-0">

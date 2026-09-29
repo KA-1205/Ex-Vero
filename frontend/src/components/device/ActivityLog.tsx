@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchActivity } from '../../api/client'
+import { fetchActivity, subscribeDeviceEvents } from '../../api/client'
 import type { ActivityEntry, ActivityKind } from '../../types'
 import { MonoValue, Panel } from '../primitives'
 
@@ -32,12 +32,18 @@ export function ActivityLog({ deviceId }: { deviceId: string }) {
   const [kindFilter, setKindFilter] = useState<ActivityKind | 'all'>('all')
 
   useEffect(() => {
-    fetchActivity(deviceId).then(setEntries)
-    const id = setInterval(() => fetchActivity(deviceId).then(setEntries), 6000)
-    return () => clearInterval(id)
-  }, [deviceId])
+    let active = true
+    const refresh = () => void fetchActivity(deviceId, kindFilter === 'all' ? undefined : kindFilter).then((rows) => { if (active) setEntries(rows) }).catch((error) => console.error('Unable to load activity', error))
+    refresh()
+    const unsubscribe = subscribeDeviceEvents(deviceId, (frame) => {
+      if (frame.type !== 'activity') return
+      const entry = frame.data
+      setEntries((rows) => [entry, ...rows.filter((row) => !(row.timestamp === entry.timestamp && row.kind === entry.kind && row.point_id === entry.point_id))].slice(0, 100))
+    })
+    return () => { active = false; unsubscribe() }
+  }, [deviceId, kindFilter])
 
-  const visible = kindFilter === 'all' ? entries : entries.filter((e) => e.kind === kindFilter)
+  const visible = entries
 
   return (
     <Panel

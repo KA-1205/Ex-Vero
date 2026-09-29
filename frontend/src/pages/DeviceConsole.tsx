@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { QAPanel } from '../components/device/QAPanel'
 import { DecisionFeed } from '../components/device/DecisionFeed'
@@ -7,6 +7,9 @@ import { SyncStrip } from '../components/device/SyncStrip'
 import { ResourceStrip } from '../components/device/ResourceStrip'
 import { CapturePanel } from '../components/device/CapturePanel'
 import { ActivityLog } from '../components/device/ActivityLog'
+import { fetchDevice } from '../api/client'
+import type { DeviceSummary } from '../types'
+import { ConnectivityPill } from '../components/primitives'
 
 type Tab = 'console' | 'capture' | 'activity'
 
@@ -19,6 +22,9 @@ const TABS: { id: Tab; label: string }[] = [
 export function DeviceConsole() {
   const { deviceId = '' } = useParams()
   const [tab, setTab] = useState<Tab>('console')
+  const [device, setDevice] = useState<DeviceSummary | null>(null)
+
+  useEffect(() => { let active = true; void fetchDevice(deviceId).then((value) => { if (active) setDevice(value) }).catch((error) => console.error('Unable to load device header', error)); return () => { active = false } }, [deviceId])
 
   return (
     <div className="p-4 flex flex-col gap-3 h-full min-h-0">
@@ -28,7 +34,8 @@ export function DeviceConsole() {
             FLEET
           </Link>
           <span className="text-ink-faint">/</span>
-          <span className="text-ink">{deviceId}</span>
+          <span className="text-ink">{device?.name ?? deviceId}</span>
+          {device && <ConnectivityPill state={device.connectivity} />}
         </div>
         <div className="flex gap-1">
           {TABS.map((t) => (
