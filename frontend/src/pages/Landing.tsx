@@ -5,7 +5,7 @@ import { ConnectivityPill, MonoValue } from '../components/primitives'
 // primitives as the rest of the app (base/ink/line/good/alert/pending,
 // font-mono, ConnectivityPill, hairline borders, no shadows/gradients) so it
 // doesn't fork the visual language. This will later be replaced with a
-// 3D-flow-style "about" page; the button top-right into /overview should stay.
+// 3D-flow-style "about" page; the button top-right opens the login screen.
 const CLAIMS = [
   'CONFIG-DRIVEN MODEL ADAPTER REGISTRY',
   'N-WAY TRUST-WEIGHTED CONSENSUS',
@@ -15,7 +15,7 @@ const CLAIMS = [
 
 export function Landing() {
   return (
-    <div className="relative isolate min-h-screen flex flex-col overflow-hidden bg-base text-ink">
+    <div className="relative isolate min-h-screen flex flex-col overflow-hidden bg-[#C5D9E0] text-ink">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 bg-[url('/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
@@ -30,10 +30,10 @@ export function Landing() {
           </span>
         </div>
         <Link
-          to="/overview"
+          to="/login"
           className="px-3 py-1.5 text-xs font-mono border border-good text-good hover:bg-good hover:text-base transition-colors"
         >
-          VIEW DEMO
+          LOGIN
         </Link>
       </header>
 
@@ -57,7 +57,7 @@ export function Landing() {
           {CLAIMS.map((c) => (
             <span
               key={c}
-              className="border border-line px-2.5 py-1 text-[10px] font-mono text-ink-dim tracking-wide"
+              className="border border-[#7890A5] bg-white/10 px-2.5 py-1 text-[10px] font-mono text-ink-dim tracking-wide"
             >
               {c}
             </span>

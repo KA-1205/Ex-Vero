@@ -88,14 +88,14 @@ export function OverviewDashboard() {
     <div className="h-full min-h-0 overflow-hidden p-4 lg:p-5 flex flex-col gap-3 text-ink">
       <header className="relative flex min-h-[105px] flex-wrap items-center justify-between gap-4 pt-3">
         <div className="min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">OVERVIEW</div>
+          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">OVERVIEW - IMAGES</div>
           <h1 className="mt-1 font-serif text-4xl xl:text-5xl leading-none tracking-tight text-ink">Field Command</h1>
           <p className="mt-2 text-sm text-ink-dim">Real-time monitoring of your fleet and critical infrastructure.</p>
         </div>
         <div className="hidden md:flex min-w-[290px] flex-1 max-w-[520px] h-[88px] items-center border-l border-line pl-5">
           <div className="w-[112px] shrink-0 font-mono text-[9px] font-semibold leading-5 tracking-[0.28em] text-ink-dim">REAL TIME<br />INSIGHT<br />SAFER<br />TOMORROW</div>
           <div className="relative h-full flex-1 overflow-hidden border border-line bg-base-sunken">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/asset1.png')] bg-cover bg-center" />
+            <div aria-hidden="true" className="absolute inset-0 bg-[url('/image-data/asset1.png')] bg-cover bg-center" />
             <div className="absolute inset-0 bg-white/15" />
             <div className="absolute inset-y-0 right-2 flex flex-col justify-center text-right font-mono text-[9px] leading-4 text-[#102A43]"><span>FLEET STATUS</span><span>{devices ? `${total} ACTIVE NODES` : 'LOADING NODES'}</span></div>
           </div>
@@ -120,7 +120,7 @@ export function OverviewDashboard() {
         <Panel number="02" title="DEVICE LIST" className="xl:col-span-2 min-h-0 overflow-hidden">
           <div className="h-full overflow-y-auto px-3 pt-2">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-line pb-2 font-mono text-[9px] tracking-wide text-ink-faint"><span>DEVICE</span><span>STATUS</span><span>LAST SYNC</span></div>
-            {devices?.map((device) => <button key={device.id} onClick={() => navigate(`/numeric/overview/devices/${device.id}`)} className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-line py-2 text-left hover:bg-base-sunken"><span className="min-w-0"><span className="block truncate text-xs font-semibold">{device.id.toUpperCase()}</span><span className="block truncate text-[10px] text-ink-dim">{device.name}</span></span><ConnectivityPill state={device.connectivity} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(device.last_sync_at)}</MonoValue></button>)}
+            {devices?.map((device) => <button key={device.id} onClick={() => navigate(`/image/overview/devices/${device.id}`)} className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-line py-2 text-left hover:bg-base-sunken"><span className="min-w-0"><span className="block truncate text-xs font-semibold">{device.id.toUpperCase()}</span><span className="block truncate text-[10px] text-ink-dim">{device.name}</span></span><ConnectivityPill state={device.connectivity} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(device.last_sync_at)}</MonoValue></button>)}
             {devices === null && <Loading>Loading devices…</Loading>}
           </div>
         </Panel>
@@ -129,7 +129,7 @@ export function OverviewDashboard() {
       <section className="grid grid-cols-1 lg:grid-cols-10 gap-3 flex-[0.8] min-h-[150px] max-h-[230px]">
         <Panel number="03" title="RECENT SYSTEM ACTIVITY" className="lg:col-span-4 min-h-0 overflow-hidden">
           <div className="h-full overflow-y-auto divide-y divide-line px-3">
-            {activity.slice(0, 5).map((entry) => <button key={entry.id} onClick={() => navigate(`/numeric/overview/devices/${entry.device_id}`)} className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 py-2 text-left hover:bg-base-sunken"><span className={`h-2 w-2 rounded-full ${entry.kind === 'error' || entry.kind === 'retraction' ? 'bg-alert' : entry.kind === 'push_result' || entry.kind === 'pull_result' ? 'bg-good' : 'bg-pending'}`} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(entry.timestamp)}</MonoValue><span className="min-w-0 truncate text-[11px]"><span className="mr-2 font-mono text-[10px] text-ink-faint">{entry.device_id}</span>{entry.detail}</span></button>)}
+            {activity.slice(0, 5).map((entry) => <button key={entry.id} onClick={() => navigate(`/image/overview/devices/${entry.device_id}`)} className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 py-2 text-left hover:bg-base-sunken"><span className={`h-2 w-2 rounded-full ${entry.kind === 'error' || entry.kind === 'retraction' ? 'bg-alert' : entry.kind === 'push_result' || entry.kind === 'pull_result' ? 'bg-good' : 'bg-pending'}`} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(entry.timestamp)}</MonoValue><span className="min-w-0 truncate text-[11px]"><span className="mr-2 font-mono text-[10px] text-ink-faint">{entry.device_id}</span>{entry.detail}</span></button>)}
             {activity.length === 0 && <Loading>Waiting for activity data…</Loading>}
           </div>
         </Panel>
@@ -143,7 +143,7 @@ export function OverviewDashboard() {
         </Panel>
         <Panel number="05" title="FIELD CONDITIONS" className="lg:col-span-3 min-h-0 overflow-hidden">
           <div className="relative flex h-full min-h-0 flex-col overflow-y-auto p-3">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/delhi.png')] bg-cover bg-[center_65%]" />
+            <div aria-hidden="true" className="absolute inset-0 bg-[url('/image-data/delhi.png')] bg-cover bg-[center_65%]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#E1EBEB]/10 via-[#E1EBEB]/45 to-[#E1EBEB]/35" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="text-[11px] font-medium text-ink">New Delhi, India</div>
@@ -179,10 +179,10 @@ function Kpi({ icon, value, label, detail }: { icon: 'devices' | 'alert' | 'wifi
 
 function Icon({ name, className }: { name: 'devices' | 'alert' | 'wifi' | 'health'; className: string }) {
   const imageByName = {
-    devices: '/kpi-devices.png',
-    alert: '/kpi-danger.png',
-    health: '/kpi-health.png',
-    wifi: '/kpi-signal.png',
+    devices: '/image-data/kpi-devices.png',
+    alert: '/image-data/kpi-danger.png',
+    health: '/image-data/kpi-health.png',
+    wifi: '/image-data/kpi-signal.png',
   }
   const accessibleName = { devices: 'Devices', alert: 'Disputed facts', health: 'Devices online', wifi: 'Measured sync rate' }
   return <img src={imageByName[name]} alt={accessibleName[name]} className={`h-9 w-9 object-contain ${className}`} />

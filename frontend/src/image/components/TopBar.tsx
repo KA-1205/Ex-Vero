@@ -15,10 +15,10 @@ const MODE_ACCENT: Record<NetworkMode, string> = {
 }
 
 const NAV = [
-  { to: '/numeric/overview', label: 'Overview', end: true, icon: 'home' },
-  { to: '/numeric/overview/devices', label: 'Devices', end: true, icon: 'devices' },
-  { to: '/numeric/overview/conflict-theater', label: 'Conflict Theater', icon: 'danger' },
-  { to: '/numeric/overview/command', label: 'Reports', icon: 'report' },
+  { to: '/image/overview', label: 'Overview', end: true, icon: 'home' },
+  { to: '/image/overview/devices', label: 'Devices', end: true, icon: 'devices' },
+  { to: '/image/overview/conflict-theater', label: 'Conflict Theater', icon: 'danger' },
+  { to: '/image/overview/command', label: 'Reports', icon: 'report' },
 ]
 
 export function TopBar() {
@@ -28,7 +28,7 @@ export function TopBar() {
     <header className="relative isolate w-52 shrink-0 min-h-screen overflow-hidden border-r border-[#163751] bg-[#040229] text-white flex flex-col">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 bg-[url('/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
+        className="pointer-events-none absolute inset-0 z-0 bg-[url('/image-data/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
       />
       <div className="relative z-10 border-b border-[#163751]">
         <div className="px-4 pt-6 pb-4">
