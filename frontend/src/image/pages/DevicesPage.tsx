@@ -26,7 +26,7 @@ export function DevicesPage() {
             <DeviceTile
               key={device.id}
               device={device}
-              onOpen={() => navigate(`/numeric/overview/devices/${device.id}`)}
+              onOpen={() => navigate(`/image/overview/devices/${device.id}`)}
             />
           ))}
         </div>

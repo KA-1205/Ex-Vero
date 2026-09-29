@@ -24,7 +24,7 @@ export function DeviceConsole() {
     <div className="p-4 flex flex-col gap-3 h-full min-h-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-mono">
-          <Link to="/numeric/overview" className="text-ink-dim hover:text-ink">
+          <Link to="/image/overview" className="text-ink-dim hover:text-ink">
             FLEET
           </Link>
           <span className="text-ink-faint">/</span>

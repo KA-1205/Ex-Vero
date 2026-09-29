@@ -79,7 +79,7 @@ export function FleetOverview() {
             </div>
           )}
           {devices?.map((d) => (
-            <DeviceTile key={d.id} device={d} onOpen={() => navigate(`/numeric/overview/devices/${d.id}`)} />
+            <DeviceTile key={d.id} device={d} onOpen={() => navigate(`/image/overview/devices/${d.id}`)} />
           ))}
         </div>
       </Panel>
