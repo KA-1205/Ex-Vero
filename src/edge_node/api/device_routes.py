@@ -5,7 +5,7 @@ shared, not copied into a second shard/adapter/transport registry.
 """
 
 from types import ModuleType
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 
 def register(runtime: ModuleType) -> APIRouter:
@@ -155,10 +155,10 @@ def register(runtime: ModuleType) -> APIRouter:
         sync_state: runtime.Optional[str] = None,
         modality: runtime.Optional[str] = None,
         zone: runtime.Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0,
+        limit: int = Query(default=100, ge=1, le=1000),
+        offset: int = Query(default=0, ge=0),
     ):
-        """List/filter everything held locally (Memory Browser panel) (API.md §5)."""
+        """List/filter local memory; limit is 1–1000 and offset must be nonnegative."""
         if device_id not in runtime.device_shards:
             raise runtime.HTTPException(status_code=404, detail="unknown device")
         shards = runtime.device_shards[device_id]
