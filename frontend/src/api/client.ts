@@ -12,8 +12,8 @@ import * as mock from './mock'
 // The edge node runs locally on :8000 and is deliberately not deployed (its
 // facts live in an on-disk shard, which a serverless function cannot persist).
 // VITE_API_BASE_URL overrides this for anyone fronting the node differently.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8000'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
+const WS_BASE_URL = (import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8000').replace(/\/+$/, '')
 
 function apiAsset(url?: string | null): string | null {
   if (!url) return null
