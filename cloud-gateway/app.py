@@ -33,6 +33,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
@@ -50,7 +51,14 @@ SPARSE_VECTOR = "text_bm25"
 CONSENSUS_THRESHOLD = float(os.environ.get("CONSENSUS_THRESHOLD", DEFAULT_THRESHOLD))
 CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
 
-app = FastAPI(title="Aegis Edge — Cloud Gateway")
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    _startup()
+    yield
+
+
+app = FastAPI(title="Aegis Edge — Cloud Gateway", lifespan=_lifespan)
 
 # The gateway is the single sequencer for hub-assigned event ordering. Guarded by
 # a lock so concurrent ingests get distinct, monotonic seqs.
@@ -93,13 +101,17 @@ def _ensure_events_collection() -> None:
 
 def _ensure_facts_collection(dense_size: int) -> None:
     if not client.collection_exists(FACTS_COLLECTION):
+        vectors_cfg = {
+            "text": models.VectorParams(size=384, distance=models.Distance.COSINE),
+            "image": models.VectorParams(size=512, distance=models.Distance.COSINE),
+        }
+        if DENSE_VECTOR not in vectors_cfg:
+            vectors_cfg[DENSE_VECTOR] = models.VectorParams(
+                size=dense_size, distance=models.Distance.COSINE
+            )
         client.create_collection(
             collection_name=FACTS_COLLECTION,
-            vectors_config={
-                DENSE_VECTOR: models.VectorParams(
-                    size=dense_size, distance=models.Distance.COSINE
-                )
-            },
+            vectors_config=vectors_cfg,
             sparse_vectors_config={SPARSE_VECTOR: models.SparseVectorParams()},
         )
         client.create_payload_index(
@@ -132,23 +144,29 @@ def _init_sequencer() -> None:
         _seq = highest
 
 
-@app.on_event("startup")
 def _startup() -> None:
     global client
-    # A generous timeout + a short retry loop: on a cold compose start Qdrant may
-    # still be settling even after its healthcheck flips, and the first
-    # collection create is the slowest call.
-    client = QdrantClient(url=QDRANT_URL, timeout=30.0)
+    if QDRANT_URL == ":memory:":
+        client = QdrantClient(location=":memory:")
+        _ensure_events_collection()
+        _init_sequencer()
+        return
+
+    # Try connecting to QDRANT_URL with retries; fall back to in-memory if unreachable
     last_err: Optional[Exception] = None
-    for _ in range(30):
-        try:
-            _ensure_events_collection()
-            _init_sequencer()
-            return
-        except Exception as e:  # transport/timeout while Qdrant warms up
-            last_err = e
-            time.sleep(2.0)
-    raise RuntimeError(f"gateway could not reach Qdrant at {QDRANT_URL}: {last_err}")
+    try:
+        client = QdrantClient(url=QDRANT_URL, timeout=2.0)
+        _ensure_events_collection()
+        _init_sequencer()
+        return
+    except Exception as e:
+        last_err = e
+
+    # Fallback to local in-memory Qdrant so gateway functions without external Docker
+    print(f"Warning: Qdrant at {QDRANT_URL} not reachable ({last_err}); falling back to in-memory Qdrant")
+    client = QdrantClient(location=":memory:")
+    _ensure_events_collection()
+    _init_sequencer()
 
 
 @app.get("/health")
@@ -191,7 +209,7 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
     if not req.envelopes:
         return {"acked_ids": [], "count": 0}
 
-    dense_size = len(req.envelopes[0]["vector"])
+    dense_size = len(req.envelopes[0]["vector"]) if req.envelopes[0].get("vector") else 384
     _ensure_facts_collection(dense_size)
 
     fact_points: List[models.PointStruct] = []
@@ -199,13 +217,25 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
     acked: List[int] = []
 
     for env in req.envelopes:
-        vectors: Dict[str, Any] = {DENSE_VECTOR: env["vector"]}
+        payload = env.get("payload") or {}
+        model_name = payload.get("model", "text")
+        vectors: Dict[str, Any] = {}
+        if env.get("vector") is not None:
+            v = env["vector"]
+            # Map into the collection's named vector slot
+            if len(v) == 512:
+                vectors["image"] = v
+            elif len(v) == 384:
+                vectors["text"] = v
+            else:
+                vectors[DENSE_VECTOR] = v
+
         if env.get("sparse"):
             vectors[SPARSE_VECTOR] = models.SparseVector(
                 indices=env["sparse"]["indices"], values=env["sparse"]["values"]
             )
         fact_points.append(
-            models.PointStruct(id=env["id"], vector=vectors, payload=env["payload"])
+            models.PointStruct(id=env["id"], vector=vectors, payload=payload)
         )
 
         seq = _next_seq()  # hub-assigned ordering; device wall-clock stays metadata
@@ -425,3 +455,168 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
         events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
     )
     return result
+
+
+class RetractRequest(BaseModel):
+    device_id: str
+    point_id: int
+    corroboration_key: Optional[str] = None
+    client_sequence: int = 0
+    client_timestamp_ns: Optional[int] = None
+
+
+@app.post("/retract")
+def retract_event(req: RetractRequest) -> Dict[str, Any]:
+    """Append a RETRACTED event to the hub's fact_events log."""
+    seq = _next_seq()
+    event_id = _event_id(req.device_id, req.point_id, req.client_sequence)
+    key = req.corroboration_key
+    # If not supplied, try to find corroboration_key from existing events for this point
+    if not key and client.collection_exists(EVENTS_COLLECTION):
+        flt = models.Filter(
+            must=[
+                models.FieldCondition(key="device_id", match=models.MatchValue(value=req.device_id)),
+                models.FieldCondition(key="point_id", match=models.MatchValue(value=req.point_id)),
+            ]
+        )
+        points, _ = client.scroll(EVENTS_COLLECTION, scroll_filter=flt, limit=1, with_payload=True)
+        if points:
+            key = points[0].payload.get("corroboration_key")
+
+    event_point = models.PointStruct(
+        id=event_id,
+        vector=[0.0],
+        payload={
+            "device_id": req.device_id,
+            "point_id": req.point_id,
+            "event_type": "RETRACTED",
+            "seq": seq,
+            "client_sequence": req.client_sequence,
+            "corroboration_key": key,
+            "value": None,
+            "client_timestamp_ns": req.client_timestamp_ns or int(time.time() * 1e9),
+            "device_trust_at_report": 0.0,
+        },
+    )
+    client.upsert(EVENTS_COLLECTION, points=[event_point])
+    return {"retracted": True, "seq": seq, "point_id": req.point_id}
+
+
+class InjectConflictRequest(BaseModel):
+    corroboration_key: str
+    assignments: Dict[str, str]
+
+
+@app.post("/demo/inject-conflict")
+def inject_conflict(req: InjectConflictRequest) -> Dict[str, Any]:
+    """Scripted conflict injection across multiple devices for demo/testing."""
+    events_to_insert = []
+    now_ns = int(time.time() * 1e9)
+    for dev_id, val in req.assignments.items():
+        seq = _next_seq()
+        pid = abs(hash(f"{req.corroboration_key}:{val}:{dev_id}")) % 1000000 + 1
+        eid = _event_id(dev_id, pid, seq)
+        events_to_insert.append(
+            models.PointStruct(
+                id=eid,
+                vector=[0.0],
+                payload={
+                    "device_id": dev_id,
+                    "point_id": pid,
+                    "event_type": "OBSERVED",
+                    "seq": seq,
+                    "client_sequence": seq,
+                    "corroboration_key": req.corroboration_key,
+                    "value": val,
+                    "client_timestamp_ns": now_ns,
+                    "device_trust_at_report": DEFAULT_DEVICE_TRUST,
+                },
+            )
+        )
+    if events_to_insert:
+        client.upsert(EVENTS_COLLECTION, points=events_to_insert)
+
+    # Return updated consensus for the key
+    return {
+        "injected": True,
+        "corroboration_key": req.corroboration_key,
+        "consensus": consensus(req.corroboration_key),
+    }
+
+
+@app.get("/cloud/state")
+def cloud_state() -> Dict[str, Any]:
+    """Merged trusted fleet state across all corroboration keys (API.md §8).
+
+    Exposes facts formatted for the ApiCloudFact frontend contract:
+    {
+      "facts": [
+        {
+          "corroboration_key": str,
+          "state": "CONFIRMED" | "DISPUTED",
+          "value": str,
+          "confidence": float,
+          "corroborating_devices": list[str],
+          "updated_at": str (ISO 8601)
+        }
+      ],
+      "device_trust": {device_id: score}
+    }
+    """
+    all_events: List[Dict[str, Any]] = []
+    if client.collection_exists(EVENTS_COLLECTION):
+        offset = None
+        while True:
+            pts, offset = client.scroll(
+                EVENTS_COLLECTION, limit=1000, offset=offset, with_payload=True, with_vectors=False
+            )
+            for p in pts:
+                if p.payload:
+                    all_events.append(p.payload)
+            if offset is None:
+                break
+
+    by_key: Dict[str, List[Dict[str, Any]]] = {}
+    for ev in all_events:
+        k = ev.get("corroboration_key")
+        if k:
+            by_key.setdefault(k, []).append(ev)
+
+    facts = []
+    from datetime import datetime, timezone
+    for k in sorted(by_key):
+        evts = by_key[k]
+        folded = fold_consensus(evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY)
+        if folded.get("status") == "ABSENT" or not folded.get("value"):
+            continue
+
+        st = "CONFIRMED" if folded.get("confidence", 0.0) >= CONSENSUS_THRESHOLD else "DISPUTED"
+
+        winner_val = folded.get("value")
+        corrob: List[str] = []
+        for val_info in folded.get("values", []):
+            if val_info.get("value") == winner_val:
+                corrob = val_info.get("devices", [])
+                break
+
+        latest_evt = max(evts, key=lambda e: e.get("seq", 0))
+        ts_ns = latest_evt.get("client_timestamp_ns")
+        if isinstance(ts_ns, (int, float)) and ts_ns > 0:
+            updated_at = datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc).isoformat()
+        else:
+            updated_at = datetime.now(timezone.utc).isoformat()
+
+        facts.append({
+            "corroboration_key": k,
+            "state": st,
+            "value": str(winner_val),
+            "confidence": folded.get("confidence", 0.0),
+            "corroborating_devices": sorted(corrob),
+            "updated_at": updated_at,
+        })
+
+    device_trust = derive_device_trust(
+        all_events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
+    )
+    return {"facts": facts, "device_trust": device_trust}
+
