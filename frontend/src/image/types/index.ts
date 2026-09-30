@@ -33,9 +33,19 @@ export interface ActivityEntry {
   id?: string; confidence?: number
 }
 export type DeviceEventFrame = { type: 'decision'; data: DecisionEvent } | { type: 'activity'; data: ActivityEntry }
+export interface SeverityRung {
+  prompt: string
+  score: number
+}
+export interface VisionMetadata {
+  label: string
+  confidence: number
+  severity_ladder?: SeverityRung[]
+}
 export interface MemoryPoint {
   id: number; value: string; modality: Modality; thumbnail_url: string | null; zone: string | null
   corroboration_key: string; sync_state: MemoryState; model: string; model_version: string; created_at: string
+  vision?: VisionMetadata
 }
 export interface MemoryPointWithScore extends MemoryPoint { score?: number }
 export interface MemoryDetail {
@@ -45,6 +55,7 @@ export interface MemoryRecord {
   id: string; device_id: string; content_preview: string; thumbnail_url?: string; modality: Modality
   state: MemoryState; zone?: string; status?: string; decision_reason: string; sync_verdict?: string
   captured_at: string; activity_ids: string[]; detail?: MemoryDetail; corroboration_key?: string
+  vision?: VisionMetadata
 }
 export interface QuerySource { id: number; score: number; value: string; consensus_state: string }
 export interface QueryResult {
@@ -59,6 +70,7 @@ export interface CaptureRequest {
 export interface ConflictRecord {
   status: 'POSSIBLE_CONFLICT'; new_point_id: number; existing_point_id: number; score: number
   zone: string; new_value: string; existing_value: string; new_key: string; existing_key: string
+  thumbnail_url?: string | null
 }
 export interface CaptureResponse {
   id: number; verdict: Verdict; reason: string; conflicts: ConflictRecord[]
@@ -94,20 +106,24 @@ export interface ApiConsensusEvent {
   corroboration_key: string; state: 'CONFIRMED' | 'DISPUTED' | 'RESOLVED_LWW' | 'RETRACTED'
   confidence: number; resolved_value: string | null; candidates: ConsensusCandidate[]
   explanation: string; timestamp: string
+  modal_votes?: Record<string, { devices: string[]; weight: number }>
 }
 export type ConsensusOutcome = 'CONFIRMED' | 'DISPUTED' | 'LWW'
-export interface DeviceClaim { device_id: string; value: string; trust_score: number; reported_at: string }
+export interface DeviceClaim { device_id: string; value: string; trust_score: number; reported_at: string; thumbnail_url?: string | null }
 export interface ConsensusEvent {
   id: string; corroboration_key: string; timestamp: string; outcome: ConsensusOutcome
   confidence: number; claims: DeviceClaim[]; resolution_summary: string
+  modal_votes?: Record<string, { devices: string[]; weight: number }>
 }
 export interface CloudFact {
   id: string; corroboration_key: string; zone?: string; summary: string; status: 'CONFIRMED' | 'DISPUTED'
   confidence: number; corroborating_devices: string[]; last_updated: string
+  thumbnail_url?: string | null; modality?: Modality
 }
 export interface ApiCloudFact {
   corroboration_key: string; state: 'CONFIRMED' | 'DISPUTED'; value: string; confidence: number
   corroborating_devices: string[]; updated_at: string
+  thumbnail_url?: string | null; modality?: Modality
 }
 export interface CloudState { facts: ApiCloudFact[]; device_trust: Record<string, number> }
 export interface NetworkModeState { mode: NetworkMode }

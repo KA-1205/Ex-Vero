@@ -7,6 +7,7 @@ import { SyncStrip } from '../components/device/SyncStrip'
 import { ResourceStrip } from '../components/device/ResourceStrip'
 import { CapturePanel } from '../components/device/CapturePanel'
 import { ActivityLog } from '../components/device/ActivityLog'
+import { TrendStrip } from '../components/device/TrendStrip'
 
 type Tab = 'console' | 'capture' | 'activity'
 
@@ -49,6 +50,7 @@ export function DeviceConsole() {
 
       {tab === 'console' && (
         <div className="flex flex-col gap-3 flex-1 min-h-0">
+          <TrendStrip deviceId={deviceId} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1 min-h-0">
             <QAPanel deviceId={deviceId} />
             <DecisionFeed deviceId={deviceId} />
