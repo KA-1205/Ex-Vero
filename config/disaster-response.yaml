@@ -43,6 +43,15 @@ conflict:
   # (~1/(k+rank) per leg), so this threshold lives near 0.01, not 0.5.
   similarity_threshold: 0.01
 
+consensus:
+  # The trust-weighted fold lives in the Cloud Gateway (cloud-gateway/), which
+  # reads these as CONSENSUS_THRESHOLD / CONSENSUS_DECAY. A multi-device fact is
+  # only CONFIRMED at/above this confidence; below it the fold surfaces every
+  # value as DISPUTED rather than silently picking one.
+  confidence_threshold: 0.66
+  # Recency decay applied by hub-seq distance when weighting reports (0 = off).
+  trust_decay: 0.0
+
 hub:
   # The edge node talks to the Cloud Gateway (cloud-gateway/), which owns the
   # Qdrant Server hub. This is the gateway URL, not Qdrant's 6333 port.

@@ -16,10 +16,12 @@ Endpoints the edge's `GatewayTransport` calls:
   POST /ingest                — {device_id, envelopes[]} -> {acked_ids, count}
   GET  /facts/{device_id}     — {"envelopes": [...]}  (Phase 3 pull source)
   POST /snapshot/{device_id}  — a real Edge partial snapshot tar (Phase 4 pull)
+  GET  /consensus/{key}       — the trust-weighted fold for a corroboration_key
+                                (Phase 5)
 
-Phase 3 scope: the gateway just stores points + events. Phase 4 adds the
-partial-snapshot endpoint (learn from the fleet); the consensus fold (Phase 5)
-builds on the event log, unchanged here.
+Phase 3 stores points + events; Phase 4 adds the partial-snapshot endpoint
+(learn from the fleet); Phase 5 folds the event log into CONFIRMED / DISPUTED /
+LWW verdicts via the pure `consensus_fold` module.
 """
 
 import hashlib
@@ -37,11 +39,16 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
+from consensus_fold import DEFAULT_DEVICE_TRUST, DEFAULT_THRESHOLD, derive_device_trust, fold_consensus
+
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 FACTS_COLLECTION = "facts"
 EVENTS_COLLECTION = "fact_events"
 DENSE_VECTOR = "dense"
 SPARSE_VECTOR = "text_bm25"
+# Supermajority needed to call a multi-device fact CONFIRMED (config-overridable).
+CONSENSUS_THRESHOLD = float(os.environ.get("CONSENSUS_THRESHOLD", DEFAULT_THRESHOLD))
+CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
 
 app = FastAPI(title="Aegis Edge — Cloud Gateway")
 
@@ -77,6 +84,10 @@ def _ensure_events_collection() -> None:
         )
         client.create_payload_index(
             EVENTS_COLLECTION, "client_sequence", models.PayloadSchemaType.INTEGER
+        )
+        # Phase 5: the consensus fold selects a fact's events by corroboration_key.
+        client.create_payload_index(
+            EVENTS_COLLECTION, "corroboration_key", models.PayloadSchemaType.KEYWORD
         )
 
 
@@ -199,6 +210,9 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
 
         seq = _next_seq()  # hub-assigned ordering; device wall-clock stays metadata
         event_id = _event_id(req.device_id, env["id"], env["client_sequence"])
+        payload = env.get("payload") or {}
+        # Phase 5: carry everything the consensus fold needs. `seq` is the only
+        # ordering key; `client_timestamp_ns` rides along as metadata only.
         event_points.append(
             models.PointStruct(
                 id=event_id,
@@ -209,6 +223,12 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
                     "event_type": "OBSERVED",
                     "seq": seq,
                     "client_sequence": env["client_sequence"],
+                    "corroboration_key": payload.get("corroboration_key"),
+                    "value": payload.get("value"),
+                    "client_timestamp_ns": payload.get("client_timestamp_ns"),
+                    "device_trust_at_report": payload.get(
+                        "device_trust_at_report", DEFAULT_DEVICE_TRUST
+                    ),
                 },
             )
         )
@@ -364,3 +384,44 @@ def snapshot(device_id: str, req: SnapshotRequest) -> Response:
         filename="snapshot.tar",
         background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
     )
+
+
+def _events_for_key(corroboration_key: str) -> List[Dict[str, Any]]:
+    """Scroll the append-only event log for one fact's events."""
+    events: List[Dict[str, Any]] = []
+    if not client.collection_exists(EVENTS_COLLECTION):
+        return events
+    flt = models.Filter(
+        must=[
+            models.FieldCondition(
+                key="corroboration_key", match=models.MatchValue(value=corroboration_key)
+            )
+        ]
+    )
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            EVENTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+            with_payload=True, with_vectors=False,
+        )
+        events.extend(p.payload for p in points)
+        if offset is None:
+            break
+    return events
+
+
+@app.get("/consensus/{corroboration_key}")
+def consensus(corroboration_key: str) -> Dict[str, Any]:
+    """Fold all live events for a fact into one trust-weighted verdict (Phase 5).
+
+    The fold is the pure `consensus_fold.fold_consensus` — ordered strictly by
+    hub `seq`, trust derived from the log, retraction terminal — so the hub is
+    the single sequencer and the verdict is reproducible.
+    """
+    events = _events_for_key(corroboration_key)
+    result = fold_consensus(events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY)
+    # Trust is derived here (never stored), so the dashboard can watch it move.
+    result["device_trust"] = derive_device_trust(
+        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
+    )
+    return result

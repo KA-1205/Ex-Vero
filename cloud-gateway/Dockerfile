@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY consensus_fold.py .
 
 EXPOSE 8088
 # QDRANT_URL is injected by docker-compose (the qdrant service).

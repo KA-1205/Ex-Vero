@@ -29,7 +29,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 2 | Model Adapter Registry | DONE |
 | 3 | Real Qdrant Server hub + outbox | DONE |
 | 4 | Partial-snapshot pull | DONE |
-| 5 | Multi-device consensus | HALF |
+| 5 | Multi-device consensus | DONE |
 | 6 | Network layer | TODO |
 | 7 | Answer layer (on-device RAG) | TODO |
 | 8 | Eviction + inspection endpoints | TODO |
@@ -284,8 +284,29 @@ no `CONFIRMED`/`DISPUTED` or value resolution. This is the differentiator and it
 **Guardrails:** order strictly by hub `seq`. Trust is derived, never stored. Retraction is an
 append, never a delete.
 
-**Out of scope:** semantic conflict detection already exists in `conflicts.py` (keep it; move its
-detection to gateway ingest only if time allows — note as a follow-up).
+**Result:** the trust-weighted fold now lives in the Cloud Gateway as a pure, dependency-free module
+(`cloud-gateway/consensus_fold.py`) — the single source of truth. `fold_consensus(events)` groups a
+`corroboration_key`'s events, takes each device's latest event by **hub `seq`** (wall-clock is
+metadata, never ordering), drops devices whose latest event is a retraction, weights the rest by
+`device_trust_at_report × recency`, and resolves: one device → `LWW`; agreeing devices → `CONFIRMED`
+with confidence rising via noisy-OR of the backers; disagreement below the config supermajority
+(`consensus.confidence_threshold`, default 0.66) → `DISPUTED` surfacing **both** values, never a
+silent pick; all-retracted → `ABSENT`. Output is byte-identical under event reordering (floats
+rounded, sums taken in sorted order). `derive_device_trust` recomputes each device's agreement rate
+from the log (never stored). The gateway ingest now stamps the rich event payload
+(`corroboration_key/value/client_timestamp_ns/device_trust_at_report`, `seq` hub-assigned) and
+exposes `GET /consensus/{key}`; `fact_events` gains a `corroboration_key` index (Qdrant only, no SQL).
+Because the fold module is pure and importable, `tests/test_consensus.py` exercises the exact gateway
+code with no network: DISPUTED-with-both-values, CONFIRMED-confidence-rises-vs-one, order-shuffle
+identical (inv 6), hub-seq beats a one-hour clock skew (inv 5), observe→retract→re-observe stays
+absent until the newer observe (inv 7), and a disagreeing device's derived trust drops. Each was
+verified as a real guard by mutation (clock-ordering, retraction-ignore, silent-pick, unsorted output
+all flip a test red). Full suite green (53, +3 skipped integration).
+
+**Out of scope / deferred:** field-level non-destructive merge (each `corroboration_key` resolves as
+one value today); propagating device-side `RETRACTED` events to the gateway so the hub fold sees them
+(the local `/retract` still only appends to the on-device log — a follow-up). Semantic conflict
+detection stays in `conflicts.py` as before.
 
 ---
 
