@@ -28,8 +28,11 @@ function apiDevice(d: ApiDevice): DeviceSummary {
 function apiFact(f: ApiCloudFact, i: number): CloudFact {
   return { id: `${f.corroboration_key}-${i}`, corroboration_key: f.corroboration_key, zone: f.corroboration_key.split('.')[0]?.replace(/^zone_/, 'Zone ').toUpperCase(), summary: f.value, status: f.state, confidence: f.confidence, corroborating_devices: f.corroborating_devices, last_updated: f.updated_at }
 }
-function apiFeed(e: DecisionEvent): DecisionFeedEntry {
-  return { ...e, id: String(e.point_id), content_preview: e.value_preview }
+function apiFeed(raw: DecisionEvent | Record<string, unknown>): DecisionFeedEntry {
+  const e = raw as DecisionEvent & { payload?: { value?: string; modality?: DecisionFeedEntry['modality']; thumbnail_url?: string | null } }
+  const pointId = Number(e.point_id ?? 0)
+  const value = e.value_preview ?? e.payload?.value ?? ''
+  return { device_id: e.device_id, point_id: pointId, id: String(pointId), timestamp: e.timestamp, content_preview: value.slice(0, 160), value_preview: value.slice(0, 160), modality: e.modality ?? e.payload?.modality ?? 'text', thumbnail_url: e.thumbnail_url ?? e.payload?.thumbnail_url ?? null, verdict: e.verdict, reason: e.reason }
 }
 function apiActivity(e: ActivityEntry): ActivityEntry { return { ...e, id: e.point_id == null ? `${e.device_id}-${e.timestamp}-${e.kind}` : String(e.point_id) } }
 function apiMemory(p: MemoryPoint, deviceId: string): MemoryRecord {
@@ -50,7 +53,18 @@ export async function queryDevice(deviceId: string, question: string): Promise<Q
     await new Promise((r) => setTimeout(r, 120 + Math.random() * 200))
     return { answer: `Based on retrieved local memory: "${question}" — nearest hazard reports indicate Zone C requires attention.`, answer_path: 'offline', model: 'mock-labeled', latency_ms: Math.floor(4 + Math.random() * 28), sources: [], results: [] }
   }
-  return postJSON(`/devices/${encodeURIComponent(deviceId)}/query`, { text: question, answer: true, limit: 10 })
+  const response = await postJSON<{
+    answer?: string; answer_path?: QueryResult['answer_path']; model?: string; latency_ms: number;
+    sources?: QueryResult['sources']; results: { id: number; score: number; payload?: { value?: string }; value?: string }[]
+  }>(`/devices/${encodeURIComponent(deviceId)}/query`, { text: question, answer: true, limit: 10 })
+  return {
+    answer: response.answer ?? 'No answer was generated for this query.',
+    answer_path: response.answer_path ?? 'extractive',
+    model: response.model ?? 'unknown',
+    latency_ms: response.latency_ms,
+    sources: response.sources ?? [],
+    results: response.results,
+  }
 }
 export async function captureFact(req: CaptureRequest): Promise<CaptureResponse> {
   if (mock.USE_MOCKS) {
@@ -69,7 +83,7 @@ export async function captureFact(req: CaptureRequest): Promise<CaptureResponse>
     if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`)
     return res.json()
   }
-  return postJSON(path, { value: req.value, corroboration_key: req.corroboration_key, zone: req.zone, entity: req.entity, status: req.status ?? 'unverified', reporter_device_id: req.reporter_device_id })
+  return postJSON(path, { device_id: req.device_id, value: req.value, corroboration_key: req.corroboration_key, zone: req.zone, entity: req.entity, status: req.status ?? 'unverified', reporter_device_id: req.reporter_device_id })
 }
 export async function fetchNetworkMode(): Promise<NetworkMode> {
   if (mock.USE_MOCKS) return 'full'
@@ -137,8 +151,8 @@ export async function fetchRecallBenchmark(): Promise<RecallBenchmark> {
 }
 export async function fetchDecisionFeed(deviceId: string, limit = 50): Promise<DecisionFeedEntry[]> {
   if (mock.USE_MOCKS) return mock.mockDecisionFeed(deviceId, limit)
-  const { events } = await getJSON<{ events: DecisionEvent[] }>(`/devices/${encodeURIComponent(deviceId)}/feed?limit=${limit}`)
-  return events.map(apiFeed)
+  const { events } = await getJSON<{ events: (DecisionEvent | Record<string, unknown>)[] }>(`/devices/${encodeURIComponent(deviceId)}/feed?limit=${limit}`)
+  return events.map(apiFeed).reverse()
 }
 export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceEventFrame) => void): () => void {
   if (mock.USE_MOCKS) {
