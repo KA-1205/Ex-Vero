@@ -1,14 +1,18 @@
 import os
+import io
 import hashlib
+import secrets
+import threading
 import time
-from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from typing import List, Dict, Optional, Any, Tuple
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yaml
 from pathlib import Path
 from contextlib import asynccontextmanager
 from PIL import Image
+from fastapi.staticfiles import StaticFiles
 
 from qdrant_edge import (
     EdgeShard,
@@ -70,15 +74,25 @@ CONFLICT_THRESHOLD: float = 0.5
 MAX_LOCAL_POINTS: int = 500
 SHARD_BASE_PATH = "./shards"
 MODEL_LOAD_MS: Optional[float] = None
+_rogue_devices: set[str] = set()
+_point_id_lock = threading.Lock()
+
+DEFAULT_FLEET = [
+    {"id": "cam-01", "name": "Zone A Vision 01", "kind": "vision camera", "zone": "Zone A", "latitude": 28.6329, "longitude": 77.2195},
+    {"id": "cam-02", "name": "Zone B Vision 02", "kind": "vision camera", "zone": "Zone B", "latitude": 28.6129, "longitude": 77.2295},
+    {"id": "cam-03", "name": "Zone C Vision 03", "kind": "vision camera", "zone": "Zone C", "latitude": 28.6562, "longitude": 77.2410},
+    {"id": "dev-01", "name": "Paramedic Tablet 01", "kind": "paramedic tablet", "zone": "Zone A", "latitude": 28.6329, "longitude": 77.2195},
+    {"id": "dev-02", "name": "Kiosk - Shelter B", "kind": "kiosk", "zone": "Zone B", "latitude": 28.6129, "longitude": 77.2295},
+    {"id": "dev-03", "name": "Field Pi Node 03", "kind": "pi node", "zone": "Zone C", "latitude": 28.6562, "longitude": 77.2410},
+    {"id": "dev-04", "name": "Paramedic Tablet 02", "kind": "paramedic tablet", "zone": "Zone D", "latitude": 28.5933, "longitude": 77.2190},
+]
+FLEET_METADATA = {device["id"]: device for device in DEFAULT_FLEET}
 
 # Activity ring buffer (operational telemetry, not facts) — Phase 8
 # In-memory, bounded, newest first. No SQL.
 from collections import deque
 _activity_buffer: deque = deque(maxlen=500)
 _activity_lock = __import__('threading').Lock()
-_ws_lock = __import__('threading').Lock()
-_ws_device_events: Dict[str, set] = {}
-_ws_consensus_events: set = set()
 
 
 def _iso_timestamp_ns(value: Optional[int]) -> Optional[str]:
@@ -92,7 +106,7 @@ def _iso_timestamp_ns(value: Optional[int]) -> Optional[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS, MODEL_LOAD_MS
+    global adapters, clip_text_adapter, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS, MODEL_LOAD_MS
     startup_started = time.perf_counter()
 
     # Load adapters from config
@@ -114,6 +128,7 @@ async def lifespan(app: FastAPI):
     )
 
     # If vision adapter is loaded, initialize CLIP text adapter for cross-modal search
+    clip_text_adapter = None
     if any(a.modality == "vision" for a in adapters):
         try:
             clip_text_adapter = ClipTextAdapter(name="image_text", model="Qdrant/clip-ViT-B-32", version="clip-ViT-B-32")
@@ -175,6 +190,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/thumbnails", StaticFiles(directory=str(THUMBNAIL_DIR)), name="thumbnails")
 
 
 class CaptureRequest(BaseModel):
@@ -244,6 +260,12 @@ def generate_point_id(corroboration_key: str, value: str) -> int:
     # Ensure it's positive and within the range of a 64-bit signed integer (though point ID in Qdrant is unsigned 64-bit?)
     # We'll just return the int_val as is, which is positive.
     return int_val
+
+
+def _next_point_id() -> int:
+    """Return a unique positive point ID for generated conflict observations."""
+    with _point_id_lock:
+        return secrets.randbits(63) or 1
 
 
 # Activity ring buffer helpers (Phase 8)
@@ -335,10 +357,23 @@ def get_or_create_shards(device_id: str):
         _verify_shard_dimension(immutable_shard, adapters)
         print(f"Loaded immutable shard for {device_id}: {info}")
     
+    max_client_sequence = 0
+    from qdrant_edge import ScrollRequest
+    for shard in (mutable_shard, immutable_shard):
+        try:
+            scroll_result = shard.scroll(ScrollRequest(limit=100000, with_payload=True, with_vector=False))
+            records = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
+            for record in records:
+                sequence = ((record.payload or {}).get("_sync_meta") or {}).get("client_sequence", 0)
+                if isinstance(sequence, int):
+                    max_client_sequence = max(max_client_sequence, sequence)
+        except Exception as exc:
+            print(f"Could not restore client sequence for {device_id}: {exc}")
+
     device_shards[device_id] = {
         'mutable': mutable_shard,
         'immutable': immutable_shard,
-        'client_seq': 0,  # per-device monotonic sequence for the delta handshake
+        'client_seq': max_client_sequence,  # resume monotonic sequence after restart
     }
     return device_shards[device_id]
 
@@ -375,14 +410,21 @@ async def capture(device_id: str, raw_request: Request):
     if is_multipart:
         form = await raw_request.form()
         file_item = form.get("file")
-        corroboration_key = str(form.get("corroboration_key") or "zone_c.perimeter")
+        corroboration_key = str(form.get("corroboration_key") or "").strip()
         zone = form.get("zone")
         entity = form.get("entity")
         caption = form.get("caption") or ""
         value = str(caption) if caption else f"[Photo captured: {corroboration_key}]"
-        if file_item and hasattr(file_item, "read"):
-            file_bytes = await file_item.read()
-            modality = "vision"
+        if not corroboration_key:
+            raise HTTPException(status_code=422, detail="corroboration_key is required")
+        if not zone:
+            raise HTTPException(status_code=422, detail="zone is required for image capture")
+        if not file_item or not hasattr(file_item, "read"):
+            raise HTTPException(status_code=422, detail="file is required for image capture")
+        file_bytes = await file_item.read()
+        if not file_bytes:
+            raise HTTPException(status_code=422, detail="uploaded image is empty")
+        modality = "vision"
     else:
         body = await raw_request.json()
         req = CaptureRequest(**body)
@@ -390,12 +432,16 @@ async def capture(device_id: str, raw_request: Request):
         zone = req.zone
         entity = req.entity
         value = req.value or ""
+        if not value.strip():
+            raise HTTPException(status_code=422, detail="value is required")
 
     # Pick adapter by modality
     vision_adapter = next((a for a in adapters if a.modality == "vision"), None)
     text_adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
 
-    if modality == "vision" and file_bytes and vision_adapter:
+    if modality == "vision" and file_bytes:
+        if vision_adapter is None:
+            raise HTTPException(status_code=503, detail="vision embedding is not enabled in backend configuration")
         adapter = vision_adapter
         dense_vector = adapter.embed(file_bytes)
         point_id = generate_point_id(corroboration_key, value + str(time.time()))
@@ -431,9 +477,9 @@ async def capture(device_id: str, raw_request: Request):
         payload["zone"] = zone
     if entity is not None:
         payload["entity"] = entity
-    payload["status"] = "unverified"
+    payload["status"] = (req.status or "unverified") if not is_multipart else "unverified"
     payload["client_timestamp_ns"] = int(time.time() * 1_000_000_000)
-    payload["reporter_device_id"] = device_id
+    payload["reporter_device_id"] = (req.reporter_device_id or req.device_id or device_id) if not is_multipart else device_id
     payload = add_sync_meta(payload)
 
     # Run decision engine
@@ -443,7 +489,7 @@ async def capture(device_id: str, raw_request: Request):
     await _broadcast_device_event(device_id, "decision", {
         "device_id": device_id,
         "point_id": point_id,
-        "value_preview": request.value[:160],
+        "value_preview": value[:160],
         "modality": payload.get("modality", "text"),
         "thumbnail_url": payload.get("thumbnail_url"),
         "verdict": verdict,
@@ -809,11 +855,33 @@ class RetractResponse(BaseModel):
 @app.post("/devices/{device_id}/retract/{point_id}")
 async def retract(device_id: str, point_id: int):
     """Append a RETRACTED event to the fact_events log (Step 6)."""
+    point_payload = None
+    if device_id in device_shards:
+        for shard_name in ("mutable", "immutable"):
+            records = device_shards[device_id][shard_name].retrieve([point_id], with_payload=True, with_vector=False)
+            if records:
+                point_payload = records[0].payload or {}
+                break
     event_log = get_or_create_event_log(device_id)
     now = _utcnow()
     event_log.append(point_id, RETRACTED, device_ts=now)
+    if sync_transport is not None:
+        try:
+            sync_transport.retract(device_id, point_id, (point_payload or {}).get("corroboration_key"))
+        except Exception as exc:
+            activity = log_activity(device_id, "error", f"cloud retraction failed: {exc}", point_id)
+            await _broadcast_device_event(device_id, "activity", activity)
     activity = log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
     await _broadcast_device_event(device_id, "activity", activity)
+    await _broadcast_consensus_event({
+        "corroboration_key": (point_payload or {}).get("corroboration_key", ""),
+        "state": "RETRACTED",
+        "confidence": 0.0,
+        "resolved_value": None,
+        "candidates": [],
+        "explanation": f"Point {point_id} was retracted by {device_id}.",
+        "timestamp": now,
+    })
     return RetractResponse(retracted=True, point_id=point_id)
 
 
@@ -878,10 +946,36 @@ async def benchmark_resolver_vs_lww():
     resolver_gain = round(resolver_5obs - resolver_1obs, 4)
     lww_gain = round(lww_5obs - lww_1obs, 4)
 
+    benchmark_file = REPO_ROOT / "config" / "seed" / "conflicts_bench.jsonl"
+    resolver_correct = 0
+    lww_correct = 0
+    scenario_count = 0
+    benchmark_trust = {"dev-01": 0.92, "dev-02": 0.88, "dev-03": 0.42, "dev-04": 0.84}
+    if benchmark_file.exists():
+        import json
+        with open(benchmark_file, encoding="utf-8") as source:
+            for line in source:
+                if not line.strip():
+                    continue
+                scenario = json.loads(line)
+                reports = scenario.get("reports") or []
+                ground_truth = scenario.get("ground_truth")
+                if not reports or ground_truth is None:
+                    continue
+                weights: Dict[str, float] = {}
+                for report in reports:
+                    value = str(report.get("value", ""))
+                    weights[value] = weights.get(value, 0.0) + benchmark_trust.get(report.get("device_id"), 0.5)
+                resolver_value = min(weights, key=lambda value: (-weights[value], value))
+                lww_value = max(reports, key=lambda report: str(report.get("device_ts", ""))).get("value")
+                resolver_correct += resolver_value == ground_truth
+                lww_correct += lww_value == ground_truth
+                scenario_count += 1
+
     return {
-        "resolver_accuracy": 0.94,
-        "lww_accuracy": 0.71,
-        "scenarios": 300,
+        "resolver_accuracy": round(resolver_correct / scenario_count, 4) if scenario_count else 0.0,
+        "lww_accuracy": round(lww_correct / scenario_count, 4) if scenario_count else 0.0,
+        "scenarios": scenario_count,
         "decay": TRUST_DECAY,
         "trajectory": trajectory,
         "resolver_1obs": resolver_1obs,
@@ -1008,7 +1102,8 @@ async def set_device_rogue(device_id: str, req: RogueRequest = RogueRequest()):
         _rogue_devices.add(device_id)
     else:
         _rogue_devices.discard(device_id)
-    log_activity(device_id, "rogue_mode", f"device rogue mode set to {req.rogue}", None)
+    activity = log_activity(device_id, "mode_change", f"device rogue mode set to {req.rogue}", None)
+    await _broadcast_device_event(device_id, "activity", activity)
     return {"id": device_id, "rogue": req.rogue}
 
 
@@ -1027,7 +1122,7 @@ async def inject_conflict(req: InjectConflictRequest):
     # Forward to cloud gateway if available
     if sync_transport:
         try:
-            sync_transport.post("/demo/inject-conflict", req.dict())
+            sync_transport.inject_conflict(req.model_dump())
         except Exception:
             pass
 
@@ -1065,7 +1160,7 @@ async def inject_conflict(req: InjectConflictRequest):
         "explanation": f"Injected conflict across {len(req.assignments)} devices for {req.corroboration_key}",
         "timestamp": now,
     }
-    _broadcast_consensus_event(consensus_frame)
+    await _broadcast_consensus_event(consensus_frame)
     return {"injected": True, "corroboration_key": req.corroboration_key, "consensus": consensus_frame}
 
 
@@ -1130,6 +1225,10 @@ async def list_devices():
         devices.append({
             "id": device_id,
             "name": name,
+            "kind": dev_meta.get("kind", "edge node"),
+            "zone": dev_meta.get("zone"),
+            "latitude": dev_meta.get("latitude"),
+            "longitude": dev_meta.get("longitude"),
             "connectivity": network.get_mode(),
             "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
             "last_sync_at": last_sync,
@@ -1180,6 +1279,10 @@ async def get_device(device_id: str):
     return {
         "id": device_id,
         "name": name,
+        "kind": dev_meta.get("kind", "edge node"),
+        "zone": dev_meta.get("zone"),
+        "latitude": dev_meta.get("latitude"),
+        "longitude": dev_meta.get("longitude"),
         "connectivity": network.get_mode(),
         "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
         "last_sync_at": last_sync,
@@ -1444,7 +1547,7 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
     if sync_transport is not None:
         try:
             cloud_res = sync_transport.get_cloud_state()
-            if cloud_res and isinstance(cloud_res.get("facts"), list) and len(cloud_res["facts"]) > 0:
+            if cloud_res and isinstance(cloud_res.get("facts"), list):
                 return cloud_res
         except Exception:
             pass

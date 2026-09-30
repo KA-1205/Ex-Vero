@@ -51,6 +51,10 @@ class SyncTransport(Protocol):
         """Fetch merged fleet state from the hub."""
         ...
 
+    def inject_conflict(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Inject a reproducible conflict into the gateway's event history."""
+        ...
+
 
 class GatewayTransport:
     """Real HTTP client to the Cloud Gateway (`cloud-gateway/`)."""
@@ -90,6 +94,11 @@ class GatewayTransport:
 
     def get_cloud_state(self) -> Dict[str, Any]:
         r = httpx.get(f"{self.base_url}/cloud/state", timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()
+
+    def inject_conflict(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        r = httpx.post(f"{self.base_url}/demo/inject-conflict", json=request, timeout=self.timeout)
         r.raise_for_status()
         return r.json()
 

@@ -12,6 +12,11 @@ import * as mock from './mock'
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8000'
 
+function apiAsset(url?: string | null): string | null {
+  if (!url) return null
+  try { return new URL(url, `${BASE_URL}/`).toString() } catch { return url }
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`)
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
@@ -23,7 +28,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 function apiDevice(d: ApiDevice): DeviceSummary {
-  return { id: d.id, name: d.name, kind: 'edge node', connectivity: d.connectivity === 'full' ? 'ONLINE' : d.connectivity.toUpperCase() as DeviceSummary['connectivity'], memory_used: d.memory.used, memory_cap: d.memory.cap, last_sync_at: d.last_sync_at, activity_sparkline: d.activity_sparkline }
+  return { id: d.id, name: d.name, kind: d.kind ?? 'edge node', connectivity: d.connectivity === 'full' ? 'ONLINE' : d.connectivity.toUpperCase() as DeviceSummary['connectivity'], memory_used: d.memory.used, memory_cap: d.memory.cap, last_sync_at: d.last_sync_at, activity_sparkline: d.activity_sparkline, latitude: d.latitude, longitude: d.longitude }
 }
 function apiFact(f: ApiCloudFact, i: number): CloudFact {
   return { id: `${f.corroboration_key}-${i}`, corroboration_key: f.corroboration_key, zone: f.corroboration_key.split('.')[0]?.replace(/^zone_/, 'Zone ').toUpperCase(), summary: f.value, status: f.state, confidence: f.confidence, corroborating_devices: f.corroborating_devices, last_updated: f.updated_at }
@@ -32,11 +37,11 @@ function apiFeed(raw: DecisionEvent | Record<string, unknown>): DecisionFeedEntr
   const e = raw as DecisionEvent & { payload?: { value?: string; modality?: DecisionFeedEntry['modality']; thumbnail_url?: string | null } }
   const pointId = Number(e.point_id ?? 0)
   const value = e.value_preview ?? e.payload?.value ?? ''
-  return { device_id: e.device_id, point_id: pointId, id: String(pointId), timestamp: e.timestamp, content_preview: value.slice(0, 160), value_preview: value.slice(0, 160), modality: e.modality ?? e.payload?.modality ?? 'text', thumbnail_url: e.thumbnail_url ?? e.payload?.thumbnail_url ?? null, verdict: e.verdict, reason: e.reason }
+  return { device_id: e.device_id, point_id: pointId, id: String(pointId), timestamp: e.timestamp, content_preview: value.slice(0, 160), value_preview: value.slice(0, 160), modality: e.modality ?? e.payload?.modality ?? 'text', thumbnail_url: apiAsset(e.thumbnail_url ?? e.payload?.thumbnail_url) ?? null, verdict: e.verdict, reason: e.reason }
 }
-function apiActivity(e: ActivityEntry): ActivityEntry { return { ...e, id: e.point_id == null ? `${e.device_id}-${e.timestamp}-${e.kind}` : String(e.point_id) } }
+function apiActivity(e: ActivityEntry): ActivityEntry { return { ...e, id: `${e.device_id}-${e.timestamp}-${e.kind}-${e.point_id ?? ''}` } }
 function apiMemory(p: MemoryPoint, deviceId: string): MemoryRecord {
-  return { id: String(p.id), device_id: deviceId, content_preview: p.value, thumbnail_url: p.thumbnail_url ?? undefined, modality: p.modality, state: p.sync_state, zone: p.zone ?? undefined, decision_reason: '', captured_at: p.created_at, activity_ids: [], corroboration_key: p.corroboration_key }
+  return { id: String(p.id), device_id: deviceId, content_preview: p.value, thumbnail_url: apiAsset(p.thumbnail_url) ?? undefined, modality: p.modality, state: p.sync_state, zone: p.zone ?? undefined, decision_reason: '', captured_at: p.created_at, activity_ids: [], corroboration_key: p.corroboration_key }
 }
 
 export async function fetchDevices(): Promise<DeviceSummary[]> {
@@ -129,7 +134,8 @@ export async function fetchMemoryDetail(deviceId: string, pointId: string): Prom
     const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId) ?? mock.mockMemoryRecords(deviceId)[0]
     return { point: { id: Number(pointId.replace(/\D/g, '')) || 1, value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
   }
-  return getJSON(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
+  const detail = await getJSON<MemoryDetail>(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
+  return { ...detail, point: { ...detail.point, thumbnail_url: apiAsset(detail.point.thumbnail_url) }, decision: { ...detail.decision, thumbnail_url: apiAsset(detail.decision.thumbnail_url) } }
 }
 export async function fetchCloudState(): Promise<CloudFact[]> {
   if (mock.USE_MOCKS) return mock.mockCloudState()
@@ -145,9 +151,10 @@ export async function fetchResolverBenchmark(): Promise<ResolverBenchmark> {
   if (mock.USE_MOCKS) return { resolver_accuracy: 0.94, lww_accuracy: 0.71, scenarios: 300, trajectory: [] }
   return getJSON('/benchmark/resolver-vs-lww')
 }
-export async function fetchRecallBenchmark(): Promise<RecallBenchmark> {
+export async function fetchRecallBenchmark(): Promise<RecallBenchmark | null> {
   if (mock.USE_MOCKS) return { dense_recall_at_5: 0.62, hybrid_recall_at_5: 0.84, labeled_queries: 40 }
-  return getJSON('/benchmark/recall')
+  const benchmark = await getJSON<RecallBenchmark>('/benchmark/recall')
+  return benchmark.labeled_queries > 0 ? benchmark : null
 }
 export async function fetchDecisionFeed(deviceId: string, limit = 50): Promise<DecisionFeedEntry[]> {
   if (mock.USE_MOCKS) return mock.mockDecisionFeed(deviceId, limit)
@@ -161,7 +168,12 @@ export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceE
     return () => clearInterval(interval)
   }
   const ws = new WebSocket(`${WS_BASE_URL}/devices/${encodeURIComponent(deviceId)}/events`)
-  ws.onmessage = (msg) => { try { onEvent(JSON.parse(msg.data) as DeviceEventFrame) } catch (error) { console.error('Invalid device event frame', error) } }
+  ws.onmessage = (msg) => { try {
+    const frame = JSON.parse(msg.data) as DeviceEventFrame
+    if (frame.type === 'decision') frame.data.thumbnail_url = apiAsset(frame.data.thumbnail_url)
+    if (frame.type === 'activity' && !frame.data.id) frame.data.id = `${frame.data.device_id}-${frame.data.timestamp}-${frame.data.kind}-${frame.data.point_id ?? ''}`
+    onEvent(frame)
+  } catch (error) { console.error('Invalid device event frame', error) } }
   return () => ws.close()
 }
 export async function pushDevice(deviceId: string) { return postJSON(`/devices/${encodeURIComponent(deviceId)}/push`, {}) }
