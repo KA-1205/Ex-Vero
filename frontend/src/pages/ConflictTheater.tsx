@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
-import { mockConsensusEvents } from '../api/mock'
-import type { ConsensusEvent } from '../types'
+import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
+import { fetchDevices, injectConflict, setRogueMode, subscribeConsensusEvents } from '../api/client'
+import type { ConsensusEvent, DeviceSummary } from '../types'
 import { MonoValue, Panel } from '../components/primitives'
 
 const DEVICE_A = { id: 'dev-01', name: 'Paramedic Tablet 01', value: 'Zone C — gas leak, active, evacuate' }
@@ -30,24 +31,44 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
 
 export function ConflictTheater() {
   const { setMode } = useNetworkMode()
+  const [devices, setDevices] = useState<DeviceSummary[]>([])
   const [reconnected, setReconnected] = useState(false)
   const [resolved, setResolved] = useState<ConsensusEvent | null>(null)
   const [resolving, setResolving] = useState(false)
+  const [rogue, setRogue] = useState(false)
+  const [message, setMessage] = useState('')
 
-  function reconnect() {
+  useEffect(() => {
+    void fetchDevices().then(setDevices).catch((error) => console.error('Unable to load conflict devices', error))
+    return subscribeConsensusEvents((event) => { setResolved(event); setResolving(false) })
+  }, [])
+
+  const deviceA = devices[0] ?? DEVICE_A
+  const deviceB = devices.find((device) => device.id !== deviceA.id) ?? DEVICE_B
+
+  async function reconnect() {
     setResolving(true)
-    setMode('full')
+    try { setMode('full') } catch (error) { setMessage(error instanceof Error ? error.message : 'Reconnect failed') }
     setReconnected(true)
-    setTimeout(() => {
-      setResolved(mockConsensusEvents()[0])
-      setResolving(false)
-    }, 1600)
+    if (USE_MOCKS) window.setTimeout(() => { setResolved(mockConsensusEvents()[0]); setResolving(false) }, 1200)
   }
 
   function reset() {
     setReconnected(false)
     setResolved(null)
     setMode('offline')
+  }
+
+  async function inject() {
+    setMessage('')
+    try { await injectConflict('zone_c.hazard', { [deviceA.id]: DEVICE_A.value, [deviceB.id]: DEVICE_B.value }); setMessage('Conflict injected. Both devices hold different values.') }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Conflict injection failed') }
+  }
+
+  async function toggleRogue() {
+    const next = !rogue
+    try { await setRogueMode(deviceB.id, next); setRogue(next); setMessage(next ? `${deviceB.id} set to rogue mode` : `${deviceB.id} rogue mode cleared`) }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Rogue mode update failed') }
   }
 
   return (
@@ -61,6 +82,8 @@ export function ConflictTheater() {
           >
             RESET (GO OFFLINE)
           </button>
+          <button onClick={inject} className="px-3 py-1.5 text-xs font-mono border border-line text-ink-dim hover:text-ink">INJECT CONFLICT</button>
+          <button onClick={toggleRogue} className={`px-3 py-1.5 text-xs font-mono border ${rogue ? 'border-alert text-alert' : 'border-line text-ink-dim'}`}>{rogue ? 'ROGUE ON' : 'ROGUE DEVICE'}</button>
           <button
             onClick={reconnect}
             disabled={resolving}
@@ -72,9 +95,10 @@ export function ConflictTheater() {
       </div>
 
       <div className="flex gap-3">
-        <DeviceSide name={DEVICE_A.name} id={DEVICE_A.id} value={DEVICE_A.value} reconnected={reconnected} />
-        <DeviceSide name={DEVICE_B.name} id={DEVICE_B.id} value={DEVICE_B.value} reconnected={reconnected} />
+        <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
+        <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>
+      {message && <div role="status" className="text-xs font-mono text-ink-dim">{message}</div>}
 
       <Panel title="CONSENSUS FOLD RESULT" className="flex-1">
         <div className="p-4">

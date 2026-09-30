@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
-import { mockConsensusEvents } from '../api/mock'
+import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
+import { fetchDevices, injectConflict, subscribeConsensusEvents } from '../api/client'
 import type { ConsensusEvent } from '../types'
+import type { DeviceSummary } from '../types'
 import { MonoValue, Panel } from '../components/primitives'
 
 const DEVICE_A = { id: 'dev-01', name: 'Paramedic Tablet 01', value: 'Zone C — gas leak, active, evacuate' }
@@ -33,15 +35,24 @@ export function ConflictTheater() {
   const [reconnected, setReconnected] = useState(false)
   const [resolved, setResolved] = useState<ConsensusEvent | null>(null)
   const [resolving, setResolving] = useState(false)
+  const [devices, setDevices] = useState<DeviceSummary[]>([])
 
-  function reconnect() {
+  useEffect(() => {
+    void fetchDevices().then(setDevices).catch((error) => console.error('Unable to load image fleet', error))
+    return subscribeConsensusEvents((event) => { setResolved(event); setResolving(false) })
+  }, [])
+
+  const deviceA = devices[0] ?? DEVICE_A
+  const deviceB = devices.find((device) => device.id !== deviceA.id) ?? DEVICE_B
+
+  async function reconnect() {
     setResolving(true)
-    setMode('full')
-    setReconnected(true)
-    setTimeout(() => {
-      setResolved(mockConsensusEvents()[0])
-      setResolving(false)
-    }, 1600)
+    try {
+      await injectConflict('zone_c.hazard', { [deviceA.id]: DEVICE_A.value, [deviceB.id]: DEVICE_B.value })
+      setMode('full')
+      setReconnected(true)
+      if (USE_MOCKS) window.setTimeout(() => { setResolved(mockConsensusEvents()[0]); setResolving(false) }, 1200)
+    } catch (error) { console.error('Unable to inject image conflict', error); setResolving(false) }
   }
 
   function reset() {
@@ -72,8 +83,8 @@ export function ConflictTheater() {
       </div>
 
       <div className="flex gap-3">
-        <DeviceSide name={DEVICE_A.name} id={DEVICE_A.id} value={DEVICE_A.value} reconnected={reconnected} />
-        <DeviceSide name={DEVICE_B.name} id={DEVICE_B.id} value={DEVICE_B.value} reconnected={reconnected} />
+        <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
+        <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>
 
       <Panel title="CONSENSUS FOLD RESULT" className="flex-1">

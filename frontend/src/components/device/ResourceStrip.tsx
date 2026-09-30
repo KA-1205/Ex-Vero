@@ -18,11 +18,12 @@ export function ResourceStrip({ deviceId }: { deviceId: string }) {
   return (
     <div className="glass-card px-3 py-2 flex items-center gap-6 text-xs font-mono">
       <span className="text-ink-faint">TELEMETRY</span>
+      {latest.target_label && <span className="text-ink-faint" title={latest.target_label}>TARGET: {latest.target_label}</span>}
       <span className="text-ink-dim">
-        CPU <MonoValue className="text-ink">{latest.cpu_pct}%</MonoValue>
+        CPU <MonoValue className="text-ink">{latest.cpu_pct.toFixed(1)}%</MonoValue>
       </span>
       <span className="text-ink-dim">
-        RAM <MonoValue className="text-ink">{latest.ram_mb} MB</MonoValue>
+        RAM <MonoValue className="text-ink">{latest.ram_mb.toFixed(1)} MB</MonoValue>
       </span>
       <span className="text-ink-dim">
         QUERY LATENCY <MonoValue className="text-good">{latest.query_latency_ms} ms</MonoValue>
