@@ -22,6 +22,7 @@ dependencies = [
     # env needs it. Pinned to the same version as cloud-gateway/requirements.txt.
     "qdrant-client==1.12.1",
     "uvicorn>=0.54.0",
+    "websockets>=15.0",
 ]
 
 [build-system]

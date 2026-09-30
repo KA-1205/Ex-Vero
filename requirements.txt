@@ -8,12 +8,7 @@ qdrant-edge-py==0.8.0
 qdrant-client==1.12.1
 pyyaml>=6.0.3
 uvicorn>=0.54.0
-# optional dev
-# pytest>=9.1.1
+websockets>=15.0
 
-# Frontend dependencies (manage with `npm install` in frontend/)
-# Copied from frontend/package.json
-react
-react-dom
-react-router-dom
-recharts
+# Optional development dependency
+# pytest>=9.1.1

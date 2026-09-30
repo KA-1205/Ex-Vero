@@ -44,6 +44,7 @@ from qdrant_client import QdrantClient, models
 from consensus_fold import DEFAULT_DEVICE_TRUST, DEFAULT_THRESHOLD, derive_device_trust, fold_consensus
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
 # Creating a collection on a cold Qdrant Server legitimately takes tens of
 # seconds — measured at 20s for the events collection on first boot, before
 # optimizers settle. A 2s budget guaranteed failure on exactly the cold start
@@ -172,7 +173,11 @@ def _startup() -> None:
     last_err: Optional[Exception] = None
     for attempt in range(1, QDRANT_CONNECT_ATTEMPTS + 1):
         try:
-            client = QdrantClient(url=QDRANT_URL, timeout=QDRANT_TIMEOUT_S)
+            client = QdrantClient(
+                url=QDRANT_URL,
+                api_key=QDRANT_API_KEY,
+                timeout=QDRANT_TIMEOUT_S,
+            )
             _ensure_events_collection()
             _init_sequencer()
             return
