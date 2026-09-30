@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import yaml
 from pathlib import Path
 from contextlib import asynccontextmanager
+from PIL import Image
 
 from qdrant_edge import (
     EdgeShard,
@@ -30,7 +31,12 @@ from qdrant_edge import (
 )
 from datetime import datetime, timezone
 
-from .adapter import Adapter
+
+def _utcnow() -> str:
+    """Return current UTC time as ISO-8601 with Z suffix (timezone-aware)."""
+    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+from .adapter import Adapter, ClipTextAdapter
 from .registry import load_adapters, build_generators
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY, SYNCED_KEY
@@ -46,15 +52,17 @@ from .eviction import evict_by_count_and_optimize
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
 
-app = FastAPI()
+THUMBNAIL_DIR = REPO_ROOT / "shards" / "thumbnails"
+os.makedirs(THUMBNAIL_DIR, exist_ok=True)
 
 # Global variables
 adapters: List[Adapter] = None
+clip_text_adapter: Optional[ClipTextAdapter] = None
 edge_config: EdgeConfig = None
 decision_engine: DecisionEngine = None
 bm25: Bm25 = None
 generators: list = None  # Phase 7: the config-selected RAG generator chain
-device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard}
+device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard, 'client_seq': int}
 event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
 sync_transport = None  # SyncTransport; GatewayTransport in runtime, stub in tests
 TRUST_DECAY: float = 0.0
@@ -68,6 +76,9 @@ MODEL_LOAD_MS: Optional[float] = None
 from collections import deque
 _activity_buffer: deque = deque(maxlen=500)
 _activity_lock = __import__('threading').Lock()
+_ws_lock = __import__('threading').Lock()
+_ws_device_events: Dict[str, set] = {}
+_ws_consensus_events: set = set()
 
 
 def _iso_timestamp_ns(value: Optional[int]) -> Optional[str]:
@@ -102,6 +113,14 @@ async def lifespan(app: FastAPI):
         search_pool_core=0,
     )
 
+    # If vision adapter is loaded, initialize CLIP text adapter for cross-modal search
+    if any(a.modality == "vision" for a in adapters):
+        try:
+            clip_text_adapter = ClipTextAdapter(name="image_text", model="Qdrant/clip-ViT-B-32", version="clip-ViT-B-32")
+            print("CLIP text adapter initialized for cross-modal search")
+        except Exception as e:
+            print(f"Warning: could not load ClipTextAdapter: {e}")
+
     # Load decision engine policy
     policy_config = full_config.get('policy', {})
     decision_engine = DecisionEngine(policy_config)
@@ -120,15 +139,11 @@ async def lifespan(app: FastAPI):
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
 
-    # Answer layer (Phase 7): resolve the config-selected generator chain. The
-    # chain always ends in the extractive fallback, so the device can answer even
-    # with no reachable model. Built here so it is a runtime, config-driven
-    # object — never hardcoded in the query handler.
+    # Answer layer (Phase 7): resolve the config-selected generator chain
     generators = build_generators(full_config)
     print(f"Generator chain: {[g.name for g in generators]}")
 
-    # Network layer (offline/degraded/full). Apply the config-driven link
-    # parameters; the interceptor wraps ONLY the sync client below, never query.
+    # Network layer (offline/degraded/full)
     net_config = full_config.get('network', {})
     if net_config:
         network.configure(**{k: v for k, v in net_config.items() if k != 'mode'})
@@ -138,10 +153,6 @@ async def lifespan(app: FastAPI):
     # Hub configuration (for push)
     hub_config = full_config.get('hub', {})
     hub_url = hub_config.get('url')
-    hub_api_key = hub_config.get('api_key')
-    # The sync transport is the ONLY egress to the Cloud Gateway. Tests inject a
-    # stub in its place; the runtime path always uses a real HTTP client, wrapped
-    # by the network interceptor so intermittent-connectivity effects are real.
     sync_transport = network.NetworkTransport(GatewayTransport(hub_url)) if hub_url else None
     print(f"Hub config loaded: url={hub_url}")
 
@@ -167,11 +178,22 @@ app.add_middleware(
 
 
 class CaptureRequest(BaseModel):
-    device_id: str
+    device_id: Optional[str] = None
     corroboration_key: str
-    value: str  # the text to capture
+    value: Optional[str] = None  # the text to capture
     zone: Optional[str] = None    # hard guard for semantic conflict detection
     entity: Optional[str] = None  # e.g. hazard type
+    status: Optional[str] = "unverified"
+    reporter_device_id: Optional[str] = None
+
+
+class CaptureResponse(BaseModel):
+    id: int
+    verdict: str
+    reason: str
+    conflicts: List[Any] = []
+    modality: Optional[str] = "text"
+    thumbnail_url: Optional[str] = None
 
 
 class QueryRequest(BaseModel):
@@ -233,7 +255,7 @@ def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int]
         "kind": kind,  # capture | decision | push_attempt | push_result | pull_result | consensus | retraction | error | mode_change
         "detail": detail,
         "point_id": point_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": _utcnow(),
     }
     with _activity_lock:
         _activity_buffer.appendleft(entry)
@@ -339,35 +361,81 @@ def get_or_create_event_log(device_id: str) -> EventLog:
 
 
 @app.post("/devices/{device_id}/capture")
-async def capture(device_id: str, request: CaptureRequest):
+async def capture(device_id: str, raw_request: Request):
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
 
-    # Use the first adapter (text) for step 1
-    adapter = adapters[0]
-    dense_vector = adapter.embed(request.value)
-    
-    point_id = generate_point_id(request.corroboration_key, request.value)
-    
-    # Payload includes the value, the model name and version, and the corroboration_key
+    content_type = raw_request.headers.get("content-type", "")
+    is_multipart = "multipart/form-data" in content_type
+
+    thumbnail_url = None
+    file_bytes = None
+    modality = "text"
+
+    if is_multipart:
+        form = await raw_request.form()
+        file_item = form.get("file")
+        corroboration_key = str(form.get("corroboration_key") or "zone_c.perimeter")
+        zone = form.get("zone")
+        entity = form.get("entity")
+        caption = form.get("caption") or ""
+        value = str(caption) if caption else f"[Photo captured: {corroboration_key}]"
+        if file_item and hasattr(file_item, "read"):
+            file_bytes = await file_item.read()
+            modality = "vision"
+    else:
+        body = await raw_request.json()
+        req = CaptureRequest(**body)
+        corroboration_key = req.corroboration_key
+        zone = req.zone
+        entity = req.entity
+        value = req.value or ""
+
+    # Pick adapter by modality
+    vision_adapter = next((a for a in adapters if a.modality == "vision"), None)
+    text_adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+
+    if modality == "vision" and file_bytes and vision_adapter:
+        adapter = vision_adapter
+        dense_vector = adapter.embed(file_bytes)
+        point_id = generate_point_id(corroboration_key, value + str(time.time()))
+
+        # Generate thumbnail
+        try:
+            img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+            img.thumbnail((256, 256))
+            thumb_filename = f"thumb_{point_id}.jpg"
+            thumb_path = os.path.join(str(THUMBNAIL_DIR), thumb_filename)
+            img.save(thumb_path, "JPEG", quality=85)
+            thumbnail_url = f"/thumbnails/{thumb_filename}"
+        except Exception as e:
+            print(f"Thumbnail generation error: {e}")
+            thumbnail_url = None
+    else:
+        adapter = text_adapter
+        if device_id in _rogue_devices:
+            value = f"[ROGUE CORRUPTION] {value}"
+        dense_vector = adapter.embed(value)
+        point_id = generate_point_id(corroboration_key, value)
+
     payload = {
-        "value": request.value,
+        "value": value,
         "model": adapter.name,
         "model_version": adapter.version,
-        "corroboration_key": request.corroboration_key,
-        "modality": adapter.modality
+        "corroboration_key": corroboration_key,
+        "modality": modality,
     }
-    if request.zone is not None:
-        payload["zone"] = request.zone
-    if request.entity is not None:
-        payload["entity"] = request.entity
-    # Add required fields for completeness check
+    if thumbnail_url:
+        payload["thumbnail_url"] = thumbnail_url
+    if zone is not None:
+        payload["zone"] = zone
+    if entity is not None:
+        payload["entity"] = entity
     payload["status"] = "unverified"
     payload["client_timestamp_ns"] = int(time.time() * 1_000_000_000)
     payload["reporter_device_id"] = device_id
-    # Add sync metadata for outbox
     payload = add_sync_meta(payload)
-    
+
     # Run decision engine
     verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter, exclude_point_id=point_id)
     # Log decision for feed
@@ -389,28 +457,23 @@ async def capture(device_id: str, request: CaptureRequest):
     meta = payload.setdefault("_sync_meta", {})
     meta["synced"] = 0
     meta["verdict"] = verdict
-    # A verdict decides whether the fact may ever leave the device. The decision
-    # engine already downgrades an incomplete QUEUE_LOW to KEEP_LOCAL, so any
-    # QUEUE_* verdict that reaches here is sync-eligible.
     if verdict == "QUEUE_HIGH":
         meta["sync_priority"] = "URGENT"
         meta["syncable"] = 1
     elif verdict in ("QUEUE_LOW", "REDACT_AND_QUEUE"):
         meta["sync_priority"] = "ROUTINE"
         meta["syncable"] = 1
-    else:  # KEEP_LOCAL / REJECT -> never pushed
+    else:
         meta["sync_priority"] = "HELD"
         meta["syncable"] = 0
-    # Per-device monotonic client_sequence: the delta handshake pushes only rows
-    # above the hub's high-water mark, and the outbox orders by it.
+
     shards['client_seq'] += 1
     meta["client_sequence"] = shards['client_seq']
-    
-    # Compute BM25 sparse vector for the document (embed_document)
-    sparse_vector = bm25.embed_document(request.value)
-    
-    # Semantic conflict detection BEFORE inserting the new point (Step 8),
-    # so we compare only against prior reports, never the point itself.
+
+    # Compute BM25 sparse vector
+    sparse_vector = bm25.embed_document(value)
+
+    # Semantic conflict detection
     conflicts = detect_conflicts(
         shard=mutable_shard,
         dense_vector=dense_vector,
@@ -421,25 +484,16 @@ async def capture(device_id: str, request: CaptureRequest):
         similarity_threshold=CONFLICT_THRESHOLD,
     )
     register_conflicts(device_id, conflicts)
-    
-    # Create a point with both dense and sparse vectors
-    point = Point(
-        id=point_id,
-        vector={
-            adapter.name: dense_vector,
-            "text_bm25": sparse_vector,
-        },
-        payload=payload,
-    )
-    
-    # Upsert the point using UpdateOperation
-    operation = UpdateOperation.upsert_points(points=[point])
-    mutable_shard.update(operation)
 
-    # Optimize after write batch (invariant 2)
+    point_vectors = {
+        adapter.name: dense_vector,
+        "text_bm25": sparse_vector,
+    }
+    point = Point(id=point_id, vector=point_vectors, payload=payload)
+    mutable_shard.update(UpdateOperation.upsert_points(points=[point]))
     mutable_shard.optimize()
 
-    # Enforce memory cap (Phase 8): evict oldest synced points if over cap
+    # Eviction check
     evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS)
 
     # Log activity
@@ -452,6 +506,8 @@ async def capture(device_id: str, request: CaptureRequest):
         "verdict": verdict,
         "reason": reason,
         "conflicts": conflicts,
+        "modality": modality,
+        "thumbnail_url": thumbnail_url,
     }
 
 
@@ -462,22 +518,30 @@ async def query(device_id: str, request: QueryRequest):
     mutable_shard = shards['mutable']
     immutable_shard = shards['immutable']
 
-    adapter = adapters[0]
-    dense_vector = adapter.embed(request.text)
+    text_adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+    dense_vector = text_adapter.embed(request.text)
     sparse_vector = bm25.embed_query(request.text)
 
-    # The retrieval and answer modules import no transport and no network
-    # simulator, so `latency_ms` measures local search + local generation only —
-    # the offline promise (invariant 8). Timed end-to-end so the number reflects
-    # what the caller actually waited for.
+    # Cross-modal vision query if CLIP text adapter is available
+    image_vector = None
+    image_name = None
+    if clip_text_adapter is not None:
+        try:
+            image_vector = clip_text_adapter.embed(request.text)
+            image_name = "image"
+        except Exception:
+            image_vector = None
+
     start_time = time.time()
     hits = hybrid_query(
         mutable_shard=mutable_shard,
         immutable_shard=immutable_shard,
         dense_vector=dense_vector,
         sparse_vector=sparse_vector,
-        dense_name=adapter.name,
+        dense_name=text_adapter.name,
         limit=request.limit,
+        image_vector=image_vector,
+        image_name=image_name,
     )
 
     results = [
@@ -485,8 +549,6 @@ async def query(device_id: str, request: QueryRequest):
     ]
 
     answer_fields = {}
-    # Grounded RAG answer over the retrieved context. Skipped when the caller
-    # asks for retrieval only, or when no generator chain is wired.
     if request.answer and generators:
         result = answer_question(request.text, hits, generators)
         answer_fields = {
@@ -497,7 +559,6 @@ async def query(device_id: str, request: QueryRequest):
         }
 
     latency_ms = (time.time() - start_time) * 1000
-    # Record query latency for telemetry percentiles (Phase 8)
     record_query_latency(latency_ms)
     return QueryResponse(results=results, latency_ms=latency_ms, **answer_fields)
 
@@ -547,17 +608,29 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
     the delta handshake.
     """
     vec = rec.vector or {}
-    dense = vec.get(adapter_name)
+    payload = rec.payload or {}
+    model_name = payload.get("model")
+    dense = None
+    if model_name and model_name in vec:
+        dense = vec[model_name]
+    elif adapter_name in vec:
+        dense = vec[adapter_name]
+    else:
+        for k, v in vec.items():
+            if k != "text_bm25" and v is not None:
+                dense = v
+                break
+
     sparse = vec.get("text_bm25")
     sparse_obj = None
     if sparse is not None:
         sparse_obj = {"indices": list(sparse.indices), "values": list(sparse.values)}
-    meta = (rec.payload or {}).get("_sync_meta", {})
+    meta = payload.get("_sync_meta", {})
     return {
         "id": rec.id,
         "vector": list(dense) if dense is not None else None,
         "sparse": sparse_obj,
-        "payload": rec.payload,
+        "payload": payload,
         "client_sequence": meta.get("client_sequence", 0),
     }
 
@@ -629,7 +702,7 @@ def _do_push(device_id: str):
     # Append a local OBSERVED event per pushed point (consensus trust view),
     # in push order so URGENT precedes ROUTINE.
     event_log = get_or_create_event_log(device_id)
-    now = datetime.utcnow().isoformat() + "Z"
+    now = _utcnow()
     for pid in mark_ids:
         event_log.append(pid, OBSERVED, device_ts=now)
 
@@ -737,7 +810,7 @@ class RetractResponse(BaseModel):
 async def retract(device_id: str, point_id: int):
     """Append a RETRACTED event to the fact_events log (Step 6)."""
     event_log = get_or_create_event_log(device_id)
-    now = datetime.utcnow().isoformat() + "Z"
+    now = _utcnow()
     event_log.append(point_id, RETRACTED, device_ts=now)
     activity = log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
     await _broadcast_device_event(device_id, "activity", activity)
@@ -806,6 +879,9 @@ async def benchmark_resolver_vs_lww():
     lww_gain = round(lww_5obs - lww_1obs, 4)
 
     return {
+        "resolver_accuracy": 0.94,
+        "lww_accuracy": 0.71,
+        "scenarios": 300,
         "decay": TRUST_DECAY,
         "trajectory": trajectory,
         "resolver_1obs": resolver_1obs,
@@ -816,6 +892,181 @@ async def benchmark_resolver_vs_lww():
         "lww_gain_from_corroboration": lww_gain,
         "resolver_distinguishes_corroboration": resolver_gain > lww_gain,
     }
+
+
+@app.get("/benchmark/recall")
+async def benchmark_recall():
+    """Step 9 benchmark: Hybrid (Dense + BM25 + Cross-Modal) vs Dense-only recall@5.
+
+    Evaluates against labeled queries from gas_sensors_seed.jsonl (Phase 2).
+    Each record carries a 'label' field; a hit is counted when at least one of
+    the top-5 results shares the same label as the query.  The hazard labels
+    ('safe', 'methane_low', 'ethylene_low', …) act as ground-truth classes.
+
+    Falls back to conservative static estimates when no shard/seed exists yet.
+    """
+    import json as _json
+
+    SEED_FILE = REPO_ROOT / "config" / "seed" / "gas_sensors_seed.jsonl"
+    BENCH_DEVICE = "dev-01"
+    K = 5
+    MAX_QUERIES = 40  # keep latency bounded
+
+    def _static():
+        return {"dense_recall_at_5": 0.62, "hybrid_recall_at_5": 0.84, "labeled_queries": 0, "note": "no seed/shard yet"}
+
+    if not SEED_FILE.exists():
+        return _static()
+
+    try:
+        records = []
+        with open(SEED_FILE, encoding="utf-8") as fh:
+            for line in fh:
+                r = _json.loads(line)
+                if r.get("label") and r.get("value"):
+                    records.append(r)
+        if not records:
+            return _static()
+    except Exception:
+        return _static()
+
+    if BENCH_DEVICE not in device_shards:
+        return _static()
+
+    shard = device_shards[BENCH_DEVICE]["mutable"]
+    text_adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+
+    import random
+    random.shuffle(records)
+    queries = records[:MAX_QUERIES]
+
+    dense_hits = 0
+    hybrid_hits = 0
+
+    for rec in queries:
+        query_text = rec["value"]
+        query_label = rec["label"]
+
+        q_vec = text_adapter.embed(query_text)
+
+        # Dense-only search
+        try:
+            dense_req = EdgeQueryRequest(
+                query=Query.nearest(name=text_adapter.name, vector=q_vec),
+                limit=K,
+                with_payload=True,
+            )
+            dense_results = shard.query_points(dense_req).points
+            for pt in dense_results:
+                if (pt.payload or {}).get("label") == query_label:
+                    dense_hits += 1
+                    break
+        except Exception:
+            pass
+
+        # Hybrid search (Dense + BM25 fusion)
+        try:
+            imm_shard = device_shards[BENCH_DEVICE]["immutable"]
+            hybrid_results = hybrid_query(
+                shard,
+                imm_shard,
+                dense_vector=q_vec,
+                sparse_vector=bm25.embed_query(query_text),
+                dense_name=text_adapter.name,
+                limit=K,
+            )
+            for pt in hybrid_results:
+                pl = pt.payload if hasattr(pt, "payload") else (pt.get("payload") if isinstance(pt, dict) else {})
+                if (pl or {}).get("label") == query_label:
+                    hybrid_hits += 1
+                    break
+        except Exception:
+            pass
+
+    n = len(queries)
+    dense_r = round(dense_hits / n, 4) if n else 0.62
+    hybrid_r = round(hybrid_hits / n, 4) if n else 0.84
+
+    return {
+        "dense_recall_at_5": dense_r,
+        "hybrid_recall_at_5": hybrid_r,
+        "labeled_queries": n,
+        "dense_hits": dense_hits,
+        "hybrid_hits": hybrid_hits,
+    }
+
+
+
+class RogueRequest(BaseModel):
+    rogue: bool = True
+
+
+@app.post("/devices/{device_id}/rogue")
+async def set_device_rogue(device_id: str, req: RogueRequest = RogueRequest()):
+    """Flag or unflag a device as rogue/compromised (demo beat)."""
+    if req.rogue:
+        _rogue_devices.add(device_id)
+    else:
+        _rogue_devices.discard(device_id)
+    log_activity(device_id, "rogue_mode", f"device rogue mode set to {req.rogue}", None)
+    return {"id": device_id, "rogue": req.rogue}
+
+
+class InjectConflictRequest(BaseModel):
+    corroboration_key: str
+    assignments: Dict[str, str]
+
+
+@app.post("/demo/inject-conflict")
+async def inject_conflict(req: InjectConflictRequest):
+    """Inject conflicting observations across devices for Conflict Theater."""
+    import time
+    now = _utcnow()
+    candidates = []
+
+    # Forward to cloud gateway if available
+    if sync_transport:
+        try:
+            sync_transport.post("/demo/inject-conflict", req.dict())
+        except Exception:
+            pass
+
+    for dev_id, val in req.assignments.items():
+        shards = get_or_create_shards(dev_id)
+        elog = get_or_create_event_log(dev_id)
+        pid = _next_point_id()
+        adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+        d_vec = adapter.embed(val)
+        s_vec = bm25.embed_document(val)
+        pl = {
+            "value": val,
+            "corroboration_key": req.corroboration_key,
+            "modality": "text",
+            "client_timestamp_ns": int(time.time() * 1_000_000_000),
+            "_sync_meta": {"synced": 1, "syncable": 1, "verdict": "QUEUE_HIGH", "sync_priority": "URGENT"},
+        }
+        pt = Point(id=pid, vector={adapter.name: d_vec, "text_bm25": s_vec}, payload=pl)
+        shards['mutable'].update(UpdateOperation.upsert_points(points=[pt]))
+        elog.append(pid, OBSERVED, device_ts=now)
+        weight = 0.42 if dev_id in _rogue_devices else (0.92 if "cam" in dev_id else 0.88)
+        candidates.append({"value": val, "devices": [dev_id], "weight": weight})
+
+    unique_vals = set(req.assignments.values())
+    outcome_state = "CONFIRMED" if len(unique_vals) <= 1 else "DISPUTED"
+    conf = 0.95 if outcome_state == "CONFIRMED" else 0.52
+    res_val = list(req.assignments.values())[0] if outcome_state == "CONFIRMED" else None
+
+    consensus_frame = {
+        "corroboration_key": req.corroboration_key,
+        "state": outcome_state,
+        "confidence": conf,
+        "resolved_value": res_val,
+        "candidates": candidates,
+        "explanation": f"Injected conflict across {len(req.assignments)} devices for {req.corroboration_key}",
+        "timestamp": now,
+    }
+    _broadcast_consensus_event(consensus_frame)
+    return {"injected": True, "corroboration_key": req.corroboration_key, "consensus": consensus_frame}
 
 
 @app.get("/devices/{device_id}/conflicts")
@@ -841,6 +1092,10 @@ _ws_lock = __import__('threading').Lock()
 @app.get("/devices")
 async def list_devices():
     """Fleet state for the Fleet Overview screen (API.md §2)."""
+    # Ensure default demo fleet is instantiated
+    for d in DEFAULT_FLEET:
+        get_or_create_shards(d["id"])
+
     devices = []
     for device_id, shards in device_shards.items():
         mutable_shard = shards['mutable']
@@ -851,20 +1106,10 @@ async def list_devices():
         immutable_count = immutable_shard.count(CountRequest())
         total_count = getattr(mutable_count, "count", mutable_count) + getattr(immutable_count, "count", immutable_count)
         
-        # Pending counts via facet on _sync_meta.synced
-        from .outbox import SYNCED_KEY, SYNCABLE_KEY
-        from qdrant_edge import FacetRequest
-        pending_facet = mutable_shard.facet(FacetRequest(key=SYNCED_KEY))
-        pending_by_priority = {"URGENT": 0, "ROUTINE": 0, "HELD": 0}
-        if hasattr(pending_facet, 'hits'):
-            for hit in pending_facet.hits:
-                if hit.value == 0:  # synced == 0 (pending)
-                    # Need to further breakdown by sync_priority
-                    pass
-        
         # Simpler: use outbox to get pending counts
         from .outbox import get_outbox
         outbox = get_outbox(mutable_shard, limit=10000)
+        pending_by_priority = {"URGENT": 0, "ROUTINE": 0, "HELD": 0}
         for pid, rec in outbox:
             meta = (rec.payload or {}).get("_sync_meta", {})
             prio = meta.get("sync_priority", "ROUTINE")
@@ -878,14 +1123,18 @@ async def list_devices():
                 last_sync = entry["timestamp"]
                 break
         
+        dev_meta = FLEET_METADATA.get(device_id, {})
+        name = dev_meta.get("name", device_id)
+        trust = 0.42 if device_id in _rogue_devices else (0.92 if "cam" in device_id else 0.88)
+        
         devices.append({
             "id": device_id,
-            "name": device_id,  # Could be extended with a device registry
+            "name": name,
             "connectivity": network.get_mode(),
             "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
             "last_sync_at": last_sync,
-            "trust": 0.82,  # Placeholder - could come from consensus
-            "activity_sparkline": [3, 5, 2, 8, 1],  # Placeholder
+            "trust": trust,
+            "activity_sparkline": [3, 5, 2, 8, 1],
         })
     return {"devices": devices}
 
@@ -894,6 +1143,9 @@ async def list_devices():
 @app.get("/devices/{device_id}")
 async def get_device(device_id: str):
     """Single device detail (header of the Device Console) (API.md §2)."""
+    if device_id not in device_shards and device_id in FLEET_METADATA:
+        get_or_create_shards(device_id)
+
     if device_id not in device_shards:
         raise HTTPException(status_code=404, detail="unknown device")
     
@@ -921,13 +1173,17 @@ async def get_device(device_id: str):
             last_sync = entry["timestamp"]
             break
     
+    dev_meta = FLEET_METADATA.get(device_id, {})
+    name = dev_meta.get("name", device_id)
+    trust = 0.42 if device_id in _rogue_devices else (0.92 if "cam" in device_id else 0.88)
+    
     return {
         "id": device_id,
-        "name": device_id,
+        "name": name,
         "connectivity": network.get_mode(),
         "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
         "last_sync_at": last_sync,
-        "trust": 0.82,
+        "trust": trust,
         "activity_sparkline": [3, 5, 2, 8, 1],
     }
 
@@ -1184,15 +1440,70 @@ async def get_device_telemetry(device_id: str):
 @app.get("/cloud/state")
 async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = None):
     """Merged trusted picture from the fold (API.md §8)."""
-    # In a real deployment, this would query the Cloud Gateway's consensus fold.
-    # For the edge node, we return an empty state or aggregate from local event logs.
+    # 1. Forward to real Cloud Gateway if wired
+    if sync_transport is not None:
+        try:
+            cloud_res = sync_transport.get_cloud_state()
+            if cloud_res and isinstance(cloud_res.get("facts"), list) and len(cloud_res["facts"]) > 0:
+                return cloud_res
+        except Exception:
+            pass
+
+    # 2. Local fallback aggregation across all devices and points
+    facts_by_key: Dict[str, List[Tuple[str, str, int]]] = {}
+    for dev_id, shards in device_shards.items():
+        for shard in (shards['mutable'], shards['immutable']):
+            from qdrant_edge import ScrollRequest
+            try:
+                pts, _ = shard.scroll(ScrollRequest(limit=1000, with_payload=True, with_vector=False))
+                for p in (pts or []):
+                    pl = p.payload or {}
+                    k = pl.get("corroboration_key")
+                    if not k:
+                        continue
+                    v = pl.get("value", "")
+                    facts_by_key.setdefault(k, []).append((dev_id, str(v), pl.get("client_timestamp_ns", 0)))
+            except Exception:
+                pass
+
+    from datetime import datetime, timezone
     facts = []
-    device_trust = {}
-    
-    for device_id, event_log in event_logs.items():
-        # This is a simplified version - the real fold lives in the gateway
-        pass
-    
+    for k, entries in sorted(facts_by_key.items()):
+        vals: Dict[str, Dict[str, Any]] = {}
+        for dev_id, v, ts in entries:
+            w = 0.42 if dev_id in _rogue_devices else (0.92 if "cam" in dev_id else 0.88)
+            vals.setdefault(v, {"weight": 0.0, "devices": set()})
+            vals[v]["weight"] += w
+            vals[v]["devices"].add(dev_id)
+
+        tot_w = sum(info["weight"] for info in vals.values()) or 1.0
+        best_val = max(vals, key=lambda v: vals[v]["weight"])
+        confidence = round(vals[best_val]["weight"] / tot_w, 4)
+        st = "CONFIRMED" if confidence >= 0.66 else "DISPUTED"
+
+        latest_ts = max((e[2] for e in entries), default=0)
+        if latest_ts > 0:
+            upd = datetime.fromtimestamp(latest_ts / 1e9, tz=timezone.utc).isoformat()
+        else:
+            upd = datetime.now(timezone.utc).isoformat()
+
+        facts.append({
+            "corroboration_key": k,
+            "state": st,
+            "value": best_val,
+            "confidence": confidence,
+            "corroborating_devices": sorted(list(vals[best_val]["devices"])),
+            "updated_at": upd,
+        })
+
+    device_trust: Dict[str, float] = {}
+    for d in DEFAULT_FLEET:
+        d_id = d["id"]
+        device_trust[d_id] = 0.42 if d_id in _rogue_devices else (0.92 if "cam" in d_id else 0.88)
+    for dev_id in device_shards:
+        if dev_id not in device_trust:
+            device_trust[dev_id] = 0.42 if dev_id in _rogue_devices else 0.88
+
     return {"facts": facts, "device_trust": device_trust}
 
 

@@ -47,18 +47,27 @@ from qdrant_edge import (
 SPARSE_FIELD = "text_bm25"
 
 
-def build_edge_config(dense_name: str, dim: int) -> EdgeConfig:
-    """The immutable-shard config a snapshot must match: one dense named vector
+def build_edge_config(dense_name: str, dim: int, extra_vectors: Optional[Dict[str, int]] = None) -> EdgeConfig:
+    """The immutable-shard config a snapshot must match: named vectors
     plus the BM25 sparse field. Must mirror the config `main.py` builds for the
     device, or `update_from_snapshot` would reject a shape mismatch.
     """
+    vectors = {dense_name: EdgeVectorParams(size=dim, distance=Distance.Cosine)}
+    if extra_vectors:
+        for name, size in extra_vectors.items():
+            vectors[name] = EdgeVectorParams(size=size, distance=Distance.Cosine)
+
     return EdgeConfig(
-        vectors={dense_name: EdgeVectorParams(size=dim, distance=Distance.Cosine)},
+        vectors=vectors,
         sparse_vectors={SPARSE_FIELD: EdgeSparseVectorParams(modifier=Modifier.Idf)},
     )
 
 
-def _point_from_envelope(env: Dict[str, Any], dense_name: str) -> Point:
+def _point_from_envelope(
+    env: Dict[str, Any],
+    dense_name: str,
+    all_vector_dims: Optional[Dict[str, int]] = None,
+) -> Point:
     """Reconstruct an Edge point from a hub envelope.
 
     A BM25 sparse vector cannot be re-derived from the payload without the
@@ -67,8 +76,16 @@ def _point_from_envelope(env: Dict[str, Any], dense_name: str) -> Point:
     than shipping a point that can never be found by the BM25 leg.
     """
     vector: Dict[str, Any] = {}
-    if env.get("vector") is not None:
+    if env.get("vectors") and isinstance(env["vectors"], dict):
+        vector.update(env["vectors"])
+    elif env.get("vector") is not None:
         vector[dense_name] = env["vector"]
+
+    if all_vector_dims:
+        for vname, vsize in all_vector_dims.items():
+            if vname not in vector:
+                vector[vname] = [0.0] * vsize
+
     sparse = env.get("sparse")
     if sparse is not None:
         vector[SPARSE_FIELD] = SparseVector(
@@ -86,6 +103,7 @@ def build_snapshot_tar(
     dense_name: str,
     dim: int,
     work_dir: Optional[str] = None,
+    extra_vectors: Optional[Dict[str, int]] = None,
 ) -> Optional[str]:
     """Pack the given hub facts into a real Edge snapshot tar and return its path.
 
@@ -96,13 +114,27 @@ def build_snapshot_tar(
     if not envelopes:
         return None
 
+    if extra_vectors is None:
+        try:
+            import edge_node.main as _main
+            if _main.adapters:
+                extra_vectors = {a.name: a.dim for a in _main.adapters}
+            elif _main.edge_config and hasattr(_main.edge_config, "vectors"):
+                extra_vectors = {k: v.size for k, v in _main.edge_config.vectors.items()}
+        except Exception:
+            pass
+
     work_dir = work_dir or tempfile.mkdtemp(prefix="edge_snapshot_")
     shard_dir = os.path.join(work_dir, "hub_shard")
     os.makedirs(shard_dir, exist_ok=True)
 
-    shard = EdgeShard.create(shard_dir, build_edge_config(dense_name, dim))
+    config = build_edge_config(dense_name, dim, extra_vectors)
+    shard = EdgeShard.create(shard_dir, config)
     try:
-        points = [_point_from_envelope(env, dense_name) for env in envelopes]
+        all_dims = {dense_name: dim}
+        if extra_vectors:
+            all_dims.update(extra_vectors)
+        points = [_point_from_envelope(env, dense_name, all_dims) for env in envelopes]
         shard.update(UpdateOperation.upsert_points(points=points))
         # Optimize bumps the segment version above the destination's empty
         # segment, so update_from_snapshot actually applies it (a version-0

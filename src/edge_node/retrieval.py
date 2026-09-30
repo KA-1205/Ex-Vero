@@ -11,7 +11,7 @@ Hybrid = dense + BM25 fused with server-side RRF per shard (verified on
 merged in Python and deduped by point id (backend.md §9).
 """
 
-from typing import List
+from typing import List, Optional
 
 from qdrant_edge import (
     Query,
@@ -41,24 +41,33 @@ def hybrid_query(
     dense_name: str,
     limit: int = 10,
     prefetch_limit: int = 25,
+    image_vector: Optional[List[float]] = None,
+    image_name: Optional[str] = None,
 ) -> List[RetrievedPoint]:
-    """Run the fused dense+BM25 query over both shards and return deduped hits,
+    """Run the fused dense+BM25+CLIP query over both shards and return deduped hits,
     highest score first.
-
-    A point pushed up and later pulled back lives in both shards; we keep the
-    higher-scoring copy so it never appears twice.
     """
-    dense_prefetch = Prefetch(
-        limit=prefetch_limit,
-        query=Query.Nearest(query=dense_vector, using=dense_name),
-    )
-    sparse_prefetch = Prefetch(
-        limit=prefetch_limit,
-        query=Query.Nearest(query=sparse_vector, using="text_bm25"),
-    )
+    prefetches = [
+        Prefetch(
+            limit=prefetch_limit,
+            query=Query.Nearest(query=dense_vector, using=dense_name),
+        ),
+        Prefetch(
+            limit=prefetch_limit,
+            query=Query.Nearest(query=sparse_vector, using="text_bm25"),
+        ),
+    ]
+    if image_vector is not None and image_name is not None:
+        prefetches.append(
+            Prefetch(
+                limit=prefetch_limit,
+                query=Query.Nearest(query=image_vector, using=image_name),
+            )
+        )
+
     edge_request = EdgeQueryRequest(
         limit=limit,
-        prefetches=[dense_prefetch, sparse_prefetch],
+        prefetches=prefetches,
         query=Fusion.Rrf(k=60),
         with_payload=True,
         with_vector=False,

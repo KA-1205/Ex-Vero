@@ -8,13 +8,11 @@ models:
       provider: fastembed
       model: BAAI/bge-small-en-v1.5
       version: bge-small-en-v1.5
-    # Cross-modal CLIP (text query -> photo) is available via the registry and
-    # covered by tests/test_registry.py; enable it here to index images:
-    # - name: image
-    #   modality: vision
-    #   provider: fastembed
-    #   model: Qdrant/clip-ViT-B-32
-    #   version: clip-ViT-B-32
+    - name: image
+      modality: vision
+      provider: fastembed
+      model: Qdrant/clip-ViT-B-32
+      version: clip-ViT-B-32
   sparse:
     - name: text_bm25
       provider: qdrant-edge   # BM25 is built into Qdrant Edge — no extra lib
