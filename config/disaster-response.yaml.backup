@@ -1,0 +1,91 @@
+# Model Adapter Registry (backend.md §3.2). Which models run is declared here
+# and resolved into adapter objects at startup; swapping a model is a one-line
+# edit. `dim` is derived from the model, never hardcoded (fakes excepted).
+models:
+  embedders:
+    - name: text
+      modality: text
+      provider: fastembed
+      model: BAAI/bge-small-en-v1.5
+      version: bge-small-en-v1.5
+    # Cross-modal CLIP (text query -> photo) is available via the registry and
+    # covered by tests/test_registry.py; enable it here to index images:
+    # - name: image
+    #   modality: vision
+    #   provider: fastembed
+    #   model: Qdrant/clip-ViT-B-32
+    #   version: clip-ViT-B-32
+  sparse:
+    - name: text_bm25
+      provider: qdrant-edge   # BM25 is built into Qdrant Edge — no extra lib
+      modifier: idf
+  generator:
+    # The Answer layer (src/edge_node/answer.py) resolves this into a generator
+    # chain via registry.build_generators. `prefer` selects the primary; the
+    # ExtractiveGenerator is always appended as the never-fails fallback, so a
+    # device with no reachable model still answers. Swapping the model is a
+    # one-line edit here — no kernel change. An `online:` (openai-compatible)
+    # block can be added and selected with `prefer: online`; it is omitted here
+    # rather than shipped as a placeholder.
+    prefer: offline
+    offline:
+      provider: ollama
+      model: qwen2.5:1.5b
+      version: qwen2.5-1.5b-instruct
+      endpoint: http://localhost:11434
+      fallback: extractive
+
+policy:
+  novelty_threshold_high: 0.98
+  novelty_threshold_low: 0.70
+  urgency_keywords:
+    - "structural collapse"
+    - "gas"
+    - "no pulse"
+    - "bleeding"
+    - "unconscious"
+  urgency_threshold: 0.8
+  pii_patterns:
+    - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN
+    - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # email
+  required_fields: ["status", "client_timestamp_ns", "reporter_device_id"]
+  bandwidth: "FULL"
+  trust_decay: 0.3
+
+conflict:
+  # Fused (RRF) score above which two same-zone reports with different keys
+  # are flagged as POSSIBLE_CONFLICT for human review. RRF scores are small
+  # (~1/(k+rank) per leg), so this threshold lives near 0.01, not 0.5.
+  similarity_threshold: 0.01
+
+consensus:
+  # The trust-weighted fold lives in the Cloud Gateway (cloud-gateway/), which
+  # reads these as CONSENSUS_THRESHOLD / CONSENSUS_DECAY. A multi-device fact is
+  # only CONFIRMED at/above this confidence; below it the fold surfaces every
+  # value as DISPUTED rather than silently picking one.
+  confidence_threshold: 0.66
+  # Recency decay applied by hub-seq distance when weighting reports (0 = off).
+  trust_decay: 0.0
+
+hub:
+  # The edge node talks to the Cloud Gateway (cloud-gateway/), which owns the
+  # Qdrant Server hub. This is the gateway URL, not Qdrant's 6333 port.
+  url: "http://localhost:8088"
+  api_key: ""
+
+network:
+  # The transport interceptor (src/edge_node/network.py) wraps ONLY the sync
+  # client — never the query/answer path. `degraded` effects are real: a genuine
+  # latency sleep, a token-bucket byte cap over actual payload bytes, and a real
+  # failure rate that leaves the point pending (mark-after-ack). Start `full`.
+  mode: "full"                    # offline | degraded | full
+  latency_min_ms: 400            # degraded round-trip latency window
+  latency_max_ms: 1200
+  byte_rate_bytes_per_sec: 8000  # ~64 kbps cap over real payload bytes
+  failure_rate: 0.08             # ~8% of degraded requests genuinely drop
+
+# Local memory cap (Phase 8). When the mutable shard exceeds this count,
+# the oldest synced points are evicted (pending points are never touched).
+# The UI shows used/cap so eviction is visibly working (backend.md §5).
+memory:
+  max_local_points: 500

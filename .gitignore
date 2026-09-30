@@ -36,3 +36,6 @@ shards/
 .ollama
 # qdrant local storage
 .qdrant/
+# Large seed datasets (download externally)
+config/seed/disaster_response.jsonl
+config/seed/gas_sensor_raw.txt
