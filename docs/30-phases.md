@@ -28,7 +28,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 1 | Decision Engine fix | DONE |
 | 2 | Model Adapter Registry | DONE |
 | 3 | Real Qdrant Server hub + outbox | DONE |
-| 4 | Partial-snapshot pull | WEAK |
+| 4 | Partial-snapshot pull | DONE |
 | 5 | Multi-device consensus | HALF |
 | 6 | Network layer | TODO |
 | 7 | Answer layer (on-device RAG) | TODO |
@@ -233,6 +233,23 @@ learning.
 
 **Guardrails:** never write the immutable shard locally except via snapshot restore. Query still
 reads both shards and dedupes by id.
+
+**Result:** `pull()` now learns from the fleet via a **real partial snapshot**, not a re-upserted
+list. It (1) flushes the outbox to the hub first so the snapshot isn't stale, (2) asks the hub for a
+snapshot keyed off the immutable shard's `snapshot_manifest()` and restores it with the verified
+`EdgeShard.update_from_snapshot(path)` — the only way the immutable shard is ever written — and (3)
+dedupes the mutable shard by `client_timestamp_ns <= sync_timestamp` via `delete_points_by_filter`,
+**guarded by `synced == 1`** so a pending point is never deleted (invariant 1). New
+`src/edge_node/snapshot.py` packs hub facts into a genuine Edge shard snapshot (write + `optimize()`
+so the segment version rises above the empty destination's, or the restore is silently skipped — a
+trap found here); the Cloud Gateway gained `POST /snapshot/{device}` that materializes that snapshot
+from its `facts` collection (Qdrant only, no second store), and `GatewayTransport.pull_snapshot`
+streams it. `client_timestamp_ns` is now Integer-indexed for the range dedupe. Tests
+(`tests/test_pull.py`): device B learns a fact it never captured and answers with it **from its
+immutable shard** (queried directly), pull flushes before snapshotting, the mutable dedupe drops the
+synced copy but never a pending one, and the union query dedupes by id when a fact is genuinely in
+both shards; plus an integration test against the real compose stack (skipped without `GATEWAY_URL`).
+Full suite green (47, +2 skipped integration). `docs/API.md` unchanged — `/pull` shape is identical.
 
 **Out of scope:** trust/consensus (phase 5).
 

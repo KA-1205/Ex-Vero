@@ -23,13 +23,18 @@ from qdrant_edge import (
     Bm25Config,
     Modifier,
     EdgeSparseVectorParams,
+    CountRequest,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    RangeFloat,
 )
 from datetime import datetime
 
 from .adapter import Adapter
 from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
-from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY
+from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY, SYNCED_KEY
 from .sync_transport import GatewayTransport
 from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
@@ -437,18 +442,28 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
 
 @app.post("/devices/{device_id}/push")
 async def push(device_id: str):
+    pushed_count, errors = _do_push(device_id)
+    return PushResponse(pushed_count=pushed_count, errors=errors)
+
+
+def _do_push(device_id: str):
+    """Drain the outbox to the hub. Returns (pushed_count, errors).
+
+    Shared by the push endpoint and the pull flush-first step. Marks synced ONLY
+    on ack (invariant 1): any failure leaves the point pending and on device.
+    """
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
 
     if sync_transport is None:
         # No transport wired: fail loudly rather than silently "succeeding".
-        return PushResponse(pushed_count=0, errors=["no sync transport configured"])
+        return 0, ["no sync transport configured"]
 
     # The outbox is a filtered VIEW over the mutable shard
     # (synced == 0 AND syncable == 1), URGENT before ROUTINE — not a second store.
     outbox = get_outbox(mutable_shard, limit=1000)
     if not outbox:
-        return PushResponse(pushed_count=0, errors=[])
+        return 0, []
 
     adapter_name = adapters[0].name
 
@@ -457,7 +472,7 @@ async def push(device_id: str):
     try:
         hub_seq = sync_transport.get_delta(device_id)
     except Exception as e:
-        return PushResponse(pushed_count=0, errors=[f"delta handshake failed: {e}"])
+        return 0, [f"delta handshake failed: {e}"]
 
     envelopes = []
     ids_in_order = []
@@ -469,7 +484,7 @@ async def push(device_id: str):
         ids_in_order.append(pid)
 
     if not envelopes:
-        return PushResponse(pushed_count=0, errors=[])
+        return 0, []
 
     # Push to the gateway. Mark synced ONLY on ack (invariant 1): on any failure
     # we leave synced == 0, so the point stays pending and on the device — a
@@ -477,7 +492,7 @@ async def push(device_id: str):
     try:
         ack = sync_transport.push(device_id, envelopes)
     except Exception as e:
-        return PushResponse(pushed_count=0, errors=[f"push failed: {e}"])
+        return 0, [f"push failed: {e}"]
 
     acked = set(ack.get("acked_ids", ids_in_order))
     mark_ids = [pid for pid in ids_in_order if pid in acked]
@@ -490,7 +505,7 @@ async def push(device_id: str):
     for pid in mark_ids:
         event_log.append(pid, OBSERVED, device_ts=now)
 
-    return PushResponse(pushed_count=len(mark_ids), errors=[])
+    return len(mark_ids), []
 
 
 class PullResponse(BaseModel):
@@ -500,46 +515,82 @@ class PullResponse(BaseModel):
 
 @app.post("/devices/{device_id}/pull")
 async def pull(device_id: str):
-    """Pull hub facts into the immutable shard.
+    """Learn from the fleet via a real partial snapshot (Phase 4).
 
-    Phase 3 fetches the device's facts from the gateway and upserts them; Phase 4
-    replaces this with real partial snapshots (snapshot_manifest → partial/create
-    → update_from_snapshot). The immutable shard is written only from the hub,
-    never locally.
+    Mirrors Qdrant's sync guide (backend.md §6.3):
+      1. flush the outbox to the hub first, so the snapshot we pull back isn't
+         stale (our own latest reports are included);
+      2. pull a partial snapshot keyed off the immutable shard's manifest and
+         restore it with `update_from_snapshot` — the ONLY way we ever write the
+         immutable shard (Phase 4 guardrail);
+      3. dedupe the mutable shard: a point that is synced (on the hub) and was
+         captured at/before this sync now lives in the immutable shard, so drop
+         its mutable copy. Pending points (`synced == 0`) are never touched —
+         deleting one would be silent data loss (invariant 1).
+
+    Query still reads both shards and dedupes by id, so a point briefly present
+    in both never shows up twice.
     """
     shards = get_or_create_shards(device_id)
+    mutable_shard = shards['mutable']
     immutable_shard = shards['immutable']
 
     if sync_transport is None:
         return PullResponse(pulled_count=0, errors=["no sync transport configured"])
 
+    # 1. Flush first so the hub snapshot reflects our own pending facts. A flush
+    # failure is reported but does not abort the pull (we can still learn from
+    # the fleet); the pending points simply stay pending.
+    _, flush_errors = _do_push(device_id)
+
+    # The sync boundary: points synced at/before now are safely on the hub and
+    # will come back in the snapshot, so they are the ones we may dedupe.
+    sync_timestamp = int(time.time() * 1_000_000_000)
+
+    # 2. Pull + restore a real partial snapshot into the immutable shard.
+    manifest = immutable_shard.snapshot_manifest()
     try:
-        envelopes = sync_transport.pull(device_id)
+        snapshot_path = sync_transport.pull_snapshot(device_id, manifest)
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=[f"pull failed: {e}"])
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"pull failed: {e}"])
 
-    if not envelopes:
-        return PullResponse(pulled_count=0, errors=[])
+    if snapshot_path is None:
+        return PullResponse(pulled_count=0, errors=flush_errors)
 
-    from qdrant_edge import SparseVector
-
-    points = []
-    for env in envelopes:
-        vector = {}
-        if env.get("vector") is not None:
-            vector[adapters[0].name] = env["vector"]
-        if env.get("sparse") is not None:
-            vector["text_bm25"] = SparseVector(
-                indices=env["sparse"]["indices"], values=env["sparse"]["values"]
-            )
-        points.append(Point(id=env["id"], vector=vector, payload=env["payload"]))
-
+    before = immutable_shard.count(CountRequest())
     try:
-        immutable_shard.update(UpdateOperation.upsert_points(points=points))
+        immutable_shard.update_from_snapshot(snapshot_path)
         immutable_shard.optimize()
-        return PullResponse(pulled_count=len(points), errors=[])
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=[str(e)])
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"snapshot restore failed: {e}"])
+    finally:
+        # The snapshot file is a throwaway staging artifact.
+        try:
+            os.remove(snapshot_path)
+        except OSError:
+            pass
+    after = immutable_shard.count(CountRequest())
+    pulled_count = _count_value(after) - _count_value(before)
+
+    # 3. Dedupe the mutable shard by timestamp — only synced points, so a pending
+    # fact is never deleted.
+    dedupe_filter = Filter(
+        must=[
+            FieldCondition(key=SYNCED_KEY, match=MatchValue(value=1)),
+            FieldCondition(
+                key="client_timestamp_ns", range=RangeFloat(lte=float(sync_timestamp))
+            ),
+        ]
+    )
+    mutable_shard.update(UpdateOperation.delete_points_by_filter(filter=dedupe_filter))
+    mutable_shard.optimize()
+
+    return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors)
+
+
+def _count_value(count_result) -> int:
+    """`count()` returns a CountResult with `.count`; be tolerant of a bare int."""
+    return getattr(count_result, "count", count_result)
 
 
 class RetractResponse(BaseModel):

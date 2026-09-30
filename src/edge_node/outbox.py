@@ -50,8 +50,17 @@ def add_sync_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def ensure_indexes(shard: EdgeShard) -> None:
-    """Create the Integer indexes the outbox filter/order rely on (idempotent)."""
-    for field in ("_sync_meta.synced", "_sync_meta.syncable", "_sync_meta.client_sequence"):
+    """Create the Integer indexes the outbox filter/order rely on (idempotent).
+
+    `client_timestamp_ns` is indexed too: the Phase-4 pull dedupes the mutable
+    shard with a range filter on it, which needs a range (Integer) index.
+    """
+    for field in (
+        "_sync_meta.synced",
+        "_sync_meta.syncable",
+        "_sync_meta.client_sequence",
+        "client_timestamp_ns",
+    ):
         try:
             shard.update(
                 UpdateOperation.create_field_index(

@@ -15,18 +15,25 @@ Endpoints the edge's `GatewayTransport` calls:
   GET  /delta/{device_id}     — {"max_client_sequence": int}  (-1 if none held)
   POST /ingest                — {device_id, envelopes[]} -> {acked_ids, count}
   GET  /facts/{device_id}     — {"envelopes": [...]}  (Phase 3 pull source)
+  POST /snapshot/{device_id}  — a real Edge partial snapshot tar (Phase 4 pull)
 
-Phase 3 scope: the gateway just stores points + events. The consensus fold
-(Phase 5) and partial snapshots (Phase 4) build on top of this, unchanged here.
+Phase 3 scope: the gateway just stores points + events. Phase 4 adds the
+partial-snapshot endpoint (learn from the fleet); the consensus fold (Phase 5)
+builds on the event log, unchanged here.
 """
 
 import hashlib
 import os
+import shutil
+import tarfile
+import tempfile
 import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
@@ -257,3 +264,103 @@ def facts(device_id: str) -> Dict[str, Any]:
         if offset is None:
             break
     return {"envelopes": envelopes}
+
+
+class SnapshotRequest(BaseModel):
+    # The device's immutable-shard manifest (from snapshot_manifest()). Sent for
+    # the real partial-snapshot handshake; the current hub ships the full fact
+    # set (restore is idempotent by point id) rather than diffing segments.
+    manifest: Dict[str, Any] = {}
+
+
+def _all_fact_envelopes() -> List[Dict[str, Any]]:
+    """Scroll the whole `facts` collection into pull envelopes (fleet-wide, so a
+    device learns facts other devices reported)."""
+    envelopes: List[Dict[str, Any]] = []
+    if not client.collection_exists(FACTS_COLLECTION):
+        return envelopes
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            FACTS_COLLECTION, limit=1000, offset=offset,
+            with_payload=True, with_vectors=True,
+        )
+        for p in points:
+            vecs = p.vector or {}
+            dense = vecs.get(DENSE_VECTOR) if isinstance(vecs, dict) else None
+            sparse = None
+            if isinstance(vecs, dict) and SPARSE_VECTOR in vecs:
+                sv = vecs[SPARSE_VECTOR]
+                sparse = {"indices": list(sv.indices), "values": list(sv.values)}
+            envelopes.append({"id": p.id, "vector": dense, "sparse": sparse, "payload": p.payload})
+        if offset is None:
+            break
+    return envelopes
+
+
+def _build_edge_snapshot(envelopes: List[Dict[str, Any]], work_dir: str) -> Optional[str]:
+    """Pack the hub's facts into a real Qdrant Edge snapshot tar.
+
+    The device restores this with `update_from_snapshot` — the only sanctioned
+    way to populate its immutable shard. The dense vector is named after the
+    edge adapter (stamped as `payload.model` on every point) so the shapes match
+    on restore; the segment is optimized so its version rises above the empty
+    destination's and the restore actually takes.
+    """
+    import qdrant_edge as qe
+
+    if not envelopes:
+        return None
+    sample = envelopes[0]
+    dense_name = (sample.get("payload") or {}).get("model", "text_dense")
+    dim = len(sample["vector"])
+
+    shard_dir = os.path.join(work_dir, "hub_shard")
+    os.makedirs(shard_dir, exist_ok=True)
+    cfg = qe.EdgeConfig(
+        vectors={dense_name: qe.EdgeVectorParams(size=dim, distance=qe.Distance.Cosine)},
+        sparse_vectors={SPARSE_VECTOR: qe.EdgeSparseVectorParams(modifier=qe.Modifier.Idf)},
+    )
+    shard = qe.EdgeShard.create(shard_dir, cfg)
+    try:
+        points = []
+        for env in envelopes:
+            vector: Dict[str, Any] = {dense_name: env["vector"]}
+            if env.get("sparse") is not None:
+                vector[SPARSE_VECTOR] = qe.SparseVector(
+                    indices=env["sparse"]["indices"], values=env["sparse"]["values"]
+                )
+            points.append(qe.Point(id=env["id"], vector=vector, payload=env.get("payload")))
+        shard.update(qe.UpdateOperation.upsert_points(points=points))
+        shard.optimize()
+        shard.flush()
+    finally:
+        shard.close()
+
+    tar_path = os.path.join(work_dir, "snapshot.tar")
+    with tarfile.open(tar_path, "w") as tar:
+        for name in os.listdir(shard_dir):
+            tar.add(os.path.join(shard_dir, name), arcname=name)
+    return tar_path
+
+
+@app.post("/snapshot/{device_id}")
+def snapshot(device_id: str, req: SnapshotRequest) -> Response:
+    """Materialize a real Edge partial snapshot of the fleet's facts (Phase 4).
+
+    Returns the snapshot tar as a file download, or 204 when the hub holds
+    nothing. The device applies it with `update_from_snapshot`.
+    """
+    envelopes = _all_fact_envelopes()
+    work_dir = tempfile.mkdtemp(prefix="hub_snapshot_")
+    tar_path = _build_edge_snapshot(envelopes, work_dir)
+    if tar_path is None:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return Response(status_code=204)
+    # Clean up the staging dir once the response has been streamed.
+    return FileResponse(
+        tar_path,
+        media_type="application/x-tar",
+        filename="snapshot.tar",
+        background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
+    )

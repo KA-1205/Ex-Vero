@@ -4,3 +4,6 @@ fastapi==0.115.6
 uvicorn==0.34.0
 qdrant-client==1.12.1
 pydantic==2.10.4
+# Phase 4: the gateway materializes a real Qdrant Edge partial snapshot for the
+# pull direction, so it needs the Edge engine too (pinned, never floated).
+qdrant-edge-py==0.8.0

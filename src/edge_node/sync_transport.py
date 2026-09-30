@@ -12,7 +12,9 @@ event to the `fact_events` collection; the delta handshake returns the highest
 never a full snapshot.
 """
 
-from typing import Any, Dict, List, Protocol, runtime_checkable
+import os
+import tempfile
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 import httpx
 
@@ -31,6 +33,19 @@ class SyncTransport(Protocol):
 
     def pull(self, device_id: str) -> List[Dict[str, Any]]:
         """Return the envelopes the hub holds for this device."""
+        ...
+
+    def pull_snapshot(
+        self, device_id: str, manifest: Dict[str, Any]
+    ) -> Optional[str]:
+        """Fetch a partial snapshot of the fleet's facts as a filesystem path.
+
+        The device sends its immutable-shard ``manifest`` (from
+        ``snapshot_manifest()``) so the hub can ship only what the device does
+        not already have; the return is a path to an Edge snapshot tar the
+        device applies with ``update_from_snapshot``, or ``None`` when the hub
+        holds nothing new. This is the Phase-4 learning path (A → hub → B).
+        """
         ...
 
 
@@ -59,3 +74,23 @@ class GatewayTransport:
         r = httpx.get(f"{self.base_url}/facts/{device_id}", timeout=self.timeout)
         r.raise_for_status()
         return r.json()["envelopes"]
+
+    def pull_snapshot(
+        self, device_id: str, manifest: Dict[str, Any]
+    ) -> Optional[str]:
+        """POST the device's manifest to the hub and stream the returned Edge
+        snapshot tar to a temp file, whose path we hand back for
+        ``update_from_snapshot``. A 204 means the hub has nothing new -> None.
+        """
+        r = httpx.post(
+            f"{self.base_url}/snapshot/{device_id}",
+            json={"manifest": manifest},
+            timeout=self.timeout,
+        )
+        if r.status_code == 204:
+            return None
+        r.raise_for_status()
+        fd, path = tempfile.mkstemp(prefix="edge_snapshot_", suffix=".tar")
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(r.content)
+        return path
