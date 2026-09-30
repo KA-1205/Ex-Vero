@@ -25,6 +25,8 @@ export function CapturePanel({ deviceId }: { deviceId: string }) {
       modality: imagePreview ? 'vision' : 'text',
       text: text || undefined,
       image_data_url: imagePreview ?? undefined,
+      corroboration_key: 'server_room_A.fire_status',
+      zone: 'server_room_A',
     })
     setText('')
     setImagePreview(null)

@@ -123,6 +123,9 @@ export function mockSyncStatus(deviceId: string): SyncStatus {
     last_push_bytes: Math.floor(1200 + r() * 18000),
     last_push_duration_ms: Math.floor(80 + r() * 900),
     last_push_mode: 'degraded',
+    last_push_attempted: Math.floor(1 + r() * 8),
+    last_push_accepted: Math.floor(1 + r() * 6),
+    last_push_failed: Math.floor(r() * 2),
     last_pull_at: new Date(Date.now() - r() * 1000 * 60 * 12).toISOString(),
     last_pull_points: Math.floor(r() * 40),
   }

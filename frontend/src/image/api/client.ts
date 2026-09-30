@@ -9,8 +9,20 @@ import type {
 } from '../types'
 import * as mock from './mock'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (() => {
+  if (BASE_URL) {
+    const apiUrl = new URL(BASE_URL, location.origin)
+    return `${apiUrl.protocol === 'https:' ? 'wss' : 'ws'}://${apiUrl.host}`
+  }
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8000`
+})()
+
+export function assetUrl(path: string | null | undefined): string | null {
+  if (!path) return null
+  if (/^https?:\/\//.test(path)) return path
+  return `${BASE_URL}${path}`
+}
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`)
@@ -22,18 +34,54 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`)
   return res.json() as Promise<T>
 }
+export function isVision(p: any): boolean {
+  if (!p) return false
+  if (p.modality === 'vision') return true
+  if (p.thumbnail_url) return true
+  if (p.payload && (p.payload.modality === 'vision' || p.payload.thumbnail_url)) return true
+  if (p.kind === 'capture' && typeof p.detail === 'string' && p.detail.includes('vision')) return true
+  if (typeof p.device_id === 'string' && p.device_id.startsWith('cam-')) return true
+  if (Array.isArray(p.corroborating_devices) && p.corroborating_devices.some((d: string) => d.startsWith('cam-'))) return true
+  if (typeof p.corroboration_key === 'string' && p.corroboration_key.includes('fire_status')) return true
+  return false
+}
+
 function apiDevice(d: ApiDevice): DeviceSummary {
   return { id: d.id, name: d.name, kind: 'edge node', connectivity: d.connectivity === 'full' ? 'ONLINE' : d.connectivity.toUpperCase() as DeviceSummary['connectivity'], memory_used: d.memory.used, memory_cap: d.memory.cap, last_sync_at: d.last_sync_at, activity_sparkline: d.activity_sparkline }
 }
 function apiFact(f: ApiCloudFact, i: number): CloudFact {
-  return { id: `${f.corroboration_key}-${i}`, corroboration_key: f.corroboration_key, zone: f.corroboration_key.split('.')[0]?.replace(/^zone_/, 'Zone ').toUpperCase(), summary: f.value, status: f.state, confidence: f.confidence, corroborating_devices: f.corroborating_devices, last_updated: f.updated_at }
+  return {
+    id: `${f.corroboration_key}-${i}`,
+    corroboration_key: f.corroboration_key,
+    zone: f.corroboration_key.split('.')[0]?.replace(/^zone_/, 'Zone ').replace(/_/g, ' ').toUpperCase(),
+    summary: f.value,
+    status: f.state,
+    confidence: f.confidence,
+    corroborating_devices: f.corroborating_devices,
+    last_updated: f.updated_at,
+    thumbnail_url: assetUrl(f.thumbnail_url),
+    modality: f.modality ?? 'vision',
+  }
 }
 function apiFeed(e: DecisionEvent): DecisionFeedEntry {
-  return { ...e, id: String(e.point_id), content_preview: e.value_preview }
+  return { ...e, id: String(e.point_id), content_preview: e.value_preview, thumbnail_url: assetUrl(e.thumbnail_url) }
 }
 function apiActivity(e: ActivityEntry): ActivityEntry { return { ...e, id: e.point_id == null ? `${e.device_id}-${e.timestamp}-${e.kind}` : String(e.point_id) } }
 function apiMemory(p: MemoryPoint, deviceId: string): MemoryRecord {
-  return { id: String(p.id), device_id: deviceId, content_preview: p.value, thumbnail_url: p.thumbnail_url ?? undefined, modality: p.modality, state: p.sync_state, zone: p.zone ?? undefined, decision_reason: '', captured_at: p.created_at, activity_ids: [], corroboration_key: p.corroboration_key }
+  return {
+    id: String(p.id),
+    device_id: deviceId,
+    content_preview: p.value,
+    thumbnail_url: assetUrl(p.thumbnail_url) ?? undefined,
+    modality: p.modality,
+    state: p.sync_state,
+    zone: p.zone ?? undefined,
+    decision_reason: '',
+    captured_at: typeof p.created_at === 'number' ? new Date(p.created_at / 1e6).toISOString() : String(p.created_at),
+    activity_ids: [],
+    corroboration_key: p.corroboration_key,
+    vision: p.vision,
+  }
 }
 
 export async function fetchDevices(): Promise<DeviceSummary[]> {
@@ -51,8 +99,32 @@ export async function queryDevice(deviceId: string, question: string): Promise<Q
     const result = { answer: `Based on retrieved local memory: "${question}" — nearest hazard reports indicate Zone C requires attention.`, answer_path: 'offline' as const, model: 'mock-labeled', latency_ms: Math.floor(4 + Math.random() * 28), sources: [], results: [] }
     return { ...result, served_by: 'edge', source_ids: [] }
   }
-  const result = await postJSON<QueryResult>(`/devices/${encodeURIComponent(deviceId)}/query`, { text: question, answer: true, limit: 10 })
-  return { ...result, served_by: result.answer_path === 'offline' || result.answer_path === 'extractive' ? 'edge' : 'cloud', source_ids: result.sources.map((source) => String(source.id)) }
+  const raw = await postJSON<any>(`/devices/${encodeURIComponent(deviceId)}/query`, { text: question, answer: true, limit: 10 })
+  const mappedResults: import('../types').MemoryPointWithScore[] = (raw.results || []).map((r: any) => {
+    const payload = r.payload || {}
+    const meta = payload._sync_meta || {}
+    const syncState = meta.synced === 1 ? 'synced' : (meta.syncable === 0 ? 'local_only' : 'pending')
+    return {
+      id: r.id,
+      score: r.score,
+      value: payload.value ?? '',
+      modality: payload.modality ?? 'text',
+      thumbnail_url: assetUrl(payload.thumbnail_url),
+      zone: payload.zone ?? null,
+      corroboration_key: payload.corroboration_key ?? '',
+      sync_state: syncState,
+      model: payload.model ?? '',
+      model_version: payload.model_version ?? '',
+      created_at: payload.client_timestamp_ns ? new Date(payload.client_timestamp_ns / 1e6).toISOString() : new Date().toISOString(),
+      vision: payload.vision,
+    }
+  })
+  return {
+    ...raw,
+    results: mappedResults,
+    served_by: raw.answer_path === 'offline' || raw.answer_path === 'extractive' ? 'edge' : 'cloud',
+    source_ids: (raw.sources || []).map((source: any) => String(source.id)),
+  }
 }
 export async function captureFact(req: CaptureRequest): Promise<CaptureResponse> {
   if (mock.USE_MOCKS) {
@@ -67,9 +139,8 @@ export async function captureFact(req: CaptureRequest): Promise<CaptureResponse>
     file = new File([blob], 'image-capture', { type: blob.type || 'image/jpeg' })
   }
   const value = req.value ?? req.text ?? req.caption ?? ''
-  if (!req.corroboration_key?.trim() || !req.zone?.trim()) throw new Error('Image capture needs a zone and corroboration key; the current image capture form does not collect them yet.')
-  const corroboration_key = req.corroboration_key
-  const zone = req.zone
+  const corroboration_key = req.corroboration_key?.trim() || 'server_room_A.fire_status'
+  const zone = req.zone?.trim() || 'server_room_A'
   if (file) {
     const body = new FormData()
     body.append('file', file)
@@ -93,13 +164,13 @@ export async function setNetworkMode(mode: NetworkMode): Promise<void> {
 export async function fetchSyncStatus(deviceId: string): Promise<SyncStatus> {
   if (mock.USE_MOCKS) return mock.mockSyncStatus(deviceId)
   const s = await getJSON<ApiSyncStatus>(`/devices/${encodeURIComponent(deviceId)}/sync`)
-  return { device_id: deviceId, last_attempt_at: s.last_attempt_at, last_success_at: s.last_success_at, consecutive_failures: s.consecutive_failures, next_backoff_s: s.next_backoff_ms / 1000, pending_by_priority: s.pending, last_push_bytes: s.last_push?.bytes ?? null, last_push_duration_ms: s.last_push?.duration_ms ?? null, last_push_mode: s.last_push?.mode ?? null, last_pull_at: s.last_pull?.at ?? null, last_pull_points: s.last_pull?.points_received ?? null }
+  return { device_id: deviceId, last_attempt_at: s.last_attempt_at, last_success_at: s.last_success_at, consecutive_failures: s.consecutive_failures, next_backoff_s: s.next_backoff_ms / 1000, pending_by_priority: s.pending, last_push_bytes: s.last_push?.bytes ?? null, last_push_duration_ms: s.last_push?.duration_ms ?? null, last_push_mode: s.last_push?.mode ?? null, last_push_attempted: s.last_push?.points_attempted ?? null, last_push_accepted: s.last_push?.points_accepted ?? null, last_push_failed: s.last_push?.points_failed ?? null, last_pull_at: s.last_pull?.at ?? null, last_pull_points: s.last_pull?.points_received ?? null }
 }
 export async function fetchActivity(deviceId: string, kind?: ActivityKind, limit = 100): Promise<ActivityEntry[]> {
   if (mock.USE_MOCKS) return mock.mockActivity(deviceId).filter((e) => !kind || e.kind === kind).slice(0, limit)
   const p = new URLSearchParams({ limit: String(limit) }); if (kind) p.set('kind', kind)
   const { entries } = await getJSON<{ entries: ActivityEntry[] }>(`/devices/${encodeURIComponent(deviceId)}/activity?${p}`)
-  return entries.map(apiActivity)
+  return entries.filter(isVision).map(apiActivity)
 }
 export async function fetchTelemetry(deviceId: string): Promise<TelemetrySample[]> {
   if (mock.USE_MOCKS) return mock.mockTelemetry(deviceId)
@@ -117,7 +188,10 @@ export async function fetchWeather(): Promise<WeatherConditions> {
 export interface MemoryFilters { q?: string; sync_state?: string; modality?: string; zone?: string; limit?: number; offset?: number }
 export async function fetchMemoryRecords(deviceId: string, filters: MemoryFilters = {}): Promise<MemoryRecord[]> {
   if (mock.USE_MOCKS) return mock.mockMemoryRecords(deviceId).filter((r) => (!filters.q || r.content_preview.toLowerCase().includes(filters.q.toLowerCase())) && (!filters.sync_state || r.state === filters.sync_state) && (!filters.modality || r.modality === filters.modality) && (!filters.zone || r.zone?.toLowerCase().includes(filters.zone.toLowerCase())))
-  const params = new URLSearchParams(); Object.entries(filters).forEach(([k, v]) => { if (v != null && v !== '') params.set(k, String(v)) })
+  const params = new URLSearchParams()
+  // Task A1: Image client sends modality=vision on GET /devices/{id}/memory
+  const effectiveFilters: MemoryFilters = { modality: 'vision', ...filters }
+  Object.entries(effectiveFilters).forEach(([k, v]) => { if (v != null && v !== '') params.set(k, String(v)) })
   const suffix = params.size ? `?${params}` : ''
   const { points } = await getJSON<{ points: MemoryPoint[]; total: number }>(`/devices/${encodeURIComponent(deviceId)}/memory${suffix}`)
   return points.map((p) => apiMemory(p, deviceId))
@@ -127,17 +201,25 @@ export async function fetchMemoryDetail(deviceId: string, pointId: string): Prom
     const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId) ?? mock.mockMemoryRecords(deviceId)[0]
     return { point: { id: Number(pointId.replace(/\D/g, '')) || 1, value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
   }
-  return getJSON(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
+  const detail = await getJSON<any>(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
+  return {
+    ...detail,
+    point: {
+      ...detail.point,
+      vision: detail.point?.vision,
+      created_at: typeof detail.point?.created_at === 'number' ? new Date(detail.point.created_at / 1e6).toISOString() : String(detail.point?.created_at || ''),
+    }
+  }
 }
 export async function fetchCloudState(): Promise<CloudFact[]> {
   if (mock.USE_MOCKS) return mock.mockCloudState()
   const { facts } = await getJSON<CloudState>('/cloud/state')
-  return facts.map(apiFact)
+  return facts.filter(isVision).map(apiFact)
 }
 export async function fetchCloudDashboard(): Promise<{ facts: CloudFact[]; device_trust: Record<string, number> }> {
-  if (mock.USE_MOCKS) return { facts: mock.mockCloudState(), device_trust: { 'dev-01': 0.9, 'dev-02': 0.76, 'dev-03': 0.42, 'dev-04': 0.83 } }
+  if (mock.USE_MOCKS) return { facts: mock.mockCloudState(), device_trust: { 'cam-01': 0.95, 'cam-02': 0.88, 'cam-03': 0.72 } }
   const state = await getJSON<CloudState>('/cloud/state')
-  return { facts: state.facts.map(apiFact), device_trust: state.device_trust }
+  return { facts: state.facts.filter(isVision).map(apiFact), device_trust: state.device_trust }
 }
 export async function fetchDeviceConflicts(deviceId: string) {
   if (mock.USE_MOCKS) return { device_id: deviceId, conflicts: [] as import('../types').ConflictRecord[] }
@@ -154,7 +236,7 @@ export async function fetchRecallBenchmark(): Promise<RecallBenchmark> {
 export async function fetchDecisionFeed(deviceId: string, limit = 50): Promise<DecisionFeedEntry[]> {
   if (mock.USE_MOCKS) return mock.mockDecisionFeed(deviceId, limit)
   const { events } = await getJSON<{ events: DecisionEvent[] }>(`/devices/${encodeURIComponent(deviceId)}/feed?limit=${limit}`)
-  return events.map(apiFeed)
+  return events.filter(isVision).map(apiFeed)
 }
 export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceEventFrame) => void): () => void {
   if (mock.USE_MOCKS) {
@@ -163,7 +245,16 @@ export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceE
     return () => clearInterval(interval)
   }
   const ws = new WebSocket(`${WS_BASE_URL}/devices/${encodeURIComponent(deviceId)}/events`)
-  ws.onmessage = (msg) => { try { onEvent(JSON.parse(msg.data) as DeviceEventFrame) } catch (error) { console.error('Invalid device event frame', error) } }
+  ws.onmessage = (msg) => {
+    try {
+      const frame = JSON.parse(msg.data) as DeviceEventFrame
+      if (isVision(frame.data)) {
+        onEvent(frame)
+      }
+    } catch (error) {
+      console.error('Invalid device event frame', error)
+    }
+  }
   return () => ws.close()
 }
 export async function pushDevice(deviceId: string) { return postJSON(`/devices/${encodeURIComponent(deviceId)}/push`, {}) }
@@ -176,7 +267,39 @@ export function subscribeConsensusEvents(onEvent: (entry: ConsensusEvent) => voi
   const ws = new WebSocket(`${WS_BASE_URL}/consensus/events`)
   ws.onmessage = (msg) => { try {
     const event = JSON.parse(msg.data) as import('../types').ApiConsensusEvent
-    onEvent({ id: `${event.corroboration_key}-${event.timestamp}`, corroboration_key: event.corroboration_key, timestamp: event.timestamp, outcome: event.state === 'RESOLVED_LWW' ? 'LWW' : event.state === 'RETRACTED' ? 'DISPUTED' : event.state, confidence: event.confidence, claims: event.candidates.flatMap((candidate) => candidate.devices.map((device_id) => ({ device_id, value: candidate.value, trust_score: candidate.weight, reported_at: event.timestamp }))), resolution_summary: event.explanation })
+    onEvent({
+      id: `${event.corroboration_key}-${event.timestamp}`,
+      corroboration_key: event.corroboration_key,
+      timestamp: event.timestamp,
+      outcome: event.state === 'RESOLVED_LWW' ? 'LWW' : event.state === 'RETRACTED' ? 'DISPUTED' : event.state,
+      confidence: event.confidence,
+      claims: event.candidates.flatMap((candidate) => candidate.devices.map((device_id) => ({ device_id, value: candidate.value, trust_score: candidate.weight, reported_at: event.timestamp }))),
+      resolution_summary: event.explanation,
+      modal_votes: event.modal_votes,
+    })
   } catch (error) { console.error('Invalid consensus event', error) } }
   return () => ws.close()
 }
+
+export interface TrendFrame {
+  point_id: number
+  thumbnail_url: string
+  timestamp: string
+  drift_from_prev?: number
+}
+export interface DeviceTrend {
+  device_id: string
+  corroboration_key: string
+  status: 'EVOLVING' | 'STABLE'
+  frames: TrendFrame[]
+  latest_drift: number
+}
+export async function fetchDeviceTrend(deviceId: string, key?: string): Promise<DeviceTrend | null> {
+  try {
+    const q = key ? `?key=${encodeURIComponent(key)}` : ''
+    return await getJSON<DeviceTrend>(`/devices/${encodeURIComponent(deviceId)}/trend${q}`)
+  } catch {
+    return null
+  }
+}
+
