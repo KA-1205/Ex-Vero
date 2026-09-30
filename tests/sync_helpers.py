@@ -59,6 +59,21 @@ class StubTransport:
             acked.append(env["id"])
         return {"acked_ids": acked, "count": len(acked)}
 
+    def retract(
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        self.events.append({
+            "device_id": device_id,
+            "point_id": point_id,
+            "event_type": "RETRACTED",
+            "corroboration_key": corroboration_key,
+            "client_sequence": self.max_seq.get(device_id, 0),
+        })
+        return {"retracted": True, "point_id": point_id}
+
+    def get_cloud_state(self) -> Dict[str, Any]:
+        return {"facts": [], "device_trust": {}}
+
     def pull(self, device_id: str) -> List[Dict[str, Any]]:
         return list(self.store.get(device_id, {}).values())
 

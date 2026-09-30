@@ -16,7 +16,7 @@ import type {
   TelemetrySample,
 } from '../types'
 
-export const USE_MOCKS = true
+export const USE_MOCKS = false
 
 const DEVICE_NAMES = [
   { id: 'dev-01', name: 'Paramedic Tablet 01', kind: 'paramedic tablet', latitude: 28.6329, longitude: 77.2195 },

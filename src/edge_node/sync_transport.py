@@ -38,14 +38,17 @@ class SyncTransport(Protocol):
     def pull_snapshot(
         self, device_id: str, manifest: Dict[str, Any]
     ) -> Optional[str]:
-        """Fetch a partial snapshot of the fleet's facts as a filesystem path.
+        """Fetch a partial snapshot of the fleet's facts as a filesystem path."""
+        ...
 
-        The device sends its immutable-shard ``manifest`` (from
-        ``snapshot_manifest()``) so the hub can ship only what the device does
-        not already have; the return is a path to an Edge snapshot tar the
-        device applies with ``update_from_snapshot``, or ``None`` when the hub
-        holds nothing new. This is the Phase-4 learning path (A → hub → B).
-        """
+    def retract(
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Notify the hub of a retracted point."""
+        ...
+
+    def get_cloud_state(self) -> Dict[str, Any]:
+        """Fetch merged fleet state from the hub."""
         ...
 
 
@@ -68,6 +71,26 @@ class GatewayTransport:
             timeout=self.timeout,
         )
         r.raise_for_status()  # a 5xx / connection error propagates -> caller keeps pending
+        return r.json()
+
+    def retract(
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        r = httpx.post(
+            f"{self.base_url}/retract",
+            json={
+                "device_id": device_id,
+                "point_id": point_id,
+                "corroboration_key": corroboration_key,
+            },
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def get_cloud_state(self) -> Dict[str, Any]:
+        r = httpx.get(f"{self.base_url}/cloud/state", timeout=self.timeout)
+        r.raise_for_status()
         return r.json()
 
     def pull(self, device_id: str) -> List[Dict[str, Any]]:
