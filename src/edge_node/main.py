@@ -2,7 +2,8 @@ import os
 import hashlib
 import time
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yaml
 from pathlib import Path
@@ -27,7 +28,7 @@ from qdrant_edge import (
     MatchValue,
     RangeFloat,
 )
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .adapter import Adapter
 from .registry import load_adapters, build_generators
@@ -60,6 +61,7 @@ TRUST_DECAY: float = 0.0
 CONFLICT_THRESHOLD: float = 0.5
 MAX_LOCAL_POINTS: int = 500
 SHARD_BASE_PATH = "./shards"
+MODEL_LOAD_MS: Optional[float] = None
 
 # Activity ring buffer (operational telemetry, not facts) — Phase 8
 # In-memory, bounded, newest first. No SQL.
@@ -68,9 +70,19 @@ _activity_buffer: deque = deque(maxlen=500)
 _activity_lock = __import__('threading').Lock()
 
 
+def _iso_timestamp_ns(value: Optional[int]) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value) / 1_000_000_000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS
+    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS, MODEL_LOAD_MS
+    startup_started = time.perf_counter()
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -138,10 +150,20 @@ async def lifespan(app: FastAPI):
     print(f"Trust decay: {TRUST_DECAY}")
     print(f"Memory cap: {MAX_LOCAL_POINTS}")
     print("BM25 initialized")
+    MODEL_LOAD_MS = (time.perf_counter() - startup_started) * 1000
     yield
 
 
 app = FastAPI(lifespan=lifespan)
+_frontend_origins = [origin.strip() for origin in os.environ.get(
+    "FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_frontend_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class CaptureRequest(BaseModel):
@@ -203,7 +225,7 @@ def generate_point_id(corroboration_key: str, value: str) -> int:
 
 
 # Activity ring buffer helpers (Phase 8)
-def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int] = None) -> None:
+def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int] = None) -> Dict[str, Any]:
     """Append an activity entry to the ring buffer (newest first)."""
     from datetime import datetime
     entry = {
@@ -215,6 +237,7 @@ def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int]
     }
     with _activity_lock:
         _activity_buffer.appendleft(entry)
+    return entry
 
 
 def get_activity(device_id: Optional[str] = None, kind: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
@@ -348,7 +371,17 @@ async def capture(device_id: str, request: CaptureRequest):
     # Run decision engine
     verdict, reason = decision_engine.evaluate(payload, dense_vector, mutable_shard, adapter, exclude_point_id=point_id)
     # Log decision for feed
-    log_decision(device_id, payload, verdict, reason)
+    decision_entry = log_decision(device_id, payload, verdict, reason, point_id=point_id)
+    await _broadcast_device_event(device_id, "decision", {
+        "device_id": device_id,
+        "point_id": point_id,
+        "value_preview": request.value[:160],
+        "modality": payload.get("modality", "text"),
+        "thumbnail_url": payload.get("thumbnail_url"),
+        "verdict": verdict,
+        "reason": reason,
+        "timestamp": decision_entry["timestamp"],
+    })
     
     # Store verdict + sync bookkeeping in _sync_meta so the outbox view and the
     # delta handshake can honour it. `synced`/`syncable` are Integer 0/1 (a bool
@@ -410,7 +443,8 @@ async def capture(device_id: str, request: CaptureRequest):
     evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS)
 
     # Log activity
-    log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)
+    activity = log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)
+    await _broadcast_device_event(device_id, "activity", activity)
 
     return {
         "id": point_id,
@@ -469,8 +503,8 @@ async def query(device_id: str, request: QueryRequest):
 
 
 @app.get("/devices/{device_id}/feed")
-async def get_device_feed(device_id: str):
-    return get_feed(device_id)
+async def get_device_feed(device_id: str, limit: int = 50):
+    return {"events": get_feed(device_id)[-max(0, limit):] if limit else []}
 
 
 class NetworkModeRequest(BaseModel):
@@ -532,9 +566,11 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
 async def push(device_id: str):
     pushed_count, errors = _do_push(device_id)
     if pushed_count > 0:
-        log_activity(device_id, "push_result", f"pushed {pushed_count} points", point_id=None)
+        activity = log_activity(device_id, "push_result", f"pushed {pushed_count} points", point_id=None)
+        await _broadcast_device_event(device_id, "activity", activity)
     if errors:
-        log_activity(device_id, "error", f"push errors: {errors}", point_id=None)
+        activity = log_activity(device_id, "error", f"push errors: {errors}", point_id=None)
+        await _broadcast_device_event(device_id, "activity", activity)
     return PushResponse(pushed_count=pushed_count, errors=errors)
 
 
@@ -678,9 +714,11 @@ async def pull(device_id: str):
     mutable_shard.optimize()
 
     # Log pull activity
-    log_activity(device_id, "pull_result", f"pulled {pulled_count} points", point_id=None)
+    activity = log_activity(device_id, "pull_result", f"pulled {pulled_count} points", point_id=None)
+    await _broadcast_device_event(device_id, "activity", activity)
     if flush_errors:
-        log_activity(device_id, "error", f"pull flush errors: {flush_errors}", point_id=None)
+        activity = log_activity(device_id, "error", f"pull flush errors: {flush_errors}", point_id=None)
+        await _broadcast_device_event(device_id, "activity", activity)
 
     return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors)
 
@@ -701,7 +739,8 @@ async def retract(device_id: str, point_id: int):
     event_log = get_or_create_event_log(device_id)
     now = datetime.utcnow().isoformat() + "Z"
     event_log.append(point_id, RETRACTED, device_ts=now)
-    log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
+    activity = log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
+    await _broadcast_device_event(device_id, "activity", activity)
     return RetractResponse(retracted=True, point_id=point_id)
 
 
@@ -789,7 +828,6 @@ async def list_conflicts(device_id: str):
 # Phase 8 — Eviction + Inspection Endpoints
 # =============================================================================
 
-from fastapi import WebSocket, WebSocketDisconnect
 from typing import Set
 
 
@@ -907,11 +945,9 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
     mutable_shard = shards['mutable']
     immutable_shard = shards['immutable']
     
-    # Build filter
+    # Build structured filters. Free text is filtered after scrolling because
+    # MatchValue only performs exact equality, not substring matching.
     must = []
-    if q:
-        # Text filter - use the value field
-        must.append(FieldCondition(key="value", match=MatchValue(value=q)))
     if sync_state:
         if sync_state == "synced":
             must.append(FieldCondition(key=SYNCED_KEY, match=MatchValue(value=1)))
@@ -932,7 +968,7 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
     
     for shard in (mutable_shard, immutable_shard):
         req = ScrollRequest(
-            limit=limit + offset,
+            limit=MAX_LOCAL_POINTS + offset,
             filter=f,
             with_payload=True,
             with_vector=False,
@@ -953,7 +989,7 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
                 "sync_state": sync_state_val,
                 "model": payload.get("model", "text_dense"),
                 "model_version": payload.get("model_version", "bge-small-en-v1.5"),
-                "created_at": payload.get("client_timestamp_ns", 0),
+                "created_at": _iso_timestamp_ns(payload.get("client_timestamp_ns")),
             })
         total += len(records)
     
@@ -964,7 +1000,10 @@ async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optio
             seen[p["id"]] = p
     
     deduped = list(seen.values())
-    deduped.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    if q:
+        needle = q.casefold()
+        deduped = [point for point in deduped if needle in point["value"].casefold()]
+    deduped.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     
     return {"points": deduped[offset:offset+limit], "total": len(deduped)}
 
@@ -999,24 +1038,35 @@ async def get_memory_point(device_id: str, point_id: int):
                 "sync_state": sync_state_val,
                 "model": payload.get("model", "text_dense"),
                 "model_version": payload.get("model_version", "bge-small-en-v1.5"),
-                "created_at": payload.get("client_timestamp_ns", 0),
+                "created_at": _iso_timestamp_ns(payload.get("client_timestamp_ns")),
             }
             
             # Get decision event
             decision = None
             for entry in get_feed(device_id):
-                if entry.get("payload", {}).get("id") == point_id or entry.get("point_id") == point_id:
+                if entry.get("point_id") == point_id:
                     decision = {
                         "device_id": entry.get("device_id"),
                         "point_id": point_id,
-                        "value_preview": entry.get("payload", {}).get("value", "")[:100],
+                        "value_preview": payload.get("value", "")[:100],
                         "modality": payload.get("modality", "text"),
                         "thumbnail_url": payload.get("thumbnail_url"),
-                        "verdict": meta.get("verdict", "UNKNOWN"),
+                        "verdict": entry.get("verdict", meta.get("verdict", "UNKNOWN")),
                         "reason": entry.get("reason", ""),
                         "timestamp": entry.get("timestamp"),
                     }
                     break
+            if decision is None:
+                decision = {
+                    "device_id": device_id,
+                    "point_id": point_id,
+                    "value_preview": payload.get("value", "")[:100],
+                    "modality": payload.get("modality", "text"),
+                    "thumbnail_url": payload.get("thumbnail_url"),
+                    "verdict": meta.get("verdict"),
+                    "reason": "Decision history is unavailable for this stored point.",
+                    "timestamp": _iso_timestamp_ns(payload.get("client_timestamp_ns")),
+                }
             
             # Get activity for this point
             activity = [e for e in get_activity(device_id) if e.get("point_id") == point_id]
@@ -1127,10 +1177,7 @@ async def get_device_telemetry(device_id: str):
     if device_id not in device_shards:
         raise HTTPException(status_code=404, detail="unknown device")
     
-    # Model load time could be tracked at startup
-    model_load_ms = 1840.0  # Placeholder
-    
-    return get_telemetry(model_load_ms=model_load_ms)
+    return get_telemetry(model_load_ms=MODEL_LOAD_MS)
 
 
 # --- GET /cloud/state ---
@@ -1189,28 +1236,32 @@ async def ws_consensus_events(websocket: WebSocket):
             _ws_consensus_events.discard(websocket)
 
 
-def _broadcast_device_event(device_id: str, event_type: str, data: dict):
+async def _broadcast_device_event(device_id: str, event_type: str, data: dict):
     """Broadcast a decision/activity event to WebSocket clients."""
     import json
     message = json.dumps({"type": event_type, "data": data})
     with _ws_lock:
-        for ws in _ws_device_events.get(device_id, set()):
-            try:
-                ws.send_text(message)
-            except Exception:
-                pass
+        connections = list(_ws_device_events.get(device_id, set()))
+    for ws in connections:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            with _ws_lock:
+                _ws_device_events.get(device_id, set()).discard(ws)
 
 
-def _broadcast_consensus_event(event: dict):
+async def _broadcast_consensus_event(event: dict):
     """Broadcast a consensus event to WebSocket clients."""
     import json
     message = json.dumps(event)
     with _ws_lock:
-        for ws in _ws_consensus_events:
-            try:
-                ws.send_text(message)
-            except Exception:
-                pass
+        connections = list(_ws_consensus_events)
+    for ws in connections:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            with _ws_lock:
+                _ws_consensus_events.discard(ws)
 
 
 if __name__ == "__main__":

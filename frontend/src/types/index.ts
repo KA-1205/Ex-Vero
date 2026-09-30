@@ -47,9 +47,10 @@ export interface MemoryRecord {
   captured_at: string; activity_ids: string[]; detail?: MemoryDetail; corroboration_key?: string
 }
 export interface QuerySource { id: number; score: number; value: string; consensus_state: string }
+export interface QueryResultHit { id: number; score: number; value?: string; payload?: { value?: string } }
 export interface QueryResult {
   answer: string; answer_path: 'offline' | 'online' | 'extractive'; model: string; latency_ms: number
-  sources: QuerySource[]; results: MemoryPointWithScore[]
+  sources: QuerySource[]; results: QueryResultHit[]
 }
 export interface CaptureRequest {
   device_id: string; value: string; corroboration_key: string; zone: string; entity?: string

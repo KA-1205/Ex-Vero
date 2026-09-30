@@ -167,15 +167,17 @@ def load_policy(config_path: str) -> Dict[str, Any]:
 _decision_feed: List[Dict[str, Any]] = []
 
 
-def log_decision(device_id: str, payload: Dict[str, Any], verdict: Verdict, reason: str):
+def log_decision(device_id: str, payload: Dict[str, Any], verdict: Verdict, reason: str, point_id: int = None):
     entry = {
         "device_id": device_id,
+        "point_id": point_id,
         "payload": payload,
         "verdict": verdict,
         "reason": reason,
         "timestamp": __import__('datetime').datetime.utcnow().isoformat() + "Z"
     }
     _decision_feed.append(entry)
+    return entry
 
 
 def get_feed(device_id: str = None):
