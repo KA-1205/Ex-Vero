@@ -24,7 +24,7 @@ services:
           name: ex-vero-gateway
           property: host
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://ex-vero.vercel.app
 
   - type: static
     name: ex-vero-frontend
