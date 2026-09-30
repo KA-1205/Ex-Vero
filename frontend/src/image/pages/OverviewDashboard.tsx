@@ -1,246 +1,300 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchActivity, fetchCloudState, fetchDevices, fetchSyncStatus, fetchTelemetry, fetchWeather } from '../api/client'
-import type { ActivityEntry, CloudFact, DeviceSummary, SyncStatus, TelemetrySample, WeatherConditions } from '../types'
-import { ConnectivityPill, MonoValue, Panel } from '../components/primitives'
-import { FleetMap } from '../components/FleetMap'
+import {
+  assetUrl,
+  fetchCloudDashboard,
+  fetchDecisionFeed,
+  fetchDevices,
+  fetchMemoryRecords,
+  fetchNetworkMode,
+  fetchSyncStatus,
+  fetchTelemetry,
+  queryDevice,
+  subscribeConsensusEvents,
+  subscribeDeviceEvents,
+} from '../api/client'
+import type { CloudFact, ConsensusEvent, DecisionFeedEntry, DeviceSummary, MemoryRecord, QueryResult, SyncStatus, TelemetrySample } from '../types'
+import { ConnectivityPill, MonoValue, Panel, VerdictBadge } from '../components/primitives'
 
-type DeviceTelemetry = { deviceId: string; sample: TelemetrySample }
+type CameraSnapshot = {
+  device: DeviceSummary
+  records: MemoryRecord[]
+  feed: DecisionFeedEntry[]
+  sync: SyncStatus | null
+  telemetry: TelemetrySample | null
+}
 
 export function OverviewDashboard() {
-  const [devices, setDevices] = useState<DeviceSummary[] | null>(null)
-  const [facts, setFacts] = useState<CloudFact[]>([])
-  const [activity, setActivity] = useState<ActivityEntry[]>([])
-  const [sync, setSync] = useState<SyncStatus[]>([])
-  const [telemetry, setTelemetry] = useState<DeviceTelemetry[]>([])
-  const [weather, setWeather] = useState<WeatherConditions | null>(null)
   const navigate = useNavigate()
+  const [devices, setDevices] = useState<DeviceSummary[] | null>(null)
+  const [cameras, setCameras] = useState<CameraSnapshot[]>([])
+  const [facts, setFacts] = useState<CloudFact[]>([])
+  const [trust, setTrust] = useState<Record<string, number>>({})
+  const [networkMode, setNetworkMode] = useState<string | null>(null)
+  const [consensusEvents, setConsensusEvents] = useState<ConsensusEvent[]>([])
+  const [query, setQuery] = useState('')
+  const [queryState, setQueryState] = useState<(QueryResult & { question: string }) | null>(null)
+  const [queryPending, setQueryPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function refresh() {
+    try {
+      const fleet = await fetchDevices()
+      setDevices(fleet)
+      const cameraDevices = fleet.filter((device) => device.id.startsWith('cam-'))
+      const [cloud, mode, rows] = await Promise.all([
+        fetchCloudDashboard().catch(() => ({ facts: [], device_trust: {} })),
+        fetchNetworkMode().catch(() => null),
+        Promise.all(cameraDevices.map(async (device): Promise<CameraSnapshot> => {
+          const [records, feed, sync, telemetry] = await Promise.all([
+            fetchMemoryRecords(device.id, { modality: 'vision', limit: 1000 }).catch(() => []),
+            fetchDecisionFeed(device.id, 100).catch(() => []),
+            fetchSyncStatus(device.id).catch(() => null),
+            fetchTelemetry(device.id).catch(() => []),
+          ])
+          return { device, records, feed, sync, telemetry: telemetry.at(-1) ?? null }
+        })),
+      ])
+      setFacts(cloud.facts)
+      setTrust(cloud.device_trust)
+      setNetworkMode(mode)
+      setCameras(rows)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to reach the edge node')
+      setDevices([])
+      setCameras([])
+      setFacts([])
+      setTrust({})
+    }
+  }
 
   useEffect(() => {
-    let active = true
-    const refresh = async () => {
-      try {
-        const fleet = await fetchDevices()
-        if (!active) return
-        setDevices(fleet)
-        const [cloud, ...perDevice] = await Promise.all([
-          fetchCloudState().catch(() => [] as CloudFact[]),
-          ...fleet.map(async (device) => {
-            const [events, status, samples] = await Promise.all([
-              fetchActivity(device.id).catch(() => [] as ActivityEntry[]),
-              fetchSyncStatus(device.id).catch(() => null),
-              fetchTelemetry(device.id).catch(() => [] as TelemetrySample[]),
-            ])
-            return { events, status, samples: samples.map((sample) => ({ deviceId: device.id, sample })) }
-          }),
-        ])
-        if (!active) return
-        setFacts(cloud)
-        setActivity(perDevice.flatMap((result) => result.events).sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp)))
-        setSync(perDevice.flatMap((result) => result.status ? [result.status] : []))
-        setTelemetry(perDevice.flatMap((result) => result.samples).sort((a, b) => Date.parse(a.sample.timestamp) - Date.parse(b.sample.timestamp)))
-      } catch {
-        if (active) setDevices([])
-      }
-    }
     void refresh()
     const timer = window.setInterval(() => void refresh(), 15000)
-    return () => { active = false; window.clearInterval(timer) }
+    return () => window.clearInterval(timer)
   }, [])
 
+  const cameraIds = cameras.map(({ device }) => device.id).join(',')
   useEffect(() => {
-    let active = true
-    const refreshWeather = async () => {
-      try {
-        const current = await fetchWeather()
-        if (active) setWeather(current)
-      } catch {
-        if (active) setWeather(null)
-      }
+    if (!cameraIds) return
+    const unsubscribers = cameraIds.split(',').map((deviceId) => subscribeDeviceEvents(deviceId, () => void refresh()))
+    const unsubscribeConsensus = subscribeConsensusEvents((event) => {
+      setConsensusEvents((current) => [event, ...current.filter((item) => item.id !== event.id)].slice(0, 20))
+      void refresh()
+    })
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe())
+      unsubscribeConsensus()
     }
-    void refreshWeather()
-    const timer = window.setInterval(() => void refreshWeather(), 10 * 60 * 1000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [])
+  }, [cameraIds])
 
-  const total = devices?.length ?? 0
-  const online = devices?.filter((device) => device.connectivity === 'ONLINE').length ?? 0
-  const degraded = devices?.filter((device) => device.connectivity === 'DEGRADED').length ?? 0
-  const offline = devices?.filter((device) => device.connectivity === 'OFFLINE').length ?? 0
-  const disputed = facts.filter((fact) => fact.status === 'DISPUTED').length
-  const pushBytes = sync.reduce((sum, status) => sum + (status.last_push_bytes ?? 0), 0)
-  const pushMs = sync.reduce((sum, status) => sum + (status.last_push_duration_ms ?? 0), 0)
-  const pushRate = pushMs > 0 ? pushBytes / pushMs * 1000 / 1_000_000 : null
-  const latestSamples = devices?.flatMap((device) => {
-    const samples = telemetry.filter((item) => item.deviceId === device.id)
-    const latest = samples.at(-1)?.sample
-    return latest ? [latest] : []
-  }) ?? []
-  const avg = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
-  const cpu = avg(latestSamples.map((sample) => sample.cpu_pct))
-  const ram = avg(latestSamples.map((sample) => sample.ram_mb))
-  const latency = avg(latestSamples.map((sample) => sample.query_latency_ms))
-  const modelLoad = avg(latestSamples.flatMap((sample) => sample.model_load_ms == null ? [] : [sample.model_load_ms]))
-  const onlinePct = total ? Math.round(online / total * 100) : null
-  const now = new Date()
+  const allRecords = useMemo(() => cameras.flatMap(({ records }) => records).sort(byNewest), [cameras])
+  const allFeed = useMemo(() => cameras.flatMap(({ feed }) => feed).sort(byNewest), [cameras])
+  const allSync = useMemo(() => cameras.map(({ sync }) => sync).filter((item): item is SyncStatus => item !== null), [cameras])
+  const latestByKey = useMemo(() => latestRecordsByKey(allRecords), [allRecords])
+  const disputedFacts = facts.filter((fact) => fact.status === 'DISPUTED')
+  const confirmedFacts = facts.filter((fact) => fact.status === 'CONFIRMED')
+  const photos = allRecords.length
+  const memoryCap = cameras.reduce((sum, row) => sum + row.device.memory_cap, 0)
+  const online = cameras.filter(({ device }) => device.connectivity === 'ONLINE').length
+  const degraded = cameras.filter(({ device }) => device.connectivity === 'DEGRADED').length
+  const offline = cameras.filter(({ device }) => device.connectivity === 'OFFLINE').length
+  const bytesSent = allSync.reduce((sum, status) => sum + (status.last_push_bytes ?? 0), 0)
+  const pipeline = allSync.reduce((result, status) => ({
+    URGENT: result.URGENT + (status.pending_by_priority.URGENT ?? 0),
+    ROUTINE: result.ROUTINE + (status.pending_by_priority.ROUTINE ?? 0),
+    HELD: result.HELD + (status.pending_by_priority.HELD ?? 0),
+  }), { URGENT: 0, ROUTINE: 0, HELD: 0 })
+  const latestTelemetry = cameras.map(({ telemetry }) => telemetry).filter((item): item is TelemetrySample => item !== null)
+  const activeZoneKeys = new Set([...facts.map((fact) => fact.corroboration_key), ...allRecords.flatMap((record) => record.corroboration_key ? [record.corroboration_key] : [])])
+  const zones = [...activeZoneKeys].sort()
+  const camerasMissing = devices !== null && cameras.length === 0
+  const noFrames = !camerasMissing && cameras.length > 0 && photos === 0
+
+  async function submitQuery() {
+    const camera = cameras[0]
+    if (!camera || !query.trim() || queryPending) return
+    setQueryPending(true)
+    try {
+      setQueryState({ ...(await queryDevice(camera.device.id, query.trim())), question: query.trim() })
+      setQuery('')
+    } finally {
+      setQueryPending(false)
+    }
+  }
 
   return (
-    <div className="h-full min-h-0 overflow-hidden p-4 lg:p-5 flex flex-col gap-3 text-ink">
-      <header className="relative flex min-h-[105px] flex-wrap items-center justify-between gap-4 pt-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">OVERVIEW - IMAGES</div>
-          <h1 className="mt-1 font-serif text-4xl xl:text-5xl leading-none tracking-tight text-ink">Field Command</h1>
-          <p className="mt-2 text-sm text-ink-dim">Real-time monitoring of your fleet and critical infrastructure.</p>
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4 text-ink lg:p-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">IMAGE FLEET / OVERVIEW</div>
+          <h1 className="mt-1 font-serif text-4xl leading-none tracking-tight">Visual Situation Board</h1>
+          <p className="mt-2 text-sm text-ink-dim">What the cameras see, whether they agree, and what reached the cloud.</p>
         </div>
-        <div className="hidden md:flex min-w-[290px] flex-1 max-w-[520px] h-[88px] items-center border-l border-line pl-5">
-          <div className="w-[112px] shrink-0 font-mono text-[9px] font-semibold leading-5 tracking-[0.28em] text-ink-dim">REAL TIME<br />INSIGHT<br />SAFER<br />TOMORROW</div>
-          <div className="relative h-full flex-1 overflow-hidden border border-line bg-base-sunken">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/image-data/asset1.png')] bg-cover bg-center" />
-            <div className="absolute inset-0 bg-white/15" />
-            <div className="absolute inset-y-0 right-2 flex flex-col justify-center text-right font-mono text-[9px] leading-4 text-[#102A43]"><span>FLEET STATUS</span><span>{devices ? `${total} ACTIVE NODES` : 'LOADING NODES'}</span></div>
-          </div>
-        </div>
-        <div className="absolute right-0 top-0 hidden text-right font-mono text-[10px] text-ink-dim md:block">
-          {now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })} <span className="mx-2 text-line">|</span>
-          {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-        </div>
+        <div className="font-mono text-[10px] text-ink-dim">{networkMode ? `NETWORK ${networkMode.toUpperCase()}` : 'NETWORK —'}</div>
       </header>
 
-      <section className="glass-card grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-[#AABBC8]">
-        <Kpi icon="devices" value={devices ? String(total) : '—'} label="TOTAL DEVICES" detail={`${offline} offline · ${online} online${degraded ? ` · ${degraded} degraded` : ''}`} />
-        <Kpi icon="alert" value={facts.length ? String(disputed) : '—'} label="DISPUTED FACTS" detail={`${facts.length} fleet facts in cloud state`} />
-        <Kpi icon="wifi" value={pushRate == null ? '—' : pushRate < 0.01 ? `${(pushRate * 1000).toFixed(1)} KB/s` : `${pushRate.toFixed(2)} MB/s`} label="MEASURED SYNC RATE" detail={sync.length ? 'from latest device push measurements' : 'no push measurement available'} />
-        <Kpi icon="health" value={onlinePct == null ? '—' : `${onlinePct}%`} label="DEVICES ONLINE" detail={`${online} online of ${total} devices`} />
+      {error && <div className="border border-alert bg-alert/10 px-3 py-2 font-mono text-[11px] text-alert">Edge node unavailable: {error}</div>}
+      {camerasMissing && <EmptyState>NO CAMERAS PROVISIONED. Run <span className="text-ink">python tools/seed_fleet.py</span>.</EmptyState>}
+      {noFrames && <EmptyState>NO FRAMES CAPTURED YET. Run <span className="text-ink">python tools/load_image_dataset.py</span>.</EmptyState>}
+
+      <section className="glass-card grid grid-cols-2 divide-x divide-y divide-[#AABBC8] xl:grid-cols-5 xl:divide-y-0">
+        <Kpi value={devices === null ? '—' : `${online}/${cameras.length || '—'}`} label="CAMERAS ONLINE" detail={devices === null ? '—' : `${offline} offline · ${degraded} degraded`} />
+        <Kpi value={devices === null ? '—' : `${photos}/${memoryCap || '—'}`} label="PHOTOS IN MEMORY" detail="vision points / local cap" />
+        <Kpi value={facts.length ? String(confirmedFacts.length) : '—'} label="ZONES WITH ACTIVE HAZARD" detail="confirmed visual facts" />
+        <Kpi value={facts.length ? String(disputedFacts.length) : '—'} label="OPEN VISUAL DISPUTES" detail="disputed visual facts" alert />
+        <Kpi value={bytesSent ? formatBytes(bytesSent) : '—'} label="BYTES SENT TO CLOUD" detail={networkMode ? networkMode.toUpperCase() : '—'} />
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-5 gap-3 flex-[1.15] min-h-0">
-        <Panel number="01" title="LIVE FLEET MAP" className="xl:col-span-3 min-h-0 overflow-hidden">
-          <FleetMap devices={devices ?? []} loading={devices === null} />
+      <section className="grid min-h-[360px] grid-cols-1 gap-3 xl:grid-cols-5">
+        <Panel number="01" title="ZONE SITUATION BOARD" className="min-h-0 xl:col-span-3">
+          <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2">
+            {zones.map((key) => <ZoneTile key={key} keyName={key} fact={facts.find((item) => item.corroboration_key === key)} records={latestByKey.get(key) ?? []} onOpen={() => navigate('/image/overview/command')} />)}
+            {zones.length === 0 && <LoadingRow text={camerasMissing || noFrames ? '—' : 'Waiting for vision facts…'} />}
+          </div>
         </Panel>
-        <Panel number="02" title="DEVICE LIST" className="xl:col-span-2 min-h-0 overflow-hidden">
-          <div className="h-full overflow-y-auto px-3 pt-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-line pb-2 font-mono text-[9px] tracking-wide text-ink-faint"><span>DEVICE</span><span>STATUS</span><span>LAST SYNC</span></div>
-            {devices?.map((device) => <button key={device.id} onClick={() => navigate(`/image/overview/devices/${device.id}`)} className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-line py-2 text-left hover:bg-base-sunken"><span className="min-w-0"><span className="block truncate text-xs font-semibold">{device.id.toUpperCase()}</span><span className="block truncate text-[10px] text-ink-dim">{device.name}</span></span><ConnectivityPill state={device.connectivity} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(device.last_sync_at)}</MonoValue></button>)}
-            {devices === null && <Loading>Loading devices…</Loading>}
+        <Panel number="02" title="CONSENSUS WATCH" className="min-h-0 xl:col-span-2">
+          <div className="h-full space-y-3 overflow-y-auto p-3">
+            {disputedFacts.slice(0, 4).map((fact) => {
+              const records = latestByKey.get(fact.corroboration_key) ?? []
+              const event = consensusEvents.find((item) => item.corroboration_key === fact.corroboration_key)
+              return <DisputeCard key={fact.id} fact={fact} records={records} explanation={event?.resolution_summary ?? '—'} />
+            })}
+            {disputedFacts.length === 0 && <LoadingRow text={facts.length ? 'No open disputes — all cameras agree.' : 'Waiting for consensus facts…'} />}
           </div>
         </Panel>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-10 gap-3 flex-[0.8] min-h-[150px] max-h-[230px]">
-        <Panel number="03" title="RECENT SYSTEM ACTIVITY" className="lg:col-span-4 min-h-0 overflow-hidden">
-          <div className="h-full overflow-y-auto divide-y divide-line px-3">
-            {activity.slice(0, 5).map((entry) => <button key={entry.id} onClick={() => navigate(`/image/overview/devices/${entry.device_id}`)} className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 py-2 text-left hover:bg-base-sunken"><span className={`h-2 w-2 rounded-full ${entry.kind === 'error' || entry.kind === 'retraction' ? 'bg-alert' : entry.kind === 'push_result' || entry.kind === 'pull_result' ? 'bg-good' : 'bg-pending'}`} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(entry.timestamp)}</MonoValue><span className="min-w-0 truncate text-[11px]"><span className="mr-2 font-mono text-[10px] text-ink-faint">{entry.device_id}</span>{entry.detail}</span></button>)}
-            {activity.length === 0 && <Loading>Waiting for activity data…</Loading>}
+      <Panel number="03" title="LIVE EVIDENCE STREAM" className="min-h-[190px]">
+        <div className="flex gap-3 overflow-x-auto p-3">
+          {allFeed.slice(0, 12).map((entry) => <EvidenceCard key={`${entry.device_id}-${entry.id}`} entry={entry} />)}
+          {allFeed.length === 0 && <LoadingRow text="Waiting for camera decisions…" />}
+        </div>
+      </Panel>
+
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <Panel number="04" title="CAMERA HEALTH" className="min-h-[250px]">
+          <div className="grid gap-2 p-3 sm:grid-cols-2">
+            {cameras.map(({ device, records, sync }) => <CameraHealth key={device.id} device={device} latest={records[0]} sync={sync} trust={trust[device.id]} onOpen={() => navigate(`/image/overview/devices/${device.id}`)} />)}
+            {cameras.length === 0 && <LoadingRow text="—" />}
           </div>
         </Panel>
-        <Panel number="04" title="SYSTEM PERFORMANCE" className="lg:col-span-3 min-h-0 overflow-hidden">
-          <div className="flex h-full flex-col overflow-hidden divide-y divide-line px-3">
-            <MetricRow chart="line" label="CPU LOAD" value={cpu == null ? '—' : `${cpu.toFixed(0)}%`} samples={telemetry.slice(-20).map((item) => item.sample.cpu_pct)} />
-            <MetricRow chart="line" label="MEMORY USAGE" value={ram == null ? '—' : `${ram.toFixed(0)} MB`} samples={telemetry.slice(-20).map((item) => item.sample.ram_mb)} />
-            <MetricRow chart="bars" label="QUERY LATENCY" value={latency == null ? '—' : `${latency.toFixed(0)} ms`} samples={telemetry.slice(-20).map((item) => item.sample.query_latency_ms)} />
-            <MetricRow chart="bars" label="MODEL LOAD" value={modelLoad == null ? '—' : `${modelLoad.toFixed(0)} ms`} samples={telemetry.slice(-20).flatMap((item) => item.sample.model_load_ms == null ? [] : [item.sample.model_load_ms])} />
-          </div>
+        <Panel number="05" title="EDGE → CLOUD PIPELINE" className="min-h-[250px]">
+          <Pipeline pipeline={pipeline} sync={allSync} mode={networkMode} />
         </Panel>
-        <Panel number="05" title="FIELD CONDITIONS" className="lg:col-span-3 min-h-0 overflow-hidden">
-          <div className="relative flex h-full min-h-0 flex-col overflow-y-auto p-3">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/image-data/delhi.png')] bg-cover bg-[center_65%]" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#E1EBEB]/10 via-[#E1EBEB]/45 to-[#E1EBEB]/35" />
-            <div className="relative z-10 flex items-center justify-between">
-              <div className="text-[11px] font-medium text-ink">New Delhi, India</div>
-              {weather && <MonoValue className="text-[9px] text-ink">Updated {formatTime(weather.observed_at)}</MonoValue>}
-            </div>
-            {weather ? (
-              <div className="relative z-10 flex flex-1 items-center justify-between gap-2 py-3">
-                <div className="flex items-center gap-3">
-                  <WeatherIcon code={weather.weather_code} />
-                  <div><div className="font-mono text-3xl font-semibold leading-none">{Math.round(weather.temperature_c)}°C</div><div className="mt-1 text-xs text-ink">{weatherDescription(weather.weather_code)}</div></div>
-                </div>
-                <div className="space-y-1 border-l border-line pl-3 text-[10px] text-ink">
-                  <div>Humidity <MonoValue className="ml-2 text-ink">{weather.relative_humidity_pct}%</MonoValue></div>
-                  <div>Wind <MonoValue className="ml-2 text-ink">{Math.round(weather.wind_speed_kmh)} km/h</MonoValue></div>
-                  <div>Visibility <MonoValue className="ml-2 text-ink">{weather.visibility_km.toFixed(1)} km</MonoValue></div>
-                </div>
-              </div>
-            ) : (
-              <div className="relative z-10 flex flex-1 items-center font-mono text-[10px] text-ink-dim">Weather data unavailable</div>
-            )}
-            <div className="relative z-10 mt-auto text-right font-mono text-[9px] text-ink">LIVE WEATHER · OPEN-METEO</div>
+        <Panel number="06" title="ASK THE FLEET" className="min-h-[250px]">
+          <div className="flex h-full flex-col gap-3 p-3">
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void submitQuery() }}>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="fire near the server racks" disabled={!cameras.length} className="min-w-0 flex-1 border border-line bg-base-sunken px-2 py-2 text-xs outline-none focus:border-good" />
+              <button type="submit" disabled={!cameras.length || queryPending} className="border border-line px-3 font-mono text-[10px] hover:border-good disabled:opacity-50">{queryPending ? '…' : 'ASK'}</button>
+            </form>
+            {queryState ? <QueryResultView result={queryState} /> : <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />}
           </div>
         </Panel>
       </section>
+
+      <TelemetryFooter samples={latestTelemetry} />
     </div>
   )
 }
 
-function Kpi({ icon, value, label, detail }: { icon: 'devices' | 'alert' | 'wifi' | 'health'; value: string; label: string; detail: string }) {
-  const color = icon === 'alert' ? 'text-alert' : 'text-[#1F6FB2]'
-  return <div className="flex min-w-0 items-center gap-3 p-3 xl:p-4"><div className="hidden h-[52px] w-[52px] shrink-0 items-center justify-center border border-line bg-base-sunken sm:flex"><Icon name={icon} className={color} /></div><div className="min-w-0"><div className="font-mono text-2xl font-semibold leading-none text-ink xl:text-3xl">{value}</div><div className="mt-1 font-mono text-[9px] tracking-[0.2em] text-ink xl:text-[10px]">{label}</div><div className="mt-1 truncate text-[10px] text-ink-dim">{detail}</div></div></div>
-}
-
-function Icon({ name, className }: { name: 'devices' | 'alert' | 'wifi' | 'health'; className: string }) {
-  const imageByName = {
-    devices: '/image-data/kpi-devices.png',
-    alert: '/image-data/kpi-danger.png',
-    health: '/image-data/kpi-health.png',
-    wifi: '/image-data/kpi-signal.png',
-  }
-  const accessibleName = { devices: 'Devices', alert: 'Disputed facts', health: 'Devices online', wifi: 'Measured sync rate' }
-  return <img src={imageByName[name]} alt={accessibleName[name]} className={`h-9 w-9 object-contain ${className}`} />
-}
-
-function MetricRow({ label, value, samples, chart }: { label: string; value: string; samples: number[]; chart: 'line' | 'bars' }) {
-  const max = Math.max(...samples, 1)
-  const values = samples.slice(-20)
-  const points = values.map((sample, index) => `${values.length < 2 ? 50 : index / (values.length - 1) * 100},${27 - sample / max * 22}`).join(' ')
+function ZoneTile({ keyName, fact, records, onOpen }: { keyName: string; fact?: CloudFact; records: MemoryRecord[]; onOpen: () => void }) {
+  const latest = records[0]
+  const state = fact?.status ?? (latest ? 'DISPUTED' : 'NO DATA')
   return (
-    <div className="flex flex-1 min-h-0 items-center gap-2 border-b border-[#AABBC8]/60 last:border-b-0">
-      <span className="w-[92px] shrink-0 text-[10px] text-ink-dim">{label}</span>
-      <div className="flex h-5 min-w-0 flex-1 items-center" aria-hidden="true">
-        {chart === 'line' ? (
-            <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="h-5 w-full overflow-visible">
-            {values.length > 1 && <polyline points={points} fill="none" stroke="#2878D0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
-          </svg>
-        ) : (
-          <div className="flex h-5 w-full items-end justify-between gap-[2px]">
-            {values.map((sample, index) => <span key={index} className="w-[3px] shrink-0 bg-[#4385D1]" style={{ height: `${Math.max(10, sample / max * 100)}%` }} />)}
-          </div>
-        )}
-      </div>
-      <MonoValue className="w-[52px] shrink-0 text-right text-[9px] text-ink">{value}</MonoValue>
-    </div>
+    <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#315C86]">
+      <div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-xs font-semibold">{fact?.zone ?? zoneLabel(keyName)}</span><StatePill state={state} /></div>
+      <Thumb src={latest?.thumbnail_url ?? fact?.thumbnail_url} alt={latest?.content_preview ?? fact?.summary ?? keyName} className="mt-2 aspect-video" />
+      <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[10px] text-ink-dim"><span>{fact ? `${Math.round(fact.confidence * 100)}% confidence` : '—'}</span><span>{fact ? `${fact.corroborating_devices.length} cameras` : '—'}</span></div>
+      <div className="mt-1 flex justify-between gap-2 text-[10px] text-ink-faint"><span>{records.length > 1 ? `+${records.length - 1} similar` : '—'}</span><span>{latest ? timeSince(latest.captured_at) : '—'}</span></div>
+    </button>
   )
 }
 
-function Loading({ children }: { children: string }) {
-  return <div className="py-5 text-center font-mono text-[10px] text-ink-faint">{children}</div>
+function DisputeCard({ fact, records, explanation }: { fact: CloudFact; records: MemoryRecord[]; explanation: string }) {
+  const claims = records.slice(0, 2)
+  return <div className="border border-alert/50 bg-alert/5 p-2"><div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-[10px] font-semibold">{fact.zone ?? fact.corroboration_key}</span><MonoValue className="text-[10px] text-alert">{Math.round(fact.confidence * 100)}%</MonoValue></div><div className="mt-2 grid grid-cols-2 gap-2">{claims.map((record) => <div key={record.id} className="min-w-0"><Thumb src={record.thumbnail_url} alt={record.content_preview} className="aspect-video" /><div className="mt-1 truncate font-mono text-[9px] text-ink-dim">{record.content_preview}</div></div>)}{claims.length === 0 && <div className="col-span-2 font-mono text-[10px] text-ink-faint">No frame thumbnails available</div>}</div><div className="mt-2 truncate font-mono text-[10px] text-ink-dim">{explanation}</div></div>
 }
 
-function WeatherIcon({ code }: { code: number }) {
-  const isClear = code === 0 || code === 1
-  return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-12 w-12 shrink-0 text-[#102A43]" aria-hidden="true">
-      {isClear ? <><circle cx="25" cy="23" r="8" /><path d="M25 3v5m0 30v5M5 23h5m30 0h5M11 9l4 4m20 20 4 4m0-28-4 4M15 33l-4 4" /></> : <><path d="M13 34h22a8 8 0 0 0 .5-16A12 12 0 0 0 12 21a6.5 6.5 0 0 0 1 13Z" /><path d="M18 9v4m-8-1 3 3m19-6-2 4" /></>}
-    </svg>
-  )
+function EvidenceCard({ entry }: { entry: DecisionFeedEntry }) {
+  return <div className="w-[170px] shrink-0 border border-line bg-white/30 p-2"><Thumb src={entry.thumbnail_url} alt={entry.content_preview} className="aspect-video" /><div className="mt-2 flex items-center justify-between gap-1"><span className="truncate font-mono text-[9px] text-ink-dim">{entry.device_id}</span><VerdictBadge verdict={entry.verdict} /></div><div className="mt-1 line-clamp-2 text-[10px] text-ink-dim">{entry.reason || '—'}</div></div>
 }
 
-function weatherDescription(code: number) {
-  if (code === 0) return 'Clear sky'
-  if (code === 1) return 'Mainly clear'
-  if (code === 2) return 'Partly cloudy'
-  if (code === 3) return 'Overcast'
-  if (code === 45 || code === 48) return 'Fog'
-  if (code >= 51 && code <= 57) return 'Drizzle'
-  if (code >= 61 && code <= 67) return 'Rain'
-  if (code >= 71 && code <= 77) return 'Snow'
-  if (code >= 80 && code <= 82) return 'Rain showers'
-  if (code === 85 || code === 86) return 'Snow showers'
-  if (code >= 95) return 'Thunderstorm'
-  return 'Current conditions'
+function CameraHealth({ device, latest, sync, trust, onOpen }: { device: DeviceSummary; latest?: MemoryRecord; sync: SyncStatus | null; trust?: number; onOpen: () => void }) {
+  return <button onClick={onOpen} className="border border-line bg-white/30 p-2 text-left hover:border-[#315C86]"><div className="flex items-center justify-between gap-2"><span className="font-mono text-xs font-semibold">{device.id}</span><ConnectivityPill state={device.connectivity} /></div><div className="mt-2 flex gap-2"><Thumb src={latest?.thumbnail_url} alt={latest?.content_preview ?? device.id} className="h-12 w-20 shrink-0" /><div className="min-w-0 space-y-1 text-[10px] text-ink-dim"><div>memory <MonoValue>{device.memory_used}/{device.memory_cap}</MonoValue></div><div>pending <MonoValue>{sync ? Object.values(sync.pending_by_priority).reduce((a, b) => a + b, 0) : '—'}</MonoValue></div><div>trust <MonoValue>{trust == null ? '—' : trust.toFixed(2)}</MonoValue></div></div></div><div className="mt-2 border-t border-line pt-1 font-mono text-[9px] text-ink-faint">last sync {formatTime(device.last_sync_at)}</div></button>
 }
 
-function formatTime(value: string | null) {
+function Pipeline({ pipeline, sync, mode }: { pipeline: { URGENT: number; ROUTINE: number; HELD: number }; sync: SyncStatus[]; mode: string | null }) {
+  const totalPending = pipeline.URGENT + pipeline.ROUTINE + pipeline.HELD
+  const last = sync.find((item) => item.last_push_bytes != null) ?? sync[0]
+  return <div className="flex h-full flex-col gap-4 p-3"><div className="flex h-8 overflow-hidden border border-line bg-base-sunken">{(['URGENT', 'ROUTINE', 'HELD'] as const).map((key) => <div key={key} className={key === 'URGENT' ? 'bg-alert/70' : key === 'ROUTINE' ? 'bg-pending/70' : 'bg-ink-faint/40'} style={{ width: `${totalPending ? pipeline[key] / totalPending * 100 : 0}%` }} title={`${key}: ${pipeline[key]}`} />)}</div><div className="grid grid-cols-3 gap-2 font-mono text-[10px] text-ink-dim"><span>URGENT {pipeline.URGENT}</span><span>ROUTINE {pipeline.ROUTINE}</span><span>HELD {pipeline.HELD}</span></div><div className="grid grid-cols-2 gap-2 border-t border-line pt-3 text-[10px] text-ink-dim"><span>last push bytes <MonoValue>{last?.last_push_bytes == null ? '—' : formatBytes(last.last_push_bytes)}</MonoValue></span><span>mode <MonoValue>{last?.last_push_mode ?? mode ?? '—'}</MonoValue></span><span>accepted <MonoValue>{last?.last_push_accepted ?? '—'}</MonoValue></span><span>failed <MonoValue className="text-alert">{last?.last_push_failed ?? '—'}</MonoValue></span></div></div>
+}
+
+function QueryResultView({ result }: { result: QueryResult & { question: string } }) {
+  const photos = result.results.filter((item) => item.modality === 'vision' || item.thumbnail_url)
+  return <div className="min-h-0 space-y-2 overflow-y-auto"><div className="flex items-center justify-between gap-2 text-[10px] text-ink-dim"><span className="truncate">“{result.question}”</span><MonoValue>{result.latency_ms.toFixed(0)} ms · {(result.answer_path || '—').toUpperCase()}</MonoValue></div><div className="text-xs text-ink">{result.answer || '—'}</div><div className="flex gap-2 overflow-x-auto">{photos.map((photo) => <div key={photo.id} className="w-24 shrink-0"><Thumb src={photo.thumbnail_url} alt={photo.value} className="aspect-square" /><div className="mt-1 truncate font-mono text-[9px] text-ink-faint">{photo.score == null ? '—' : `${Math.round(photo.score * 100)}%`}</div></div>)}{photos.length === 0 && <span className="font-mono text-[10px] text-ink-faint">No visual matches</span>}</div></div>
+}
+
+function TelemetryFooter({ samples }: { samples: TelemetrySample[] }) {
+  const sample = samples[0]
+  return <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 border-t border-line px-1 pt-2 font-mono text-[9px] text-ink-faint"><span>EMULATED CONSTRAINED TARGET</span><span>CPU {sample ? `${sample.cpu_pct.toFixed(0)}%` : '—'}</span><span>RAM {sample ? `${sample.ram_mb.toFixed(0)} MB` : '—'}</span><span>MODEL LOAD {sample?.model_load_ms == null ? '—' : `${sample.model_load_ms.toFixed(0)} ms`}</span><span>QUERY P50 {sample ? `${sample.query_latency_ms.toFixed(0)} ms` : '—'}</span></div>
+}
+
+function Kpi({ value, label, detail, alert = false }: { value: string; label: string; detail: string; alert?: boolean }) {
+  return <div className="min-w-0 p-3 xl:p-4"><div className={`font-mono text-2xl font-semibold leading-none ${alert ? 'text-alert' : 'text-ink'}`}>{value}</div><div className="mt-1 font-mono text-[9px] tracking-[0.16em] text-ink">{label}</div><div className="mt-1 truncate text-[10px] text-ink-dim">{detail}</div></div>
+}
+
+function StatePill({ state }: { state: string }) {
+  const style = state === 'CONFIRMED' ? 'border-good text-good bg-good/10' : state === 'DISPUTED' ? 'border-alert text-alert bg-alert/10' : 'border-line text-ink-faint'
+  return <span className={`shrink-0 border px-1.5 py-0.5 font-mono text-[9px] ${style}`}>{state}</span>
+}
+
+function Thumb({ src, alt, className = '' }: { src?: string | null; alt: string; className?: string }) {
+  return <div className={`overflow-hidden border border-line bg-base-sunken ${className}`}>{src ? <img src={assetUrl(src) ?? undefined} alt={alt} className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center font-mono text-[9px] text-ink-faint">NO THUMBNAIL</div>}</div>
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return <div className="border border-pending/50 bg-pending/5 px-3 py-2 font-mono text-[11px] text-ink-dim">{children}</div>
+}
+
+function LoadingRow({ text }: { text: string }) {
+  return <div className="flex min-h-24 flex-1 animate-pulse items-center justify-center border border-line bg-white/20 px-4 text-center font-mono text-[10px] text-ink-faint">{text}</div>
+}
+
+function latestRecordsByKey(records: MemoryRecord[]) {
+  const groups = new Map<string, MemoryRecord[]>()
+  records.forEach((record) => {
+    if (!record.corroboration_key) return
+    groups.set(record.corroboration_key, [...(groups.get(record.corroboration_key) ?? []), record].sort(byNewest))
+  })
+  return groups
+}
+
+function byNewest(a: { captured_at?: string; timestamp?: string }, b: { captured_at?: string; timestamp?: string }) {
+  return Date.parse(b.captured_at ?? b.timestamp ?? '') - Date.parse(a.captured_at ?? a.timestamp ?? '')
+}
+
+function zoneLabel(key: string) {
+  return key.split('.')[0]?.replace(/^zone[_-]/i, 'Zone ').replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || key
+}
+
+function formatTime(value: string | null | undefined) {
   if (!value) return '—'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function timeSince(value: string) {
+  const time = new Date(value).getTime()
+  if (!Number.isFinite(time)) return '—'
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60000))
+  return minutes < 1 ? 'now' : `${minutes}m ago`
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

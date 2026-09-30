@@ -10,7 +10,19 @@ import type {
 import * as mock from './mock'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? `ws://${location.host}`
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (() => {
+  if (BASE_URL) {
+    const apiUrl = new URL(BASE_URL, location.origin)
+    return `${apiUrl.protocol === 'https:' ? 'wss' : 'ws'}://${apiUrl.host}`
+  }
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8000`
+})()
+
+export function assetUrl(path: string | null | undefined): string | null {
+  if (!path) return null
+  if (/^https?:\/\//.test(path)) return path
+  return `${BASE_URL}${path}`
+}
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`)
@@ -47,12 +59,12 @@ function apiFact(f: ApiCloudFact, i: number): CloudFact {
     confidence: f.confidence,
     corroborating_devices: f.corroborating_devices,
     last_updated: f.updated_at,
-    thumbnail_url: f.thumbnail_url ?? null,
+    thumbnail_url: assetUrl(f.thumbnail_url),
     modality: f.modality ?? 'vision',
   }
 }
 function apiFeed(e: DecisionEvent): DecisionFeedEntry {
-  return { ...e, id: String(e.point_id), content_preview: e.value_preview }
+  return { ...e, id: String(e.point_id), content_preview: e.value_preview, thumbnail_url: assetUrl(e.thumbnail_url) }
 }
 function apiActivity(e: ActivityEntry): ActivityEntry { return { ...e, id: e.point_id == null ? `${e.device_id}-${e.timestamp}-${e.kind}` : String(e.point_id) } }
 function apiMemory(p: MemoryPoint, deviceId: string): MemoryRecord {
@@ -60,7 +72,7 @@ function apiMemory(p: MemoryPoint, deviceId: string): MemoryRecord {
     id: String(p.id),
     device_id: deviceId,
     content_preview: p.value,
-    thumbnail_url: p.thumbnail_url ?? undefined,
+    thumbnail_url: assetUrl(p.thumbnail_url) ?? undefined,
     modality: p.modality,
     state: p.sync_state,
     zone: p.zone ?? undefined,
@@ -97,7 +109,7 @@ export async function queryDevice(deviceId: string, question: string): Promise<Q
       score: r.score,
       value: payload.value ?? '',
       modality: payload.modality ?? 'text',
-      thumbnail_url: payload.thumbnail_url ?? null,
+      thumbnail_url: assetUrl(payload.thumbnail_url),
       zone: payload.zone ?? null,
       corroboration_key: payload.corroboration_key ?? '',
       sync_state: syncState,
@@ -152,7 +164,7 @@ export async function setNetworkMode(mode: NetworkMode): Promise<void> {
 export async function fetchSyncStatus(deviceId: string): Promise<SyncStatus> {
   if (mock.USE_MOCKS) return mock.mockSyncStatus(deviceId)
   const s = await getJSON<ApiSyncStatus>(`/devices/${encodeURIComponent(deviceId)}/sync`)
-  return { device_id: deviceId, last_attempt_at: s.last_attempt_at, last_success_at: s.last_success_at, consecutive_failures: s.consecutive_failures, next_backoff_s: s.next_backoff_ms / 1000, pending_by_priority: s.pending, last_push_bytes: s.last_push?.bytes ?? null, last_push_duration_ms: s.last_push?.duration_ms ?? null, last_push_mode: s.last_push?.mode ?? null, last_pull_at: s.last_pull?.at ?? null, last_pull_points: s.last_pull?.points_received ?? null }
+  return { device_id: deviceId, last_attempt_at: s.last_attempt_at, last_success_at: s.last_success_at, consecutive_failures: s.consecutive_failures, next_backoff_s: s.next_backoff_ms / 1000, pending_by_priority: s.pending, last_push_bytes: s.last_push?.bytes ?? null, last_push_duration_ms: s.last_push?.duration_ms ?? null, last_push_mode: s.last_push?.mode ?? null, last_push_attempted: s.last_push?.points_attempted ?? null, last_push_accepted: s.last_push?.points_accepted ?? null, last_push_failed: s.last_push?.points_failed ?? null, last_pull_at: s.last_pull?.at ?? null, last_pull_points: s.last_pull?.points_received ?? null }
 }
 export async function fetchActivity(deviceId: string, kind?: ActivityKind, limit = 100): Promise<ActivityEntry[]> {
   if (mock.USE_MOCKS) return mock.mockActivity(deviceId).filter((e) => !kind || e.kind === kind).slice(0, limit)

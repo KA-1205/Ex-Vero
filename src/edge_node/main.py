@@ -1161,7 +1161,7 @@ async def set_device_rogue(device_id: str, req: RogueRequest = RogueRequest()):
     else:
         _rogue_devices.discard(device_id)
     activity = log_activity(device_id, "mode_change", f"device rogue mode set to {req.rogue}", None)
-    await _broadcast_device_event(device_id, "activity", activity)
+    _broadcast_device_event(device_id, "activity", activity)
     return {"id": device_id, "rogue": req.rogue}
 
 
@@ -1221,7 +1221,7 @@ async def inject_conflict(req: InjectConflictRequest):
         "explanation": f"Injected conflict across {len(req.assignments)} devices for {req.corroboration_key}",
         "timestamp": now,
     }
-    await _broadcast_consensus_event(consensus_frame)
+    _broadcast_consensus_event(consensus_frame)
     return {"injected": True, "corroboration_key": req.corroboration_key, "consensus": consensus_frame}
 
 
