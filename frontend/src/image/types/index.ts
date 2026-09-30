@@ -88,6 +88,7 @@ export interface SyncStatus {
   consecutive_failures: number; next_backoff_s: number | null
   pending_by_priority: Record<SyncPriority, number>; last_push_bytes: number | null
   last_push_duration_ms: number | null; last_push_mode: NetworkMode | null
+  last_push_attempted: number | null; last_push_accepted: number | null; last_push_failed: number | null
   last_pull_at: string | null; last_pull_points: number | null
 }
 export interface ApiDeviceTelemetry {
