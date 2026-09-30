@@ -127,7 +127,7 @@ def read_cgroup_cpu_pct_delta() -> float:
 
 
 def read_process_rss_mb() -> float:
-    """Read the process RSS (Resident Set Size) in MB from /proc/self/status."""
+    """Read the process RSS (Resident Set Size) in MB from /proc/self/status or Windows API."""
     try:
         with open("/proc/self/status", "r") as f:
             for line in f:
@@ -139,6 +139,40 @@ def read_process_rss_mb() -> float:
                         return rss_kb / 1024.0
     except Exception:
         pass
+
+    # Windows fallback
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            class PMC(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+            pmc = PMC()
+            pmc.cb = ctypes.sizeof(PMC)
+            h = k32.GetCurrentProcess()
+            func = getattr(k32, "K32GetProcessMemoryInfo", None)
+            if func is None:
+                psapi = ctypes.WinDLL("psapi", use_last_error=True)
+                func = psapi.GetProcessMemoryInfo
+            func.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
+            func.restype = wintypes.BOOL
+            if func(h, ctypes.byref(pmc), pmc.cb):
+                return round(pmc.WorkingSetSize / (1024.0 * 1024.0), 2)
+        except Exception:
+            pass
+
     return 0.0
 
 

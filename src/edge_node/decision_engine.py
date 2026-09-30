@@ -173,7 +173,7 @@ def log_decision(device_id: str, payload: Dict[str, Any], verdict: Verdict, reas
         "payload": payload,
         "verdict": verdict,
         "reason": reason,
-        "timestamp": __import__('datetime').datetime.utcnow().isoformat() + "Z"
+        "timestamp": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat().replace('+00:00', 'Z')
     }
     _decision_feed.append(entry)
 
