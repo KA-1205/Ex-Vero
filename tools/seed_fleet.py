@@ -1,40 +1,28 @@
-"""Phase 1 — Device provisioning for the Aegis Edge fleet.
+"""Create persistent local shards for the configured demo fleet."""
 
-Ensures that the demo fleet (cam-01, cam-02, cam-03, dev-01, dev-02, dev-03, dev-04)
-is initialized with persistent local storage, seed metadata, and initial observations
-matching the frontend mock fleet structure.
-"""
-
+import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add project root to sys.path
 root_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root_dir / "src"))
 
-FLEET_DEVICES = [
-    {"id": "cam-01", "name": "Zone A Vision 01", "kind": "vision_camera", "zone": "Zone A"},
-    {"id": "cam-02", "name": "Zone B Vision 02", "kind": "vision_camera", "zone": "Zone B"},
-    {"id": "cam-03", "name": "Zone C Vision 03", "kind": "vision_camera", "zone": "Zone C"},
-    {"id": "dev-01", "name": "Patrol Node Alpha", "kind": "edge_worker", "zone": "Zone A"},
-    {"id": "dev-02", "name": "Patrol Node Beta", "kind": "edge_worker", "zone": "Zone B"},
-    {"id": "dev-03", "name": "Patrol Node Gamma", "kind": "edge_worker", "zone": "Zone C"},
-    {"id": "dev-04", "name": "Patrol Node Delta", "kind": "edge_worker", "zone": "Zone D"},
-]
+async def _seed_fleet_shards():
+    from edge_node.main import DEFAULT_FLEET, app, get_or_create_shards, log_activity
+
+    async with app.router.lifespan_context(app):
+        print(f"Provisioning {len(DEFAULT_FLEET)} fleet devices...")
+        for device in DEFAULT_FLEET:
+            device_id = device["id"]
+            get_or_create_shards(device_id)
+            log_activity(device_id, "mode_change", f"Device {device_id} provisioned", None)
+            print(f"  [+] {device_id} ({device['name']}) ready.")
+        print("All fleet device shards provisioned.")
 
 
 def seed_fleet_shards():
-    print(f"Provisioning {len(FLEET_DEVICES)} fleet devices...")
-    from edge_node.main import get_or_create_shards, log_activity
-
-    for dev in FLEET_DEVICES:
-        dev_id = dev["id"]
-        shards = get_or_create_shards(dev_id)
-        log_activity(dev_id, "provision", f"Device {dev_id} provisioned successfully", None)
-        print(f"  [+] Device {dev_id} ({dev['name']}) ready.")
-
-    print("All fleet devices provisioned.")
+    asyncio.run(_seed_fleet_shards())
 
 
 if __name__ == "__main__":
