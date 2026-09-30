@@ -244,6 +244,19 @@ class NetworkTransport:
         _apply(_byte_len(manifest))
         return self.inner.pull_snapshot(device_id, manifest)
 
+    def retract(self, device_id: str, point_id: int, corroboration_key: Optional[str] = None) -> Dict[str, Any]:
+        request = {"device_id": device_id, "point_id": point_id, "corroboration_key": corroboration_key}
+        _apply(_byte_len(request))
+        return self.inner.retract(device_id, point_id, corroboration_key)
+
+    def get_cloud_state(self) -> Dict[str, Any]:
+        _apply(0)
+        return self.inner.get_cloud_state()
+
+    def inject_conflict(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        _apply(_byte_len(request))
+        return self.inner.inject_conflict(request)
+
 
 # Build the default bucket at import.
 _rebuild_bucket()

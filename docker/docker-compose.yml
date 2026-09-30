@@ -1,13 +1,27 @@
-# Aegis Edge — Phase 3 hub stack: a real Qdrant Server + the Cloud Gateway.
+# Aegis Edge — the full Phase 10 stack, every node under a real budget.
 #
 #   docker compose -f docker/docker-compose.yml up --build
 #
-# Then run the integration test against it:
+# Then run the integration test against the gateway:
 #   GATEWAY_URL=http://localhost:8088 \
 #     .venv/bin/python -m pytest tests/test_sync.py -m integration -q
 #
 # Qdrant is the only datastore; the gateway holds `facts` + `fact_events`
 # collections and nothing else.
+#
+# The edge nodes below are the point of this file: each one is constrained with
+# `--cpus` / `--memory`, so the numbers reported by /telemetry are measurements
+# of a budget that genuinely exists rather than decoration. A container with no
+# limit would report the whole host's cores and RAM as its own, which is how a
+# 64 GB workstation ends up looking like a constrained edge target.
+#
+#   edge-tiny      1 CPU /  512 MB   text embedder only  (config/tiny-edge.yaml)
+#   edge-standard  2 CPU / 2048 MB   full model set
+#   edge-large     4 CPU / 4096 MB   full model set
+#
+# Query each node's honest self-report with:
+#   .venv/bin/python -c "import json,urllib.request as u; \
+#     print(json.load(u.urlopen('http://localhost:8000/devices/dev-01/telemetry')))"
 
 services:
   qdrant:
@@ -37,5 +51,72 @@ services:
       qdrant:
         condition: service_healthy
 
+  # Local answer generator. The edge nodes reach it by service name; the
+  # image itself is pulled on first use (`docker compose exec ollama pull ...`).
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+
+  # 1 CPU / 512 MB. This is the node the Phase 10 acceptance criterion is
+  # written against, and the one config/tiny-edge.yaml exists for: the full
+  # model set does not fit in 512 MB and the container would be OOM-killed
+  # before answering a query.
+  edge-tiny:
+    build:
+      context: ..
+      dockerfile: docker/edge.Dockerfile
+    environment:
+      EDGE_CONFIG_PATH: /app/config/tiny-edge.yaml
+      EDGE_HUB_URL: "http://gateway:8088"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  # 2 CPU / 2 GB: enough for the full model set (bge-small + CLIP ViT-B/32).
+  edge-standard:
+    build:
+      context: ..
+      dockerfile: docker/edge.Dockerfile
+    environment:
+      EDGE_HUB_URL: "http://gateway:8088"
+    ports:
+      - "8001:8000"
+    depends_on:
+      - gateway
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+
+  # 4 CPU / 4 GB: a roomier Pi-class node, same code, same config.
+  edge-large:
+    build:
+      context: ..
+      dockerfile: docker/edge.Dockerfile
+    environment:
+      EDGE_HUB_URL: "http://gateway:8088"
+    ports:
+      - "8002:8000"
+    depends_on:
+      - gateway
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+
 volumes:
   qdrant_storage:
+  ollama_models:

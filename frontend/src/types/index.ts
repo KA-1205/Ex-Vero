@@ -13,6 +13,7 @@ export interface ApiDevice {
   id: string; name: string; connectivity: ApiConnectivity
   memory: { used: number; cap: number }; last_sync_at: string | null
   trust: number; activity_sparkline: number[]
+  kind?: string; zone?: string; latitude?: number; longitude?: number
 }
 export interface DeviceSummary {
   id: string; name: string; kind: string; connectivity: ConnectivityState
