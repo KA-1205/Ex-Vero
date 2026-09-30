@@ -545,24 +545,8 @@ def inject_conflict(req: InjectConflictRequest) -> Dict[str, Any]:
 
 
 @app.get("/cloud/state")
-def cloud_state() -> Dict[str, Any]:
-    """Merged trusted fleet state across all corroboration keys (API.md §8).
-
-    Exposes facts formatted for the ApiCloudFact frontend contract:
-    {
-      "facts": [
-        {
-          "corroboration_key": str,
-          "state": "CONFIRMED" | "DISPUTED",
-          "value": str,
-          "confidence": float,
-          "corroborating_devices": list[str],
-          "updated_at": str (ISO 8601)
-        }
-      ],
-      "device_trust": {device_id: score}
-    }
-    """
+def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
+    """Merged trusted fleet state across all corroboration keys (API.md §8)."""
     all_events: List[Dict[str, Any]] = []
     if client.collection_exists(EVENTS_COLLECTION):
         offset = None
@@ -606,6 +590,14 @@ def cloud_state() -> Dict[str, Any]:
         else:
             updated_at = datetime.now(timezone.utc).isoformat()
 
+        item_mod = latest_evt.get("modality", "vision" if any(d.startswith("cam-") for d in corrob) else "text")
+        thumb = latest_evt.get("thumbnail_url")
+        if modality:
+            if modality == "vision" and item_mod != "vision" and not thumb:
+                continue
+            elif modality != "vision" and item_mod != modality:
+                continue
+
         facts.append({
             "corroboration_key": k,
             "state": st,
@@ -613,6 +605,8 @@ def cloud_state() -> Dict[str, Any]:
             "confidence": folded.get("confidence", 0.0),
             "corroborating_devices": sorted(corrob),
             "updated_at": updated_at,
+            "modality": item_mod,
+            "thumbnail_url": thumb,
         })
 
     device_trust = derive_device_trust(

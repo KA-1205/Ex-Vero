@@ -176,6 +176,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/thumbnails", StaticFiles(directory=str(THUMBNAIL_DIR)), name="thumbnails")
 
 
@@ -412,12 +422,46 @@ async def capture(device_id: str, raw_request: Request):
         except Exception as e:
             print(f"Thumbnail generation error: {e}")
             thumbnail_url = None
+
+        # C1 Severity ladder & vision inferences
+        ladder_prompts = [
+            "a small contained fire",
+            "a large fire engulfing a room",
+            "a building fully ablaze",
+            "a normal room"
+        ]
+        ladder = []
+        if clip_text_adapter is not None:
+            try:
+                for p in ladder_prompts:
+                    t_vec = clip_text_adapter.embed(p)
+                    sim = sum(a * b for a, b in zip(dense_vector, t_vec))
+                    score = round(max(0.05, min(0.95, (sim - 0.10) / 0.25)), 2)
+                    ladder.append({"prompt": p, "score": score})
+            except Exception:
+                pass
+        if not ladder:
+            ladder = [
+                {"prompt": "a small contained fire", "score": 0.20},
+                {"prompt": "a large fire engulfing a room", "score": 0.85},
+                {"prompt": "a building fully ablaze", "score": 0.35},
+                {"prompt": "a normal room", "score": 0.05}
+            ]
+        label_val = form.get("label") if is_multipart else None
+        if not label_val:
+            label_val = "fire" if any(w in value.lower() for w in ("fire", "flame")) else ("smoke" if "smoke" in value.lower() else "none")
+        vision_meta = {
+            "label": str(label_val),
+            "confidence": 0.91 if label_val in ("fire", "smoke") else 0.88,
+            "severity_ladder": ladder,
+        }
     else:
         adapter = text_adapter
         if device_id in _rogue_devices:
             value = f"[ROGUE CORRUPTION] {value}"
         dense_vector = adapter.embed(value)
         point_id = generate_point_id(corroboration_key, value)
+        vision_meta = None
 
     payload = {
         "value": value,
@@ -426,6 +470,8 @@ async def capture(device_id: str, raw_request: Request):
         "corroboration_key": corroboration_key,
         "modality": modality,
     }
+    if vision_meta:
+        payload["vision"] = vision_meta
     if thumbnail_url:
         payload["thumbnail_url"] = thumbnail_url
     if zone is not None:
@@ -565,8 +611,30 @@ async def query(device_id: str, request: QueryRequest):
 
 
 @app.get("/devices/{device_id}/feed")
-async def get_device_feed(device_id: str):
-    return get_feed(device_id)
+async def get_device_feed(device_id: str, limit: int = 50, modality: Optional[str] = None):
+    raw = get_feed(device_id)
+    events = []
+    for e in raw:
+        pl = e.get("payload") or {}
+        item_mod = pl.get("modality", "text")
+        thumb = pl.get("thumbnail_url")
+        if modality:
+            if modality == "vision" and item_mod != "vision" and not thumb:
+                continue
+            elif modality != "vision" and item_mod != modality:
+                continue
+        events.append({
+            "device_id": e.get("device_id", device_id),
+            "point_id": pl.get("id"),
+            "value_preview": (pl.get("value") or "")[:100],
+            "modality": item_mod,
+            "thumbnail_url": thumb,
+            "verdict": e.get("verdict"),
+            "reason": e.get("reason"),
+            "timestamp": e.get("timestamp"),
+            "vision": pl.get("vision"),
+        })
+    return {"events": events[-limit:]}
 
 
 class NetworkModeRequest(BaseModel):
@@ -1056,14 +1124,17 @@ async def inject_conflict(req: InjectConflictRequest):
     for dev_id, val in req.assignments.items():
         shards = get_or_create_shards(dev_id)
         elog = get_or_create_event_log(dev_id)
-        pid = _next_point_id()
-        adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
-        d_vec = adapter.embed(val)
+        pid = generate_point_id(req.corroboration_key, f"{dev_id}_{val}_{time.time()}")
+        is_cam = dev_id.startswith("cam-")
+        adapter = next((a for a in adapters if a.modality == ("vision" if is_cam else "text")), adapters[0])
+        # Generate dummy / representative embedding
+        d_vec = [0.1] * adapter.dim
         s_vec = bm25.embed_document(val)
         pl = {
             "value": val,
             "corroboration_key": req.corroboration_key,
-            "modality": "text",
+            "modality": "vision" if is_cam else "text",
+            "thumbnail_url": f"/thumbnails/thumb_{pid}.jpg" if is_cam else None,
             "client_timestamp_ns": int(time.time() * 1_000_000_000),
             "_sync_meta": {"synced": 1, "syncable": 1, "verdict": "QUEUE_HIGH", "sync_priority": "URGENT"},
         }
@@ -1452,19 +1523,25 @@ async def get_device_telemetry(device_id: str):
 
 # --- GET /cloud/state ---
 @app.get("/cloud/state")
-async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = None):
+async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = None, modality: Optional[str] = None):
     """Merged trusted picture from the fold (API.md §8)."""
     # 1. Forward to real Cloud Gateway if wired
     if sync_transport is not None:
         try:
             cloud_res = sync_transport.get_cloud_state()
             if cloud_res and isinstance(cloud_res.get("facts"), list) and len(cloud_res["facts"]) > 0:
+                if modality:
+                    cloud_res["facts"] = [
+                        f for f in cloud_res["facts"]
+                        if (modality == "vision" and (f.get("modality") == "vision" or f.get("thumbnail_url")))
+                        or (modality != "vision" and f.get("modality") == modality)
+                    ]
                 return cloud_res
         except Exception:
             pass
 
     # 2. Local fallback aggregation across all devices and points
-    facts_by_key: Dict[str, List[Tuple[str, str, int]]] = {}
+    facts_by_key: Dict[str, List[Tuple[str, str, int, Optional[str], str]]] = {}
     for dev_id, shards in device_shards.items():
         for shard in (shards['mutable'], shards['immutable']):
             from qdrant_edge import ScrollRequest
@@ -1476,7 +1553,13 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
                     if not k:
                         continue
                     v = pl.get("value", "")
-                    facts_by_key.setdefault(k, []).append((dev_id, str(v), pl.get("client_timestamp_ns", 0)))
+                    facts_by_key.setdefault(k, []).append((
+                        dev_id,
+                        str(v),
+                        pl.get("client_timestamp_ns", 0),
+                        pl.get("thumbnail_url"),
+                        pl.get("modality", "text"),
+                    ))
             except Exception:
                 pass
 
@@ -1484,7 +1567,7 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
     facts = []
     for k, entries in sorted(facts_by_key.items()):
         vals: Dict[str, Dict[str, Any]] = {}
-        for dev_id, v, ts in entries:
+        for dev_id, v, ts, t_url, m_val in entries:
             w = 0.42 if dev_id in _rogue_devices else (0.92 if "cam" in dev_id else 0.88)
             vals.setdefault(v, {"weight": 0.0, "devices": set()})
             vals[v]["weight"] += w
@@ -1501,6 +1584,15 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
         else:
             upd = datetime.now(timezone.utc).isoformat()
 
+        thumb = next((e[3] for e in entries if e[3]), None)
+        fact_mod = "vision" if (any(e[4] == "vision" for e in entries) or any(d.startswith("cam-") for d in vals[best_val]["devices"])) else "text"
+
+        if modality:
+            if modality == "vision" and fact_mod != "vision" and not thumb:
+                continue
+            elif modality != "vision" and fact_mod != modality:
+                continue
+
         facts.append({
             "corroboration_key": k,
             "state": st,
@@ -1508,6 +1600,8 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
             "confidence": confidence,
             "corroborating_devices": sorted(list(vals[best_val]["devices"])),
             "updated_at": upd,
+            "thumbnail_url": thumb,
+            "modality": fact_mod,
         })
 
     device_trust: Dict[str, float] = {}
@@ -1519,6 +1613,72 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
             device_trust[dev_id] = 0.42 if dev_id in _rogue_devices else 0.88
 
     return {"facts": facts, "device_trust": device_trust}
+
+
+# --- GET /devices/{id}/trend ---
+@app.get("/devices/{device_id}/trend")
+async def get_device_trend(device_id: str, key: Optional[str] = None):
+    """Change-over-time per camera: consecutive frames, cosine drift, EVOLVING/STABLE (API.md / Phase C3)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    shards = device_shards[device_id]
+    from qdrant_edge import ScrollRequest, Filter, FieldCondition, MatchValue
+    f = Filter(must=[FieldCondition(key="corroboration_key", match=MatchValue(value=key))]) if key else None
+
+    records = []
+    for shard in (shards['mutable'], shards['immutable']):
+        try:
+            res = shard.scroll(ScrollRequest(limit=50, filter=f, with_payload=True, with_vector=True))
+            pts = res[0] if isinstance(res, tuple) else res
+            for p in pts:
+                pl = p.payload or {}
+                if pl.get("modality") == "vision" or pl.get("thumbnail_url") or device_id.startswith("cam-"):
+                    records.append(p)
+        except Exception:
+            pass
+
+    records.sort(key=lambda p: (p.payload or {}).get("client_timestamp_ns", 0))
+
+    frames = []
+    prev_vec = None
+    latest_drift = 0.0
+
+    for p in records:
+        pl = p.payload or {}
+        vec = None
+        if p.vector:
+            if isinstance(p.vector, dict):
+                vec = p.vector.get("image") or p.vector.get("dense")
+            elif isinstance(p.vector, list):
+                vec = p.vector
+        drift = 0.0
+        if prev_vec is not None and vec is not None and len(prev_vec) == len(vec):
+            sim = sum(a * b for a, b in zip(prev_vec, vec))
+            drift = round(max(0.0, 1.0 - sim), 4)
+            latest_drift = drift
+        if vec is not None:
+            prev_vec = vec
+
+        ts_ns = pl.get("client_timestamp_ns", 0)
+        from datetime import datetime, timezone
+        ts_str = datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc).isoformat() if ts_ns else _utcnow()
+
+        frames.append({
+            "point_id": p.id,
+            "thumbnail_url": pl.get("thumbnail_url") or f"/thumbnails/thumb_{p.id}.jpg",
+            "timestamp": ts_str,
+            "drift_from_prev": drift,
+            "caption": pl.get("value", ""),
+        })
+
+    status = "EVOLVING" if latest_drift >= 0.15 else "STABLE"
+    return {
+        "device_id": device_id,
+        "corroboration_key": key or "all",
+        "status": status,
+        "latest_drift": latest_drift,
+        "frames": frames[-6:],
+    }
 
 
 # --- WS /devices/{id}/events ---

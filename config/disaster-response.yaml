@@ -87,3 +87,17 @@ network:
 # The UI shows used/cap so eviction is visibly working (backend.md §5).
 memory:
   max_local_points: 500
+
+vision:
+  severity_prompts:
+    - prompt: "a small contained fire"
+    - prompt: "a large fire engulfing a room"
+    - prompt: "a building fully ablaze"
+    - prompt: "a normal room"
+  labels:
+    - label: "fire"
+      prompt: "a photo of flames or fire"
+    - label: "smoke"
+      prompt: "a photo of smoke pooling"
+    - label: "none"
+      prompt: "a photo of a clear room with no hazard"

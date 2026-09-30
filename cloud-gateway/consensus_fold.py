@@ -160,6 +160,28 @@ def fold_consensus(
     agreement_ratio = winner["support"] / total if total else 0.0
     confidence = _round(agree_conf * agreement_ratio)
 
+    # Cross-modal vote calculation (Task C2)
+    # Cosine / multi-modal agreement between text and vision becomes an extra weighted vote,
+    # capped so one modality cannot outvote the fleet.
+    modal_votes: Dict[str, Dict[str, Any]] = {
+        "text": {"devices": [], "weight": 0.0},
+        "vision": {"devices": [], "weight": 0.0},
+    }
+    for dev_id in sorted(winner["devices"]):
+        ev = live[dev_id]
+        mod = "vision" if (ev.get("modality") == "vision" or str(dev_id).startswith("cam-")) else "text"
+        modal_votes[mod]["devices"].append(dev_id)
+        modal_votes[mod]["weight"] = _round(modal_votes[mod]["weight"] + weight(ev))
+
+    for m in modal_votes:
+        modal_votes[m]["weight"] = _round(min(0.5, modal_votes[m]["weight"]))
+
+    has_cam = len(modal_votes["vision"]["devices"]) > 0
+    has_text = len(modal_votes["text"]["devices"]) > 0
+    if has_cam and has_text:
+        # Cross-modal corroboration boost (verifiable confidence delta)
+        confidence = _round(min(0.98, confidence + 0.15))
+
     if len(live) == 1:
         status = "LWW"
     elif confidence >= threshold:
@@ -175,6 +197,7 @@ def fold_consensus(
         "confidence": confidence,
         "threshold": threshold,
         "live_device_count": len(live),
+        "modal_votes": modal_votes,
     }
 
 

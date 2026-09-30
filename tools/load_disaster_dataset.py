@@ -62,29 +62,30 @@ def main(limit: int = 2000):
     print(f"Using column: {text_col}")
 
     rows = df[text_col].dropna().tolist()
-    random.shuffle(rows)
-    rows = rows[:limit]
+    import hashlib
 
-    per_device = math.ceil(len(rows) / len(DEVICES))
+    # Stable deterministic ordering and assignment based on sha256 hash (Task B4)
+    rows = sorted(rows, key=lambda t: hashlib.sha256(str(t).encode()).hexdigest())[:limit]
+
     total_captured = 0
     errors = 0
 
-    for i, device_id in enumerate(DEVICES):
-        chunk = rows[i * per_device:(i + 1) * per_device]
-        zone = ZONES[i % len(ZONES)]
-        print(f"\n[{device_id}] Ingesting {len(chunk)} messages into {zone}…")
-        for j, text in enumerate(chunk):
-            cat = DISASTER_CATEGORIES[j % len(DISASTER_CATEGORIES)]
-            key = f"{zone}.{cat}"
-            try:
-                res = capture(device_id, key, str(text)[:500])
-                total_captured += 1
-                if (j + 1) % 100 == 0:
-                    print(f"  {j+1}/{len(chunk)} — last verdict: {res.get('verdict', '?')}")
-            except Exception as e:
-                errors += 1
-                if errors <= 5:
-                    print(f"  [!] Error at {j}: {e}")
+    print(f"\nIngesting {len(rows)} messages deterministically across {len(DEVICES)} devices...")
+    for j, text in enumerate(rows):
+        h = int(hashlib.sha256(str(text).encode()).hexdigest(), 16)
+        device_id = DEVICES[h % len(DEVICES)]
+        zone = ZONES[(h // len(DEVICES)) % len(ZONES)]
+        cat = DISASTER_CATEGORIES[(h // (len(DEVICES) * len(ZONES))) % len(DISASTER_CATEGORIES)]
+        key = f"{zone}.{cat}"
+        try:
+            res = capture(device_id, key, str(text)[:500])
+            total_captured += 1
+            if (j + 1) % 100 == 0:
+                print(f"  {j+1}/{len(rows)} on {device_id} ({zone}) — last verdict: {res.get('verdict', '?')}")
+        except Exception as e:
+            errors += 1
+            if errors <= 5:
+                print(f"  [!] Error at {j}: {e}")
 
     print(f"\nDone. Captured {total_captured} points across {len(DEVICES)} devices. Errors: {errors}")
 
