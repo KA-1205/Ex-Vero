@@ -59,7 +59,7 @@ export function QAPanel({ deviceId }: { deviceId: string }) {
                   <div>{source.value}</div>
                 </div>)}
               </div>}
-              {h.results.length > 0 && <details className="mb-2 text-[11px] text-ink-dim"><summary className="cursor-pointer font-mono text-ink-faint">{h.results.length} RETRIEVED RESULTS</summary>{h.results.map((result) => <div key={result.id} className="border-t border-line py-1">#{result.id} · {result.value} <span className="font-mono">{result.score?.toFixed(4)}</span></div>)}</details>}
+              {h.results.length > 0 && <details className="mb-2 text-[11px] text-ink-dim"><summary className="cursor-pointer font-mono text-ink-faint">{h.results.length} RETRIEVED RESULTS</summary>{h.results.map((result) => <div key={result.id} className="border-t border-line py-1">#{result.id} · {result.value ?? result.payload?.value ?? ''} <span className="font-mono">{result.score?.toFixed(4)}</span></div>)}</details>}
               <div className="flex items-center justify-between text-[11px]">
                 <span
                   className={`font-mono px-1.5 py-0.5 border ${

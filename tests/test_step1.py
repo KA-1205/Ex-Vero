@@ -3,6 +3,8 @@ import tempfile
 import shutil
 from fastapi.testclient import TestClient
 import sys
+
+import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import edge_node.main as main
 from edge_node.main import generate_point_id
@@ -460,6 +462,18 @@ def test_trust_decay_from_config():
 
 
 def test_resolver_beats_lww_benchmark():
+    """Phase 9 replaced this endpoint's contract with a real measurement.
+
+    It used to return a trust-score trajectory (`resolver_1obs`, `lww_1obs`,
+    ...) built from five synthetic observations, which could not support an
+    accuracy claim. It now scores the real fold against a real LWW baseline over
+    the labeled dispute fixture, so the assertion is on measured accuracy.
+
+    The corroboration property the old test checked — resolver trust climbs with
+    corroborating reports while LWW stays flat — is a fact about
+    `fold_trust`/`lww_trust` rather than about the endpoint, so it is now
+    asserted directly in `test_resolver_trust_grows_with_corroboration`.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         old_cwd = os.getcwd()
         os.chdir(tmpdir)
@@ -469,17 +483,46 @@ def test_resolver_beats_lww_benchmark():
             resp = client.get("/benchmark/resolver-vs-lww")
             assert resp.status_code == 200
             data = resp.json()
-            # LWW is flat 1.0 regardless of corroboration count.
-            assert data["lww_1obs"] == 1.0
-            assert data["lww_5obs"] == 1.0
-            assert data["lww_gain_from_corroboration"] == 0.0
-            # Resolver confidence climbs with corroboration.
-            assert data["resolver_5obs"] > data["resolver_1obs"]
-            assert data["resolver_gain_from_corroboration"] > 0.0
-            # The whole point: resolver distinguishes corroboration, LWW cannot.
-            assert data["resolver_distinguishes_corroboration"] is True
+
+            # The headline claim, now backed by counted scenarios.
+            assert data["scenarios"] >= 30
+            assert data["resolver_accuracy"] > data["lww_accuracy"]
+
+            # The numbers must be derived from the counts they summarize, so a
+            # hand-tuned float cannot pass as a measurement.
+            assert data["resolver_correct"] <= data["scenarios"]
+            assert data["lww_correct"] <= data["scenarios"]
+            assert data["resolver_accuracy"] == pytest.approx(
+                round(data["resolver_correct"] / data["scenarios"], 4)
+            )
+            assert data["lww_accuracy"] == pytest.approx(
+                round(data["lww_correct"] / data["scenarios"], 4)
+            )
         finally:
             os.chdir(old_cwd)
+
+
+def test_resolver_trust_grows_with_corroboration():
+    """Resolver trust rises with corroboration; LWW cannot see corroboration.
+
+    Preserved from the old benchmark test, which asserted this through the
+    endpoint's response body. It is a property of the trust functions, so it is
+    tested where it actually lives.
+    """
+    from edge_node.consensus import fold_trust, lww_trust, OBSERVED
+
+    events = [
+        {"point_id": 1, "event_type": OBSERVED, "seq": i, "device_ts": str(i)}
+        for i in range(1, 6)
+    ]
+    resolver = [fold_trust(events[:n], decay=0.3) for n in range(1, 6)]
+    lww = [lww_trust(events[:n]) for n in range(1, 6)]
+
+    assert resolver[-1] > resolver[0], "resolver trust must climb with corroboration"
+    assert all(b > a for a, b in zip(resolver, resolver[1:])), (
+        "resolver trust must climb monotonically"
+    )
+    assert lww == [1.0] * 5, "LWW is blind to corroboration and stays flat at 1.0"
 
 
 def test_lww_baseline_unit():
