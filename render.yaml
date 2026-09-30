@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: ex-vero-gateway
+    runtime: python
+    buildCommand: pip install -r cloud-gateway/requirements.txt
+    startCommand: uvicorn app:app --app-dir cloud-gateway --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+
+  - type: web
+    name: ex-vero-edge
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn edge_node.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONPATH
+        value: src
+      - key: EDGE_HUB_URL
+        fromService:
+          type: web
+          name: ex-vero-gateway
+          property: host
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  - type: static
+    name: ex-vero-frontend
+    buildCommand: npm ci --prefix frontend && npm run build --prefix frontend
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: ex-vero-edge
+          property: host
+      - key: VITE_WS_BASE_URL
+        fromService:
+          type: web
+          name: ex-vero-edge
+          property: host
