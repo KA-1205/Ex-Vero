@@ -112,6 +112,56 @@ docker compose -f docker/docker-compose.yml down -v       # wipe volumes
 
 ---
 
+## Deploying to Vercel
+
+`vercel.json` defines two services: `frontend` at `/` and `cloud-gateway` at
+`/gateway/*`. Everything else stays local.
+
+**The edge node is not deployed, on purpose.** Its facts live in an on-disk
+Qdrant Edge shard (`SHARD_BASE_PATH = "./shards"`) and it serves the decision
+feed over WebSockets. A serverless function has no persistent filesystem and
+no WebSocket support, so a deployed node would come up empty on every cold
+start. Docker it instead.
+
+That leaves this topology, which does work:
+
+| Piece | Where | Talks to |
+| --- | --- | --- |
+| `frontend` | Vercel, `/` | the local node |
+| `cloud-gateway` | Vercel, `/gateway/*` | Qdrant |
+| edge node | local Docker, `:8000` | the deployed gateway |
+
+The browser loads the deployed UI and calls the local node over
+`localhost:8000`, so two settings have to line up.
+
+**1. Let the deployed UI through the node's CORS.** A hardcoded origin list
+would reject the Vercel domain, so the node reads `ALLOWED_ORIGINS` as a
+comma-separated list:
+
+```bash
+# on the machine running the node
+ALLOWED_ORIGINS="https://your-project.vercel.app" \
+EDGE_HUB_URL="https://your-project.vercel.app/gateway" \
+  docker compose -f docker/docker-compose.yml up -d edge-tiny
+```
+
+**2. Point the deployed gateway at a real Qdrant.** The gateway stores nothing
+of its own and deliberately refuses to start without one rather than silently
+dropping writes:
+
+```bash
+QDRANT_URL="https://xyz.cloud.qdrant.io:6333"
+QDRANT_API_KEY="..."   # if your Qdrant requires auth
+```
+
+Set both in the Vercel project's environment variables, not in the repo.
+`OLLAMA_ENDPOINT` is the third optional override, for the node's local
+generator when Ollama is not on the same machine.
+
+Run `vercel dev` to exercise all services together before deploying.
+
+---
+
 ## Overview
 
 Edge devices — kiosks, wearables, field tablets, robots — need instant local answers with

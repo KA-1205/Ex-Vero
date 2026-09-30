@@ -221,9 +221,25 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 from fastapi.middleware.cors import CORSMiddleware
+
+# The dashboard runs on a different origin from the node, so the browser needs
+# permission to read the API. Localhost is fine for development but meaningless
+# once deployed: the served origin is whatever domain the deployment is on, and
+# a hardcoded list would silently block the real UI. DEPLOY_ORIGINS carries the
+# comma-separated origins to allow in addition to the local ones.
+_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+for _origin in (os.environ.get("ALLOWED_ORIGINS") or "").split(","):
+    _origin = _origin.strip()
+    if _origin and _origin not in _ALLOWED_ORIGINS:
+        _ALLOWED_ORIGINS.append(_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

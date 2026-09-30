@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    },
+    "cloud-gateway": {
+      "root": "cloud-gateway",
+      "framework": "fastapi",
+      "entrypoint": "app.py"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/gateway/(.*)",
+      "destination": {
+        "service": "cloud-gateway"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}

@@ -6,6 +6,8 @@ model is a one-line config edit.
 """
 from typing import List
 
+import os
+
 import yaml
 
 from .adapter import (
@@ -43,7 +45,12 @@ def build_generators(config: dict) -> list:
             return None
         return OllamaGenerator(
             model=spec.get("model", "qwen2.5:1.5b"),
-            endpoint=spec.get("endpoint", "http://localhost:11434"),
+            # The config names the endpoint, but a deployed node has no
+            # localhost to reach: OLLAMA_ENDPOINT points it at wherever the
+            # model actually lives. The config value is the fallback, not a
+            # hardcoded host.
+            endpoint=os.environ.get("OLLAMA_ENDPOINT")
+            or spec.get("endpoint", "http://localhost:11434"),
             version=spec.get("version"),
         )
 
