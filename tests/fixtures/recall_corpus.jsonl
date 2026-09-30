@@ -1,0 +1,1000 @@
+{"doc_id": 1, "text": "Cylinder asset SN-9209DCB4 hydrostatic test at Staging Yard B: measured 196.2 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 2, "text": "Cylinder asset SN-9209DCB4 leak test at Dock B Annex: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 3, "text": "Cylinder asset SN-9209DCB4 valve test at Pier 2 Warehouse: measured 57.24 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 4, "text": "Cylinder asset SN-9209DCB4 seal test at Refuge Hall C: measured 9.69 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 5, "text": "Cylinder asset SN-9209DCB4 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 6, "text": "Cylinder asset SN-68E07E03 hydrostatic test at Staging Yard B: measured 138.6 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 7, "text": "Cylinder asset SN-68E07E03 leak test at Pier 2 Warehouse: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 8, "text": "Cylinder asset SN-68E07E03 valve test at Pier 2 Warehouse: measured 43.54 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 9, "text": "Cylinder asset SN-68E07E03 seal test at Staging Yard B: measured 13.6 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 10, "text": "Cylinder asset SN-68E07E03 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 11, "text": "Cylinder asset SN-2FD0DB16 hydrostatic test at Pier 2 Warehouse: measured 209.47 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 12, "text": "Cylinder asset SN-2FD0DB16 leak test at Tank Farm: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 13, "text": "Cylinder asset SN-2FD0DB16 valve test at Tank Farm: measured 70.33 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 14, "text": "Cylinder asset SN-2FD0DB16 seal test at Dock B Annex: measured 8.9 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 15, "text": "Cylinder asset SN-2FD0DB16 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 16, "text": "Cylinder asset SN-1B56BB9A hydrostatic test at Pier 2 Warehouse: measured 184.63 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 17, "text": "Cylinder asset SN-1B56BB9A leak test at Staging Yard B: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 18, "text": "Cylinder asset SN-1B56BB9A valve test at Pier 2 Warehouse: measured 53.41 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 19, "text": "Cylinder asset SN-1B56BB9A seal test at Staging Yard B: measured 10.89 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 20, "text": "Cylinder asset SN-1B56BB9A thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 21, "text": "Cylinder asset SN-2F5FE555 hydrostatic test at Staging Yard B: measured 171.51 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 22, "text": "Cylinder asset SN-2F5FE555 leak test at Refuge Hall C: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 23, "text": "Cylinder asset SN-2F5FE555 valve test at Tank Farm: measured 64.99 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 24, "text": "Cylinder asset SN-2F5FE555 seal test at Tank Farm: measured 10.77 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 25, "text": "Cylinder asset SN-2F5FE555 thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 26, "text": "Cylinder asset SN-A6323D18 hydrostatic test at Dock B Annex: measured 161.17 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 27, "text": "Cylinder asset SN-A6323D18 leak test at Dock B Annex: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 28, "text": "Cylinder asset SN-A6323D18 valve test at Tank Farm: measured 73.58 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 29, "text": "Cylinder asset SN-A6323D18 seal test at Dock B Annex: measured 10.71 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 30, "text": "Cylinder asset SN-A6323D18 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 31, "text": "Cylinder asset SN-8A3B99E6 hydrostatic test at Staging Yard B: measured 172.39 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 32, "text": "Cylinder asset SN-8A3B99E6 leak test at Tank Farm: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 33, "text": "Cylinder asset SN-8A3B99E6 valve test at Pier 2 Warehouse: measured 48.85 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 34, "text": "Cylinder asset SN-8A3B99E6 seal test at Pier 2 Warehouse: measured 10.32 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 35, "text": "Cylinder asset SN-8A3B99E6 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 36, "text": "Cylinder asset SN-8433F7A4 hydrostatic test at Tank Farm: measured 172.54 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 37, "text": "Cylinder asset SN-8433F7A4 leak test at Dock B Annex: measured 0.42 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 38, "text": "Cylinder asset SN-8433F7A4 valve test at Staging Yard B: measured 65.47 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 39, "text": "Cylinder asset SN-8433F7A4 seal test at Pier 2 Warehouse: measured 9.66 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 40, "text": "Cylinder asset SN-8433F7A4 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 41, "text": "Cylinder asset SN-3C5E11DC hydrostatic test at Refuge Hall C: measured 153.69 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 42, "text": "Cylinder asset SN-3C5E11DC leak test at Refuge Hall C: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 43, "text": "Cylinder asset SN-3C5E11DC valve test at Dock B Annex: measured 60.34 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 44, "text": "Cylinder asset SN-3C5E11DC seal test at Pier 2 Warehouse: measured 13.79 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 45, "text": "Cylinder asset SN-3C5E11DC thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 46, "text": "Cylinder asset SN-057071E2 hydrostatic test at Staging Yard B: measured 138.13 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 47, "text": "Cylinder asset SN-057071E2 leak test at Tank Farm: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 48, "text": "Cylinder asset SN-057071E2 valve test at Staging Yard B: measured 64.85 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 49, "text": "Cylinder asset SN-057071E2 seal test at Pier 2 Warehouse: measured 14.76 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 50, "text": "Cylinder asset SN-057071E2 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 51, "text": "Cylinder asset SN-B0CF6128 hydrostatic test at Tank Farm: measured 164.79 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 52, "text": "Cylinder asset SN-B0CF6128 leak test at Tank Farm: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 53, "text": "Cylinder asset SN-B0CF6128 valve test at Refuge Hall C: measured 55.48 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 54, "text": "Cylinder asset SN-B0CF6128 seal test at Dock B Annex: measured 15.34 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 55, "text": "Cylinder asset SN-B0CF6128 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 56, "text": "Cylinder asset SN-E6E96235 hydrostatic test at Dock B Annex: measured 196.66 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 57, "text": "Cylinder asset SN-E6E96235 leak test at Staging Yard B: measured 0.32 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 58, "text": "Cylinder asset SN-E6E96235 valve test at Staging Yard B: measured 53.5 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 59, "text": "Cylinder asset SN-E6E96235 seal test at Refuge Hall C: measured 13.43 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 60, "text": "Cylinder asset SN-E6E96235 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 61, "text": "Cylinder asset SN-783D50EA hydrostatic test at Refuge Hall C: measured 151.18 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 62, "text": "Cylinder asset SN-783D50EA leak test at Refuge Hall C: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 63, "text": "Cylinder asset SN-783D50EA valve test at Tank Farm: measured 43.81 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 64, "text": "Cylinder asset SN-783D50EA seal test at Pier 2 Warehouse: measured 10.65 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 65, "text": "Cylinder asset SN-783D50EA thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 66, "text": "Cylinder asset SN-D5D279DD hydrostatic test at Refuge Hall C: measured 143.03 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 67, "text": "Cylinder asset SN-D5D279DD leak test at Dock B Annex: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 68, "text": "Cylinder asset SN-D5D279DD valve test at Refuge Hall C: measured 67.93 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 69, "text": "Cylinder asset SN-D5D279DD seal test at Refuge Hall C: measured 8.53 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 70, "text": "Cylinder asset SN-D5D279DD thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 71, "text": "Cylinder asset SN-919304AD hydrostatic test at Pier 2 Warehouse: measured 194.75 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 72, "text": "Cylinder asset SN-919304AD leak test at Pier 2 Warehouse: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 73, "text": "Cylinder asset SN-919304AD valve test at Tank Farm: measured 55.91 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 74, "text": "Cylinder asset SN-919304AD seal test at Pier 2 Warehouse: measured 15.33 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 75, "text": "Cylinder asset SN-919304AD thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 76, "text": "Cylinder asset SN-752A37FE hydrostatic test at Dock B Annex: measured 218.91 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 77, "text": "Cylinder asset SN-752A37FE leak test at Pier 2 Warehouse: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 78, "text": "Cylinder asset SN-752A37FE valve test at Refuge Hall C: measured 55.03 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 79, "text": "Cylinder asset SN-752A37FE seal test at Staging Yard B: measured 11.58 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 80, "text": "Cylinder asset SN-752A37FE thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 81, "text": "Cylinder asset SN-80AC04C6 hydrostatic test at Dock B Annex: measured 230.79 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 82, "text": "Cylinder asset SN-80AC04C6 leak test at Staging Yard B: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 83, "text": "Cylinder asset SN-80AC04C6 valve test at Tank Farm: measured 79.35 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 84, "text": "Cylinder asset SN-80AC04C6 seal test at Tank Farm: measured 11.51 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 85, "text": "Cylinder asset SN-80AC04C6 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 86, "text": "Cylinder asset SN-05ED2D8F hydrostatic test at Refuge Hall C: measured 223.66 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 87, "text": "Cylinder asset SN-05ED2D8F leak test at Staging Yard B: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 88, "text": "Cylinder asset SN-05ED2D8F valve test at Staging Yard B: measured 62.13 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 89, "text": "Cylinder asset SN-05ED2D8F seal test at Dock B Annex: measured 10.8 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 90, "text": "Cylinder asset SN-05ED2D8F thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 91, "text": "Cylinder asset SN-598271FC hydrostatic test at Pier 2 Warehouse: measured 157.21 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 92, "text": "Cylinder asset SN-598271FC leak test at Dock B Annex: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 93, "text": "Cylinder asset SN-598271FC valve test at Tank Farm: measured 51.06 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 94, "text": "Cylinder asset SN-598271FC seal test at Refuge Hall C: measured 13.5 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 95, "text": "Cylinder asset SN-598271FC thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 96, "text": "Cylinder asset SN-0ED9ADB9 hydrostatic test at Pier 2 Warehouse: measured 202.36 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 97, "text": "Cylinder asset SN-0ED9ADB9 leak test at Staging Yard B: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 98, "text": "Cylinder asset SN-0ED9ADB9 valve test at Staging Yard B: measured 72.66 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 99, "text": "Cylinder asset SN-0ED9ADB9 seal test at Staging Yard B: measured 15.2 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 100, "text": "Cylinder asset SN-0ED9ADB9 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 101, "text": "Cylinder asset SN-8A5C1DF8 hydrostatic test at Dock B Annex: measured 180.26 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 102, "text": "Cylinder asset SN-8A5C1DF8 leak test at Pier 2 Warehouse: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 103, "text": "Cylinder asset SN-8A5C1DF8 valve test at Refuge Hall C: measured 51.55 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 104, "text": "Cylinder asset SN-8A5C1DF8 seal test at Refuge Hall C: measured 14.09 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 105, "text": "Cylinder asset SN-8A5C1DF8 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 106, "text": "Cylinder asset SN-82C684B3 hydrostatic test at Dock B Annex: measured 170.41 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 107, "text": "Cylinder asset SN-82C684B3 leak test at Staging Yard B: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 108, "text": "Cylinder asset SN-82C684B3 valve test at Tank Farm: measured 50.14 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 109, "text": "Cylinder asset SN-82C684B3 seal test at Refuge Hall C: measured 9.65 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 110, "text": "Cylinder asset SN-82C684B3 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 111, "text": "Cylinder asset SN-E38E0183 hydrostatic test at Refuge Hall C: measured 233.66 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 112, "text": "Cylinder asset SN-E38E0183 leak test at Refuge Hall C: measured 0.5 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 113, "text": "Cylinder asset SN-E38E0183 valve test at Dock B Annex: measured 63.11 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 114, "text": "Cylinder asset SN-E38E0183 seal test at Dock B Annex: measured 12.23 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 115, "text": "Cylinder asset SN-E38E0183 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 116, "text": "Cylinder asset SN-7F1D286B hydrostatic test at Refuge Hall C: measured 156.25 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 117, "text": "Cylinder asset SN-7F1D286B leak test at Dock B Annex: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 118, "text": "Cylinder asset SN-7F1D286B valve test at Pier 2 Warehouse: measured 50.68 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 119, "text": "Cylinder asset SN-7F1D286B seal test at Tank Farm: measured 15.15 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 120, "text": "Cylinder asset SN-7F1D286B thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 121, "text": "Cylinder asset SN-425CB925 hydrostatic test at Refuge Hall C: measured 176.13 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 122, "text": "Cylinder asset SN-425CB925 leak test at Pier 2 Warehouse: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 123, "text": "Cylinder asset SN-425CB925 valve test at Dock B Annex: measured 53.12 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 124, "text": "Cylinder asset SN-425CB925 seal test at Staging Yard B: measured 8.47 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 125, "text": "Cylinder asset SN-425CB925 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 126, "text": "Cylinder asset SN-1350449F hydrostatic test at Pier 2 Warehouse: measured 201.78 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 127, "text": "Cylinder asset SN-1350449F leak test at Pier 2 Warehouse: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 128, "text": "Cylinder asset SN-1350449F valve test at Dock B Annex: measured 64.34 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 129, "text": "Cylinder asset SN-1350449F seal test at Refuge Hall C: measured 10.01 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 130, "text": "Cylinder asset SN-1350449F thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 131, "text": "Cylinder asset SN-9113A04B hydrostatic test at Pier 2 Warehouse: measured 191.15 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 132, "text": "Cylinder asset SN-9113A04B leak test at Staging Yard B: measured 0.28 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 133, "text": "Cylinder asset SN-9113A04B valve test at Dock B Annex: measured 44.65 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 134, "text": "Cylinder asset SN-9113A04B seal test at Tank Farm: measured 11.54 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 135, "text": "Cylinder asset SN-9113A04B thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 136, "text": "Cylinder asset SN-2566DA7D hydrostatic test at Refuge Hall C: measured 230.33 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 137, "text": "Cylinder asset SN-2566DA7D leak test at Dock B Annex: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 138, "text": "Cylinder asset SN-2566DA7D valve test at Dock B Annex: measured 70.48 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 139, "text": "Cylinder asset SN-2566DA7D seal test at Tank Farm: measured 9.11 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 140, "text": "Cylinder asset SN-2566DA7D thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 141, "text": "Cylinder asset SN-B79E4BC9 hydrostatic test at Staging Yard B: measured 148.03 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 142, "text": "Cylinder asset SN-B79E4BC9 leak test at Dock B Annex: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 143, "text": "Cylinder asset SN-B79E4BC9 valve test at Tank Farm: measured 79.33 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 144, "text": "Cylinder asset SN-B79E4BC9 seal test at Refuge Hall C: measured 11.01 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 145, "text": "Cylinder asset SN-B79E4BC9 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 146, "text": "Cylinder asset SN-1FCB656A hydrostatic test at Staging Yard B: measured 194.1 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 147, "text": "Cylinder asset SN-1FCB656A leak test at Tank Farm: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 148, "text": "Cylinder asset SN-1FCB656A valve test at Tank Farm: measured 45.31 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 149, "text": "Cylinder asset SN-1FCB656A seal test at Tank Farm: measured 9.3 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 150, "text": "Cylinder asset SN-1FCB656A thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 151, "text": "Cylinder asset SN-DD11ADF5 hydrostatic test at Pier 2 Warehouse: measured 167.64 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 152, "text": "Cylinder asset SN-DD11ADF5 leak test at Tank Farm: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 153, "text": "Cylinder asset SN-DD11ADF5 valve test at Pier 2 Warehouse: measured 71.04 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 154, "text": "Cylinder asset SN-DD11ADF5 seal test at Staging Yard B: measured 9.74 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 155, "text": "Cylinder asset SN-DD11ADF5 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 156, "text": "Cylinder asset SN-DB7A19E5 hydrostatic test at Staging Yard B: measured 147.65 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 157, "text": "Cylinder asset SN-DB7A19E5 leak test at Dock B Annex: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 158, "text": "Cylinder asset SN-DB7A19E5 valve test at Dock B Annex: measured 47.06 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 159, "text": "Cylinder asset SN-DB7A19E5 seal test at Refuge Hall C: measured 14.21 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 160, "text": "Cylinder asset SN-DB7A19E5 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 161, "text": "Cylinder asset SN-CBF0D5E6 hydrostatic test at Staging Yard B: measured 170.93 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 162, "text": "Cylinder asset SN-CBF0D5E6 leak test at Pier 2 Warehouse: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 163, "text": "Cylinder asset SN-CBF0D5E6 valve test at Staging Yard B: measured 71.49 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 164, "text": "Cylinder asset SN-CBF0D5E6 seal test at Pier 2 Warehouse: measured 10.61 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 165, "text": "Cylinder asset SN-CBF0D5E6 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 166, "text": "Cylinder asset SN-D2E0CC81 hydrostatic test at Staging Yard B: measured 187.02 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 167, "text": "Cylinder asset SN-D2E0CC81 leak test at Refuge Hall C: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 168, "text": "Cylinder asset SN-D2E0CC81 valve test at Tank Farm: measured 58.36 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 169, "text": "Cylinder asset SN-D2E0CC81 seal test at Tank Farm: measured 12.12 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 170, "text": "Cylinder asset SN-D2E0CC81 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 171, "text": "Cylinder asset SN-1DCB8542 hydrostatic test at Tank Farm: measured 142.09 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 172, "text": "Cylinder asset SN-1DCB8542 leak test at Staging Yard B: measured 0.34 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 173, "text": "Cylinder asset SN-1DCB8542 valve test at Dock B Annex: measured 50.44 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 174, "text": "Cylinder asset SN-1DCB8542 seal test at Pier 2 Warehouse: measured 14.06 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 175, "text": "Cylinder asset SN-1DCB8542 thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 176, "text": "Cylinder asset SN-E32DF493 hydrostatic test at Tank Farm: measured 164.12 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 177, "text": "Cylinder asset SN-E32DF493 leak test at Tank Farm: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 178, "text": "Cylinder asset SN-E32DF493 valve test at Staging Yard B: measured 72.23 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 179, "text": "Cylinder asset SN-E32DF493 seal test at Staging Yard B: measured 8.96 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 180, "text": "Cylinder asset SN-E32DF493 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 181, "text": "Cylinder asset SN-066B989D hydrostatic test at Dock B Annex: measured 168.82 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 182, "text": "Cylinder asset SN-066B989D leak test at Staging Yard B: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 183, "text": "Cylinder asset SN-066B989D valve test at Pier 2 Warehouse: measured 46.41 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 184, "text": "Cylinder asset SN-066B989D seal test at Staging Yard B: measured 11.51 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 185, "text": "Cylinder asset SN-066B989D thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 186, "text": "Cylinder asset SN-F9A07424 hydrostatic test at Refuge Hall C: measured 215.95 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 187, "text": "Cylinder asset SN-F9A07424 leak test at Refuge Hall C: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 188, "text": "Cylinder asset SN-F9A07424 valve test at Staging Yard B: measured 54.25 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 189, "text": "Cylinder asset SN-F9A07424 seal test at Pier 2 Warehouse: measured 8.52 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 190, "text": "Cylinder asset SN-F9A07424 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 191, "text": "Cylinder asset SN-3983221F hydrostatic test at Pier 2 Warehouse: measured 152.93 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 192, "text": "Cylinder asset SN-3983221F leak test at Tank Farm: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 193, "text": "Cylinder asset SN-3983221F valve test at Staging Yard B: measured 46.03 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 194, "text": "Cylinder asset SN-3983221F seal test at Tank Farm: measured 12.04 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 195, "text": "Cylinder asset SN-3983221F thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 196, "text": "Cylinder asset SN-188D0624 hydrostatic test at Refuge Hall C: measured 140.81 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 197, "text": "Cylinder asset SN-188D0624 leak test at Dock B Annex: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 198, "text": "Cylinder asset SN-188D0624 valve test at Pier 2 Warehouse: measured 49.92 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 199, "text": "Cylinder asset SN-188D0624 seal test at Staging Yard B: measured 10.48 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 200, "text": "Cylinder asset SN-188D0624 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 201, "text": "Cylinder asset SN-56F1480C hydrostatic test at Dock B Annex: measured 145.34 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 202, "text": "Cylinder asset SN-56F1480C leak test at Staging Yard B: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 203, "text": "Cylinder asset SN-56F1480C valve test at Refuge Hall C: measured 60.82 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 204, "text": "Cylinder asset SN-56F1480C seal test at Tank Farm: measured 8.76 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 205, "text": "Cylinder asset SN-56F1480C thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 206, "text": "Cylinder asset SN-1D10440B hydrostatic test at Pier 2 Warehouse: measured 142.75 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 207, "text": "Cylinder asset SN-1D10440B leak test at Staging Yard B: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 208, "text": "Cylinder asset SN-1D10440B valve test at Pier 2 Warehouse: measured 58.61 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 209, "text": "Cylinder asset SN-1D10440B seal test at Staging Yard B: measured 10.26 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 210, "text": "Cylinder asset SN-1D10440B thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 211, "text": "Cylinder asset SN-D0F2EA91 hydrostatic test at Pier 2 Warehouse: measured 212.53 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 212, "text": "Cylinder asset SN-D0F2EA91 leak test at Tank Farm: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 213, "text": "Cylinder asset SN-D0F2EA91 valve test at Pier 2 Warehouse: measured 71.36 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 214, "text": "Cylinder asset SN-D0F2EA91 seal test at Staging Yard B: measured 10.23 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 215, "text": "Cylinder asset SN-D0F2EA91 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 216, "text": "Cylinder asset SN-56934543 hydrostatic test at Pier 2 Warehouse: measured 177.07 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 217, "text": "Cylinder asset SN-56934543 leak test at Staging Yard B: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 218, "text": "Cylinder asset SN-56934543 valve test at Tank Farm: measured 61.35 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 219, "text": "Cylinder asset SN-56934543 seal test at Dock B Annex: measured 15.21 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 220, "text": "Cylinder asset SN-56934543 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 221, "text": "Cylinder asset SN-D6562834 hydrostatic test at Pier 2 Warehouse: measured 146.77 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 222, "text": "Cylinder asset SN-D6562834 leak test at Dock B Annex: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 223, "text": "Cylinder asset SN-D6562834 valve test at Dock B Annex: measured 77.79 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 224, "text": "Cylinder asset SN-D6562834 seal test at Staging Yard B: measured 15.26 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 225, "text": "Cylinder asset SN-D6562834 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 226, "text": "Cylinder asset SN-3DB26CA3 hydrostatic test at Tank Farm: measured 170.17 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 227, "text": "Cylinder asset SN-3DB26CA3 leak test at Refuge Hall C: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 228, "text": "Cylinder asset SN-3DB26CA3 valve test at Tank Farm: measured 44.26 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 229, "text": "Cylinder asset SN-3DB26CA3 seal test at Refuge Hall C: measured 12.35 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 230, "text": "Cylinder asset SN-3DB26CA3 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 231, "text": "Cylinder asset SN-74BDE657 hydrostatic test at Pier 2 Warehouse: measured 226.95 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 232, "text": "Cylinder asset SN-74BDE657 leak test at Tank Farm: measured 0.42 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 233, "text": "Cylinder asset SN-74BDE657 valve test at Refuge Hall C: measured 62.58 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 234, "text": "Cylinder asset SN-74BDE657 seal test at Pier 2 Warehouse: measured 8.62 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 235, "text": "Cylinder asset SN-74BDE657 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 236, "text": "Cylinder asset SN-A13442B1 hydrostatic test at Refuge Hall C: measured 202.3 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 237, "text": "Cylinder asset SN-A13442B1 leak test at Dock B Annex: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 238, "text": "Cylinder asset SN-A13442B1 valve test at Pier 2 Warehouse: measured 80.49 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 239, "text": "Cylinder asset SN-A13442B1 seal test at Dock B Annex: measured 10.86 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 240, "text": "Cylinder asset SN-A13442B1 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 241, "text": "Cylinder asset SN-1E158B6E hydrostatic test at Staging Yard B: measured 208.22 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 242, "text": "Cylinder asset SN-1E158B6E leak test at Dock B Annex: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 243, "text": "Cylinder asset SN-1E158B6E valve test at Staging Yard B: measured 56.23 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 244, "text": "Cylinder asset SN-1E158B6E seal test at Dock B Annex: measured 13.06 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 245, "text": "Cylinder asset SN-1E158B6E thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 246, "text": "Cylinder asset SN-A92DF3CC hydrostatic test at Dock B Annex: measured 177.17 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 247, "text": "Cylinder asset SN-A92DF3CC leak test at Refuge Hall C: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 248, "text": "Cylinder asset SN-A92DF3CC valve test at Dock B Annex: measured 49.4 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 249, "text": "Cylinder asset SN-A92DF3CC seal test at Dock B Annex: measured 13.88 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 250, "text": "Cylinder asset SN-A92DF3CC thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 251, "text": "Cylinder asset SN-C05201A4 hydrostatic test at Refuge Hall C: measured 197.19 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 252, "text": "Cylinder asset SN-C05201A4 leak test at Staging Yard B: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 253, "text": "Cylinder asset SN-C05201A4 valve test at Tank Farm: measured 76.1 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 254, "text": "Cylinder asset SN-C05201A4 seal test at Refuge Hall C: measured 10.22 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 255, "text": "Cylinder asset SN-C05201A4 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 256, "text": "Cylinder asset SN-3AC4D948 hydrostatic test at Refuge Hall C: measured 148.29 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 257, "text": "Cylinder asset SN-3AC4D948 leak test at Tank Farm: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 258, "text": "Cylinder asset SN-3AC4D948 valve test at Dock B Annex: measured 55.93 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 259, "text": "Cylinder asset SN-3AC4D948 seal test at Tank Farm: measured 8.89 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 260, "text": "Cylinder asset SN-3AC4D948 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 261, "text": "Cylinder asset SN-C58CA40A hydrostatic test at Dock B Annex: measured 221.46 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 262, "text": "Cylinder asset SN-C58CA40A leak test at Pier 2 Warehouse: measured 0.42 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 263, "text": "Cylinder asset SN-C58CA40A valve test at Tank Farm: measured 49.18 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 264, "text": "Cylinder asset SN-C58CA40A seal test at Staging Yard B: measured 14.0 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 265, "text": "Cylinder asset SN-C58CA40A thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 266, "text": "Cylinder asset SN-92FFB1D2 hydrostatic test at Pier 2 Warehouse: measured 171.82 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 267, "text": "Cylinder asset SN-92FFB1D2 leak test at Dock B Annex: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 268, "text": "Cylinder asset SN-92FFB1D2 valve test at Staging Yard B: measured 60.63 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 269, "text": "Cylinder asset SN-92FFB1D2 seal test at Dock B Annex: measured 12.59 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 270, "text": "Cylinder asset SN-92FFB1D2 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 271, "text": "Cylinder asset SN-85307BD7 hydrostatic test at Pier 2 Warehouse: measured 179.15 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 272, "text": "Cylinder asset SN-85307BD7 leak test at Dock B Annex: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 273, "text": "Cylinder asset SN-85307BD7 valve test at Staging Yard B: measured 74.33 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 274, "text": "Cylinder asset SN-85307BD7 seal test at Tank Farm: measured 8.5 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 275, "text": "Cylinder asset SN-85307BD7 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 276, "text": "Cylinder asset SN-2886654F hydrostatic test at Tank Farm: measured 142.39 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 277, "text": "Cylinder asset SN-2886654F leak test at Dock B Annex: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 278, "text": "Cylinder asset SN-2886654F valve test at Pier 2 Warehouse: measured 76.7 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 279, "text": "Cylinder asset SN-2886654F seal test at Staging Yard B: measured 10.98 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 280, "text": "Cylinder asset SN-2886654F thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 281, "text": "Cylinder asset SN-ADAB7D1C hydrostatic test at Dock B Annex: measured 159.67 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 282, "text": "Cylinder asset SN-ADAB7D1C leak test at Dock B Annex: measured 0.52 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 283, "text": "Cylinder asset SN-ADAB7D1C valve test at Pier 2 Warehouse: measured 67.95 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 284, "text": "Cylinder asset SN-ADAB7D1C seal test at Staging Yard B: measured 12.41 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 285, "text": "Cylinder asset SN-ADAB7D1C thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 286, "text": "Cylinder asset SN-A3214353 hydrostatic test at Staging Yard B: measured 156.91 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 287, "text": "Cylinder asset SN-A3214353 leak test at Staging Yard B: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 288, "text": "Cylinder asset SN-A3214353 valve test at Dock B Annex: measured 79.44 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 289, "text": "Cylinder asset SN-A3214353 seal test at Tank Farm: measured 12.97 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 290, "text": "Cylinder asset SN-A3214353 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 291, "text": "Cylinder asset SN-D94B53BA hydrostatic test at Refuge Hall C: measured 207.5 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 292, "text": "Cylinder asset SN-D94B53BA leak test at Pier 2 Warehouse: measured 0.43 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 293, "text": "Cylinder asset SN-D94B53BA valve test at Pier 2 Warehouse: measured 65.28 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 294, "text": "Cylinder asset SN-D94B53BA seal test at Staging Yard B: measured 11.98 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 295, "text": "Cylinder asset SN-D94B53BA thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 296, "text": "Cylinder asset SN-9E6C9151 hydrostatic test at Tank Farm: measured 154.14 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 297, "text": "Cylinder asset SN-9E6C9151 leak test at Refuge Hall C: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 298, "text": "Cylinder asset SN-9E6C9151 valve test at Dock B Annex: measured 45.25 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 299, "text": "Cylinder asset SN-9E6C9151 seal test at Pier 2 Warehouse: measured 13.26 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 300, "text": "Cylinder asset SN-9E6C9151 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 301, "text": "Cylinder asset SN-EC14F0BE hydrostatic test at Pier 2 Warehouse: measured 131.16 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 302, "text": "Cylinder asset SN-EC14F0BE leak test at Tank Farm: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 303, "text": "Cylinder asset SN-EC14F0BE valve test at Tank Farm: measured 43.76 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 304, "text": "Cylinder asset SN-EC14F0BE seal test at Pier 2 Warehouse: measured 9.88 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 305, "text": "Cylinder asset SN-EC14F0BE thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 306, "text": "Cylinder asset SN-74618639 hydrostatic test at Staging Yard B: measured 194.32 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 307, "text": "Cylinder asset SN-74618639 leak test at Refuge Hall C: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 308, "text": "Cylinder asset SN-74618639 valve test at Dock B Annex: measured 57.72 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 309, "text": "Cylinder asset SN-74618639 seal test at Dock B Annex: measured 14.39 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 310, "text": "Cylinder asset SN-74618639 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 311, "text": "Cylinder asset SN-F088FF5D hydrostatic test at Dock B Annex: measured 228.61 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 312, "text": "Cylinder asset SN-F088FF5D leak test at Staging Yard B: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 313, "text": "Cylinder asset SN-F088FF5D valve test at Staging Yard B: measured 50.64 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 314, "text": "Cylinder asset SN-F088FF5D seal test at Pier 2 Warehouse: measured 10.13 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 315, "text": "Cylinder asset SN-F088FF5D thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 316, "text": "Cylinder asset SN-D636C0D3 hydrostatic test at Tank Farm: measured 233.97 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 317, "text": "Cylinder asset SN-D636C0D3 leak test at Pier 2 Warehouse: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 318, "text": "Cylinder asset SN-D636C0D3 valve test at Tank Farm: measured 46.62 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 319, "text": "Cylinder asset SN-D636C0D3 seal test at Pier 2 Warehouse: measured 11.68 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 320, "text": "Cylinder asset SN-D636C0D3 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 321, "text": "Cylinder asset SN-85876709 hydrostatic test at Refuge Hall C: measured 212.44 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 322, "text": "Cylinder asset SN-85876709 leak test at Dock B Annex: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 323, "text": "Cylinder asset SN-85876709 valve test at Dock B Annex: measured 78.52 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 324, "text": "Cylinder asset SN-85876709 seal test at Staging Yard B: measured 12.25 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 325, "text": "Cylinder asset SN-85876709 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 326, "text": "Cylinder asset SN-6D25D661 hydrostatic test at Dock B Annex: measured 169.23 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 327, "text": "Cylinder asset SN-6D25D661 leak test at Staging Yard B: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 328, "text": "Cylinder asset SN-6D25D661 valve test at Refuge Hall C: measured 51.37 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 329, "text": "Cylinder asset SN-6D25D661 seal test at Staging Yard B: measured 13.65 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 330, "text": "Cylinder asset SN-6D25D661 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 331, "text": "Cylinder asset SN-62005B10 hydrostatic test at Staging Yard B: measured 133.7 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 332, "text": "Cylinder asset SN-62005B10 leak test at Tank Farm: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 333, "text": "Cylinder asset SN-62005B10 valve test at Staging Yard B: measured 71.37 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 334, "text": "Cylinder asset SN-62005B10 seal test at Tank Farm: measured 10.98 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 335, "text": "Cylinder asset SN-62005B10 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 336, "text": "Cylinder asset SN-DAF27814 hydrostatic test at Pier 2 Warehouse: measured 173.9 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 337, "text": "Cylinder asset SN-DAF27814 leak test at Refuge Hall C: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 338, "text": "Cylinder asset SN-DAF27814 valve test at Staging Yard B: measured 53.12 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 339, "text": "Cylinder asset SN-DAF27814 seal test at Pier 2 Warehouse: measured 15.24 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 340, "text": "Cylinder asset SN-DAF27814 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 341, "text": "Cylinder asset SN-03163274 hydrostatic test at Tank Farm: measured 180.98 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 342, "text": "Cylinder asset SN-03163274 leak test at Tank Farm: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 343, "text": "Cylinder asset SN-03163274 valve test at Refuge Hall C: measured 50.99 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 344, "text": "Cylinder asset SN-03163274 seal test at Tank Farm: measured 13.26 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 345, "text": "Cylinder asset SN-03163274 thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 346, "text": "Cylinder asset SN-2E8FF115 hydrostatic test at Pier 2 Warehouse: measured 166.07 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 347, "text": "Cylinder asset SN-2E8FF115 leak test at Refuge Hall C: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 348, "text": "Cylinder asset SN-2E8FF115 valve test at Refuge Hall C: measured 68.45 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 349, "text": "Cylinder asset SN-2E8FF115 seal test at Refuge Hall C: measured 10.79 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 350, "text": "Cylinder asset SN-2E8FF115 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 351, "text": "Cylinder asset SN-0AF0C7A1 hydrostatic test at Staging Yard B: measured 146.83 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 352, "text": "Cylinder asset SN-0AF0C7A1 leak test at Dock B Annex: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 353, "text": "Cylinder asset SN-0AF0C7A1 valve test at Tank Farm: measured 77.86 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 354, "text": "Cylinder asset SN-0AF0C7A1 seal test at Tank Farm: measured 9.38 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 355, "text": "Cylinder asset SN-0AF0C7A1 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 356, "text": "Cylinder asset SN-A5FB269A hydrostatic test at Refuge Hall C: measured 198.8 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 357, "text": "Cylinder asset SN-A5FB269A leak test at Staging Yard B: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 358, "text": "Cylinder asset SN-A5FB269A valve test at Staging Yard B: measured 71.08 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 359, "text": "Cylinder asset SN-A5FB269A seal test at Pier 2 Warehouse: measured 9.68 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 360, "text": "Cylinder asset SN-A5FB269A thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 361, "text": "Cylinder asset SN-997D7112 hydrostatic test at Tank Farm: measured 133.8 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 362, "text": "Cylinder asset SN-997D7112 leak test at Staging Yard B: measured 0.34 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 363, "text": "Cylinder asset SN-997D7112 valve test at Refuge Hall C: measured 51.59 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 364, "text": "Cylinder asset SN-997D7112 seal test at Refuge Hall C: measured 10.48 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 365, "text": "Cylinder asset SN-997D7112 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 366, "text": "Cylinder asset SN-ACCD7257 hydrostatic test at Tank Farm: measured 215.4 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 367, "text": "Cylinder asset SN-ACCD7257 leak test at Pier 2 Warehouse: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 368, "text": "Cylinder asset SN-ACCD7257 valve test at Dock B Annex: measured 52.1 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 369, "text": "Cylinder asset SN-ACCD7257 seal test at Tank Farm: measured 9.89 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 370, "text": "Cylinder asset SN-ACCD7257 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 371, "text": "Cylinder asset SN-6D32E1F8 hydrostatic test at Staging Yard B: measured 181.33 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 372, "text": "Cylinder asset SN-6D32E1F8 leak test at Dock B Annex: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 373, "text": "Cylinder asset SN-6D32E1F8 valve test at Pier 2 Warehouse: measured 47.71 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 374, "text": "Cylinder asset SN-6D32E1F8 seal test at Staging Yard B: measured 14.1 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 375, "text": "Cylinder asset SN-6D32E1F8 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 376, "text": "Cylinder asset SN-2C371A5C hydrostatic test at Staging Yard B: measured 135.34 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 377, "text": "Cylinder asset SN-2C371A5C leak test at Refuge Hall C: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 378, "text": "Cylinder asset SN-2C371A5C valve test at Refuge Hall C: measured 49.32 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 379, "text": "Cylinder asset SN-2C371A5C seal test at Pier 2 Warehouse: measured 11.93 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 380, "text": "Cylinder asset SN-2C371A5C thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 381, "text": "Cylinder asset SN-1856A445 hydrostatic test at Dock B Annex: measured 179.28 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 382, "text": "Cylinder asset SN-1856A445 leak test at Staging Yard B: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 383, "text": "Cylinder asset SN-1856A445 valve test at Dock B Annex: measured 70.39 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 384, "text": "Cylinder asset SN-1856A445 seal test at Pier 2 Warehouse: measured 11.34 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 385, "text": "Cylinder asset SN-1856A445 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 386, "text": "Cylinder asset SN-BF5C016D hydrostatic test at Pier 2 Warehouse: measured 163.0 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 387, "text": "Cylinder asset SN-BF5C016D leak test at Staging Yard B: measured 0.34 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 388, "text": "Cylinder asset SN-BF5C016D valve test at Dock B Annex: measured 72.6 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 389, "text": "Cylinder asset SN-BF5C016D seal test at Pier 2 Warehouse: measured 9.01 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 390, "text": "Cylinder asset SN-BF5C016D thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 391, "text": "Cylinder asset SN-76B4E0F6 hydrostatic test at Pier 2 Warehouse: measured 230.2 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 392, "text": "Cylinder asset SN-76B4E0F6 leak test at Tank Farm: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 393, "text": "Cylinder asset SN-76B4E0F6 valve test at Tank Farm: measured 58.51 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 394, "text": "Cylinder asset SN-76B4E0F6 seal test at Staging Yard B: measured 14.41 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 395, "text": "Cylinder asset SN-76B4E0F6 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 396, "text": "Cylinder asset SN-7EE23EBD hydrostatic test at Refuge Hall C: measured 200.54 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 397, "text": "Cylinder asset SN-7EE23EBD leak test at Staging Yard B: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 398, "text": "Cylinder asset SN-7EE23EBD valve test at Staging Yard B: measured 79.59 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 399, "text": "Cylinder asset SN-7EE23EBD seal test at Refuge Hall C: measured 8.76 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 400, "text": "Cylinder asset SN-7EE23EBD thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 401, "text": "Cylinder asset SN-A27A59A6 hydrostatic test at Refuge Hall C: measured 195.72 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 402, "text": "Cylinder asset SN-A27A59A6 leak test at Tank Farm: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 403, "text": "Cylinder asset SN-A27A59A6 valve test at Staging Yard B: measured 63.68 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 404, "text": "Cylinder asset SN-A27A59A6 seal test at Staging Yard B: measured 13.53 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 405, "text": "Cylinder asset SN-A27A59A6 thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 406, "text": "Cylinder asset SN-0BE97625 hydrostatic test at Staging Yard B: measured 173.18 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 407, "text": "Cylinder asset SN-0BE97625 leak test at Refuge Hall C: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 408, "text": "Cylinder asset SN-0BE97625 valve test at Dock B Annex: measured 44.34 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 409, "text": "Cylinder asset SN-0BE97625 seal test at Refuge Hall C: measured 13.85 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 410, "text": "Cylinder asset SN-0BE97625 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 411, "text": "Cylinder asset SN-11B27226 hydrostatic test at Refuge Hall C: measured 207.87 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 412, "text": "Cylinder asset SN-11B27226 leak test at Tank Farm: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 413, "text": "Cylinder asset SN-11B27226 valve test at Tank Farm: measured 45.51 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 414, "text": "Cylinder asset SN-11B27226 seal test at Dock B Annex: measured 14.23 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 415, "text": "Cylinder asset SN-11B27226 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 416, "text": "Cylinder asset SN-C3A7A37B hydrostatic test at Staging Yard B: measured 136.98 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 417, "text": "Cylinder asset SN-C3A7A37B leak test at Dock B Annex: measured 0.43 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 418, "text": "Cylinder asset SN-C3A7A37B valve test at Dock B Annex: measured 73.53 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 419, "text": "Cylinder asset SN-C3A7A37B seal test at Staging Yard B: measured 15.41 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 420, "text": "Cylinder asset SN-C3A7A37B thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 421, "text": "Cylinder asset SN-A47E4983 hydrostatic test at Refuge Hall C: measured 153.71 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 422, "text": "Cylinder asset SN-A47E4983 leak test at Pier 2 Warehouse: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 423, "text": "Cylinder asset SN-A47E4983 valve test at Tank Farm: measured 74.58 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 424, "text": "Cylinder asset SN-A47E4983 seal test at Staging Yard B: measured 11.51 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 425, "text": "Cylinder asset SN-A47E4983 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 426, "text": "Cylinder asset SN-AF75D865 hydrostatic test at Pier 2 Warehouse: measured 182.24 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 427, "text": "Cylinder asset SN-AF75D865 leak test at Tank Farm: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 428, "text": "Cylinder asset SN-AF75D865 valve test at Staging Yard B: measured 64.64 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 429, "text": "Cylinder asset SN-AF75D865 seal test at Pier 2 Warehouse: measured 12.79 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 430, "text": "Cylinder asset SN-AF75D865 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 431, "text": "Cylinder asset SN-CCD95C0F hydrostatic test at Tank Farm: measured 166.6 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 432, "text": "Cylinder asset SN-CCD95C0F leak test at Refuge Hall C: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 433, "text": "Cylinder asset SN-CCD95C0F valve test at Refuge Hall C: measured 43.96 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 434, "text": "Cylinder asset SN-CCD95C0F seal test at Dock B Annex: measured 14.46 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 435, "text": "Cylinder asset SN-CCD95C0F thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 436, "text": "Cylinder asset SN-3220950D hydrostatic test at Tank Farm: measured 180.13 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 437, "text": "Cylinder asset SN-3220950D leak test at Staging Yard B: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 438, "text": "Cylinder asset SN-3220950D valve test at Dock B Annex: measured 58.64 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 439, "text": "Cylinder asset SN-3220950D seal test at Refuge Hall C: measured 14.54 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 440, "text": "Cylinder asset SN-3220950D thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 441, "text": "Cylinder asset SN-4FAC9BC8 hydrostatic test at Tank Farm: measured 172.21 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 442, "text": "Cylinder asset SN-4FAC9BC8 leak test at Refuge Hall C: measured 0.32 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 443, "text": "Cylinder asset SN-4FAC9BC8 valve test at Tank Farm: measured 68.86 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 444, "text": "Cylinder asset SN-4FAC9BC8 seal test at Dock B Annex: measured 12.23 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 445, "text": "Cylinder asset SN-4FAC9BC8 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 446, "text": "Cylinder asset SN-B6C4DAC7 hydrostatic test at Staging Yard B: measured 206.2 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 447, "text": "Cylinder asset SN-B6C4DAC7 leak test at Dock B Annex: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 448, "text": "Cylinder asset SN-B6C4DAC7 valve test at Staging Yard B: measured 53.4 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 449, "text": "Cylinder asset SN-B6C4DAC7 seal test at Pier 2 Warehouse: measured 10.64 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 450, "text": "Cylinder asset SN-B6C4DAC7 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 451, "text": "Cylinder asset SN-43D4B0CD hydrostatic test at Staging Yard B: measured 228.25 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 452, "text": "Cylinder asset SN-43D4B0CD leak test at Dock B Annex: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 453, "text": "Cylinder asset SN-43D4B0CD valve test at Tank Farm: measured 57.03 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 454, "text": "Cylinder asset SN-43D4B0CD seal test at Staging Yard B: measured 11.23 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 455, "text": "Cylinder asset SN-43D4B0CD thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 456, "text": "Cylinder asset SN-250E8270 hydrostatic test at Tank Farm: measured 170.64 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 457, "text": "Cylinder asset SN-250E8270 leak test at Staging Yard B: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 458, "text": "Cylinder asset SN-250E8270 valve test at Refuge Hall C: measured 56.85 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 459, "text": "Cylinder asset SN-250E8270 seal test at Dock B Annex: measured 10.49 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 460, "text": "Cylinder asset SN-250E8270 thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 461, "text": "Cylinder asset SN-49B37F83 hydrostatic test at Tank Farm: measured 233.5 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 462, "text": "Cylinder asset SN-49B37F83 leak test at Pier 2 Warehouse: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 463, "text": "Cylinder asset SN-49B37F83 valve test at Tank Farm: measured 71.43 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 464, "text": "Cylinder asset SN-49B37F83 seal test at Pier 2 Warehouse: measured 9.85 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 465, "text": "Cylinder asset SN-49B37F83 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 466, "text": "Cylinder asset SN-F7DFE06E hydrostatic test at Refuge Hall C: measured 155.58 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 467, "text": "Cylinder asset SN-F7DFE06E leak test at Pier 2 Warehouse: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 468, "text": "Cylinder asset SN-F7DFE06E valve test at Pier 2 Warehouse: measured 62.16 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 469, "text": "Cylinder asset SN-F7DFE06E seal test at Refuge Hall C: measured 9.76 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 470, "text": "Cylinder asset SN-F7DFE06E thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 471, "text": "Cylinder asset SN-BF227D42 hydrostatic test at Staging Yard B: measured 161.18 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 472, "text": "Cylinder asset SN-BF227D42 leak test at Staging Yard B: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 473, "text": "Cylinder asset SN-BF227D42 valve test at Pier 2 Warehouse: measured 54.33 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 474, "text": "Cylinder asset SN-BF227D42 seal test at Tank Farm: measured 9.47 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 475, "text": "Cylinder asset SN-BF227D42 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 476, "text": "Cylinder asset SN-B138036B hydrostatic test at Refuge Hall C: measured 222.36 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 477, "text": "Cylinder asset SN-B138036B leak test at Staging Yard B: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 478, "text": "Cylinder asset SN-B138036B valve test at Tank Farm: measured 71.32 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 479, "text": "Cylinder asset SN-B138036B seal test at Pier 2 Warehouse: measured 9.63 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 480, "text": "Cylinder asset SN-B138036B thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 481, "text": "Cylinder asset SN-6FAA47B0 hydrostatic test at Staging Yard B: measured 223.35 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 482, "text": "Cylinder asset SN-6FAA47B0 leak test at Dock B Annex: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 483, "text": "Cylinder asset SN-6FAA47B0 valve test at Dock B Annex: measured 77.0 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 484, "text": "Cylinder asset SN-6FAA47B0 seal test at Tank Farm: measured 9.78 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 485, "text": "Cylinder asset SN-6FAA47B0 thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 486, "text": "Cylinder asset SN-79C0E750 hydrostatic test at Refuge Hall C: measured 207.42 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 487, "text": "Cylinder asset SN-79C0E750 leak test at Tank Farm: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 488, "text": "Cylinder asset SN-79C0E750 valve test at Dock B Annex: measured 77.65 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 489, "text": "Cylinder asset SN-79C0E750 seal test at Refuge Hall C: measured 9.08 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 490, "text": "Cylinder asset SN-79C0E750 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 491, "text": "Cylinder asset SN-3E4CD9E2 hydrostatic test at Tank Farm: measured 146.48 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 492, "text": "Cylinder asset SN-3E4CD9E2 leak test at Staging Yard B: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 493, "text": "Cylinder asset SN-3E4CD9E2 valve test at Dock B Annex: measured 78.78 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 494, "text": "Cylinder asset SN-3E4CD9E2 seal test at Tank Farm: measured 12.86 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 495, "text": "Cylinder asset SN-3E4CD9E2 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 496, "text": "Cylinder asset SN-A711B3CE hydrostatic test at Staging Yard B: measured 205.34 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 497, "text": "Cylinder asset SN-A711B3CE leak test at Tank Farm: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 498, "text": "Cylinder asset SN-A711B3CE valve test at Pier 2 Warehouse: measured 47.71 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 499, "text": "Cylinder asset SN-A711B3CE seal test at Refuge Hall C: measured 12.89 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 500, "text": "Cylinder asset SN-A711B3CE thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 501, "text": "Cylinder asset SN-66475E39 hydrostatic test at Staging Yard B: measured 127.63 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 502, "text": "Cylinder asset SN-66475E39 leak test at Refuge Hall C: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 503, "text": "Cylinder asset SN-66475E39 valve test at Pier 2 Warehouse: measured 64.68 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 504, "text": "Cylinder asset SN-66475E39 seal test at Dock B Annex: measured 13.73 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 505, "text": "Cylinder asset SN-66475E39 thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 506, "text": "Cylinder asset SN-88F130E8 hydrostatic test at Tank Farm: measured 180.74 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 507, "text": "Cylinder asset SN-88F130E8 leak test at Refuge Hall C: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 508, "text": "Cylinder asset SN-88F130E8 valve test at Pier 2 Warehouse: measured 48.91 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 509, "text": "Cylinder asset SN-88F130E8 seal test at Dock B Annex: measured 12.42 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 510, "text": "Cylinder asset SN-88F130E8 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 511, "text": "Cylinder asset SN-FBB7B16C hydrostatic test at Dock B Annex: measured 179.05 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 512, "text": "Cylinder asset SN-FBB7B16C leak test at Refuge Hall C: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 513, "text": "Cylinder asset SN-FBB7B16C valve test at Pier 2 Warehouse: measured 52.6 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 514, "text": "Cylinder asset SN-FBB7B16C seal test at Dock B Annex: measured 11.05 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 515, "text": "Cylinder asset SN-FBB7B16C thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 516, "text": "Cylinder asset SN-E20DD12E hydrostatic test at Pier 2 Warehouse: measured 145.91 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 517, "text": "Cylinder asset SN-E20DD12E leak test at Refuge Hall C: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 518, "text": "Cylinder asset SN-E20DD12E valve test at Refuge Hall C: measured 77.31 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 519, "text": "Cylinder asset SN-E20DD12E seal test at Pier 2 Warehouse: measured 8.61 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 520, "text": "Cylinder asset SN-E20DD12E thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 521, "text": "Cylinder asset SN-A549F200 hydrostatic test at Refuge Hall C: measured 155.59 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 522, "text": "Cylinder asset SN-A549F200 leak test at Pier 2 Warehouse: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 523, "text": "Cylinder asset SN-A549F200 valve test at Dock B Annex: measured 49.25 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 524, "text": "Cylinder asset SN-A549F200 seal test at Staging Yard B: measured 11.01 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 525, "text": "Cylinder asset SN-A549F200 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 526, "text": "Cylinder asset SN-A91FFBB0 hydrostatic test at Pier 2 Warehouse: measured 169.71 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 527, "text": "Cylinder asset SN-A91FFBB0 leak test at Dock B Annex: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 528, "text": "Cylinder asset SN-A91FFBB0 valve test at Pier 2 Warehouse: measured 56.96 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 529, "text": "Cylinder asset SN-A91FFBB0 seal test at Tank Farm: measured 15.47 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 530, "text": "Cylinder asset SN-A91FFBB0 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 531, "text": "Cylinder asset SN-E097A212 hydrostatic test at Staging Yard B: measured 156.99 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 532, "text": "Cylinder asset SN-E097A212 leak test at Staging Yard B: measured 0.52 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 533, "text": "Cylinder asset SN-E097A212 valve test at Pier 2 Warehouse: measured 44.97 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 534, "text": "Cylinder asset SN-E097A212 seal test at Staging Yard B: measured 13.16 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 535, "text": "Cylinder asset SN-E097A212 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 536, "text": "Cylinder asset SN-7778C8EE hydrostatic test at Staging Yard B: measured 205.06 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 537, "text": "Cylinder asset SN-7778C8EE leak test at Staging Yard B: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 538, "text": "Cylinder asset SN-7778C8EE valve test at Staging Yard B: measured 69.28 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 539, "text": "Cylinder asset SN-7778C8EE seal test at Dock B Annex: measured 12.11 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 540, "text": "Cylinder asset SN-7778C8EE thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 541, "text": "Cylinder asset SN-11734A9A hydrostatic test at Pier 2 Warehouse: measured 149.1 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 542, "text": "Cylinder asset SN-11734A9A leak test at Staging Yard B: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 543, "text": "Cylinder asset SN-11734A9A valve test at Dock B Annex: measured 44.56 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 544, "text": "Cylinder asset SN-11734A9A seal test at Dock B Annex: measured 8.74 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 545, "text": "Cylinder asset SN-11734A9A thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 546, "text": "Cylinder asset SN-72AAE04C hydrostatic test at Pier 2 Warehouse: measured 157.61 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 547, "text": "Cylinder asset SN-72AAE04C leak test at Pier 2 Warehouse: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 548, "text": "Cylinder asset SN-72AAE04C valve test at Pier 2 Warehouse: measured 76.46 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 549, "text": "Cylinder asset SN-72AAE04C seal test at Pier 2 Warehouse: measured 11.56 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 550, "text": "Cylinder asset SN-72AAE04C thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 551, "text": "Cylinder asset SN-B74D8524 hydrostatic test at Staging Yard B: measured 143.59 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 552, "text": "Cylinder asset SN-B74D8524 leak test at Tank Farm: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 553, "text": "Cylinder asset SN-B74D8524 valve test at Staging Yard B: measured 43.73 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 554, "text": "Cylinder asset SN-B74D8524 seal test at Pier 2 Warehouse: measured 13.14 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 555, "text": "Cylinder asset SN-B74D8524 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 556, "text": "Cylinder asset SN-D297D81A hydrostatic test at Staging Yard B: measured 208.4 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 557, "text": "Cylinder asset SN-D297D81A leak test at Staging Yard B: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 558, "text": "Cylinder asset SN-D297D81A valve test at Dock B Annex: measured 60.81 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 559, "text": "Cylinder asset SN-D297D81A seal test at Pier 2 Warehouse: measured 15.21 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 560, "text": "Cylinder asset SN-D297D81A thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 561, "text": "Cylinder asset SN-ADA79068 hydrostatic test at Pier 2 Warehouse: measured 220.87 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 562, "text": "Cylinder asset SN-ADA79068 leak test at Tank Farm: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 563, "text": "Cylinder asset SN-ADA79068 valve test at Refuge Hall C: measured 67.25 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 564, "text": "Cylinder asset SN-ADA79068 seal test at Dock B Annex: measured 9.07 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 565, "text": "Cylinder asset SN-ADA79068 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 566, "text": "Cylinder asset SN-17F51E34 hydrostatic test at Pier 2 Warehouse: measured 233.96 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 567, "text": "Cylinder asset SN-17F51E34 leak test at Staging Yard B: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 568, "text": "Cylinder asset SN-17F51E34 valve test at Refuge Hall C: measured 43.83 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 569, "text": "Cylinder asset SN-17F51E34 seal test at Dock B Annex: measured 8.65 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 570, "text": "Cylinder asset SN-17F51E34 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 571, "text": "Cylinder asset SN-5069DEBF hydrostatic test at Tank Farm: measured 205.52 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 572, "text": "Cylinder asset SN-5069DEBF leak test at Staging Yard B: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 573, "text": "Cylinder asset SN-5069DEBF valve test at Pier 2 Warehouse: measured 44.61 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 574, "text": "Cylinder asset SN-5069DEBF seal test at Tank Farm: measured 13.29 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 575, "text": "Cylinder asset SN-5069DEBF thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 576, "text": "Cylinder asset SN-DCFA9BC2 hydrostatic test at Pier 2 Warehouse: measured 134.82 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 577, "text": "Cylinder asset SN-DCFA9BC2 leak test at Staging Yard B: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 578, "text": "Cylinder asset SN-DCFA9BC2 valve test at Staging Yard B: measured 75.61 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 579, "text": "Cylinder asset SN-DCFA9BC2 seal test at Tank Farm: measured 14.65 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 580, "text": "Cylinder asset SN-DCFA9BC2 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 581, "text": "Cylinder asset SN-183B8B0A hydrostatic test at Refuge Hall C: measured 152.81 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 582, "text": "Cylinder asset SN-183B8B0A leak test at Pier 2 Warehouse: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 583, "text": "Cylinder asset SN-183B8B0A valve test at Tank Farm: measured 47.09 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 584, "text": "Cylinder asset SN-183B8B0A seal test at Staging Yard B: measured 14.62 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 585, "text": "Cylinder asset SN-183B8B0A thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 586, "text": "Cylinder asset SN-4FE8A895 hydrostatic test at Dock B Annex: measured 193.7 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 587, "text": "Cylinder asset SN-4FE8A895 leak test at Dock B Annex: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 588, "text": "Cylinder asset SN-4FE8A895 valve test at Staging Yard B: measured 78.42 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 589, "text": "Cylinder asset SN-4FE8A895 seal test at Refuge Hall C: measured 14.97 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 590, "text": "Cylinder asset SN-4FE8A895 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 591, "text": "Cylinder asset SN-2D559F45 hydrostatic test at Staging Yard B: measured 196.11 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 592, "text": "Cylinder asset SN-2D559F45 leak test at Dock B Annex: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 593, "text": "Cylinder asset SN-2D559F45 valve test at Dock B Annex: measured 56.26 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 594, "text": "Cylinder asset SN-2D559F45 seal test at Dock B Annex: measured 8.74 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 595, "text": "Cylinder asset SN-2D559F45 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 596, "text": "Cylinder asset SN-ABDC6B51 hydrostatic test at Tank Farm: measured 189.28 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 597, "text": "Cylinder asset SN-ABDC6B51 leak test at Pier 2 Warehouse: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 598, "text": "Cylinder asset SN-ABDC6B51 valve test at Dock B Annex: measured 57.9 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 599, "text": "Cylinder asset SN-ABDC6B51 seal test at Refuge Hall C: measured 10.58 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 600, "text": "Cylinder asset SN-ABDC6B51 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 601, "text": "Cylinder asset SN-4318E65E hydrostatic test at Refuge Hall C: measured 226.83 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 602, "text": "Cylinder asset SN-4318E65E leak test at Dock B Annex: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 603, "text": "Cylinder asset SN-4318E65E valve test at Pier 2 Warehouse: measured 53.13 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 604, "text": "Cylinder asset SN-4318E65E seal test at Staging Yard B: measured 14.38 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 605, "text": "Cylinder asset SN-4318E65E thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 606, "text": "Cylinder asset SN-EE0C5157 hydrostatic test at Staging Yard B: measured 223.34 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 607, "text": "Cylinder asset SN-EE0C5157 leak test at Tank Farm: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 608, "text": "Cylinder asset SN-EE0C5157 valve test at Staging Yard B: measured 45.74 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 609, "text": "Cylinder asset SN-EE0C5157 seal test at Tank Farm: measured 9.77 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 610, "text": "Cylinder asset SN-EE0C5157 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 611, "text": "Cylinder asset SN-3A3E0048 hydrostatic test at Dock B Annex: measured 178.38 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 612, "text": "Cylinder asset SN-3A3E0048 leak test at Refuge Hall C: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 613, "text": "Cylinder asset SN-3A3E0048 valve test at Staging Yard B: measured 79.45 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 614, "text": "Cylinder asset SN-3A3E0048 seal test at Refuge Hall C: measured 14.91 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 615, "text": "Cylinder asset SN-3A3E0048 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 616, "text": "Cylinder asset SN-819FD224 hydrostatic test at Staging Yard B: measured 126.4 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 617, "text": "Cylinder asset SN-819FD224 leak test at Refuge Hall C: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 618, "text": "Cylinder asset SN-819FD224 valve test at Tank Farm: measured 72.79 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 619, "text": "Cylinder asset SN-819FD224 seal test at Staging Yard B: measured 11.65 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 620, "text": "Cylinder asset SN-819FD224 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 621, "text": "Cylinder asset SN-3865AB92 hydrostatic test at Tank Farm: measured 150.95 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 622, "text": "Cylinder asset SN-3865AB92 leak test at Dock B Annex: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 623, "text": "Cylinder asset SN-3865AB92 valve test at Staging Yard B: measured 78.21 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 624, "text": "Cylinder asset SN-3865AB92 seal test at Dock B Annex: measured 13.76 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 625, "text": "Cylinder asset SN-3865AB92 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 626, "text": "Cylinder asset SN-B05948F0 hydrostatic test at Pier 2 Warehouse: measured 221.14 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 627, "text": "Cylinder asset SN-B05948F0 leak test at Staging Yard B: measured 0.5 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 628, "text": "Cylinder asset SN-B05948F0 valve test at Dock B Annex: measured 50.0 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 629, "text": "Cylinder asset SN-B05948F0 seal test at Tank Farm: measured 8.95 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 630, "text": "Cylinder asset SN-B05948F0 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 631, "text": "Cylinder asset SN-F73A3AFC hydrostatic test at Dock B Annex: measured 188.89 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 632, "text": "Cylinder asset SN-F73A3AFC leak test at Dock B Annex: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 633, "text": "Cylinder asset SN-F73A3AFC valve test at Pier 2 Warehouse: measured 66.94 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 634, "text": "Cylinder asset SN-F73A3AFC seal test at Dock B Annex: measured 14.17 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 635, "text": "Cylinder asset SN-F73A3AFC thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 636, "text": "Cylinder asset SN-B9AAB874 hydrostatic test at Pier 2 Warehouse: measured 190.66 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 637, "text": "Cylinder asset SN-B9AAB874 leak test at Staging Yard B: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 638, "text": "Cylinder asset SN-B9AAB874 valve test at Pier 2 Warehouse: measured 60.38 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 639, "text": "Cylinder asset SN-B9AAB874 seal test at Staging Yard B: measured 13.03 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 640, "text": "Cylinder asset SN-B9AAB874 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 641, "text": "Cylinder asset SN-66B2D066 hydrostatic test at Staging Yard B: measured 132.94 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 642, "text": "Cylinder asset SN-66B2D066 leak test at Refuge Hall C: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 643, "text": "Cylinder asset SN-66B2D066 valve test at Dock B Annex: measured 66.51 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 644, "text": "Cylinder asset SN-66B2D066 seal test at Dock B Annex: measured 11.8 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 645, "text": "Cylinder asset SN-66B2D066 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 646, "text": "Cylinder asset SN-34E7DB23 hydrostatic test at Refuge Hall C: measured 217.78 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 647, "text": "Cylinder asset SN-34E7DB23 leak test at Tank Farm: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 648, "text": "Cylinder asset SN-34E7DB23 valve test at Tank Farm: measured 53.78 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 649, "text": "Cylinder asset SN-34E7DB23 seal test at Dock B Annex: measured 8.61 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 650, "text": "Cylinder asset SN-34E7DB23 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 651, "text": "Cylinder asset SN-4A92A50C hydrostatic test at Tank Farm: measured 140.03 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 652, "text": "Cylinder asset SN-4A92A50C leak test at Dock B Annex: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 653, "text": "Cylinder asset SN-4A92A50C valve test at Staging Yard B: measured 51.14 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 654, "text": "Cylinder asset SN-4A92A50C seal test at Tank Farm: measured 12.78 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 655, "text": "Cylinder asset SN-4A92A50C thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 656, "text": "Cylinder asset SN-BC04C055 hydrostatic test at Pier 2 Warehouse: measured 133.6 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 657, "text": "Cylinder asset SN-BC04C055 leak test at Dock B Annex: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 658, "text": "Cylinder asset SN-BC04C055 valve test at Pier 2 Warehouse: measured 77.12 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 659, "text": "Cylinder asset SN-BC04C055 seal test at Tank Farm: measured 9.76 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 660, "text": "Cylinder asset SN-BC04C055 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 661, "text": "Cylinder asset SN-D5F7E12D hydrostatic test at Dock B Annex: measured 153.82 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 662, "text": "Cylinder asset SN-D5F7E12D leak test at Refuge Hall C: measured 0.47 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 663, "text": "Cylinder asset SN-D5F7E12D valve test at Dock B Annex: measured 66.12 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 664, "text": "Cylinder asset SN-D5F7E12D seal test at Pier 2 Warehouse: measured 12.89 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 665, "text": "Cylinder asset SN-D5F7E12D thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 666, "text": "Cylinder asset SN-85EDF7CB hydrostatic test at Staging Yard B: measured 219.91 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 667, "text": "Cylinder asset SN-85EDF7CB leak test at Tank Farm: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 668, "text": "Cylinder asset SN-85EDF7CB valve test at Tank Farm: measured 72.09 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 669, "text": "Cylinder asset SN-85EDF7CB seal test at Pier 2 Warehouse: measured 11.11 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 670, "text": "Cylinder asset SN-85EDF7CB thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 671, "text": "Cylinder asset SN-992330C5 hydrostatic test at Dock B Annex: measured 185.99 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 672, "text": "Cylinder asset SN-992330C5 leak test at Pier 2 Warehouse: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 673, "text": "Cylinder asset SN-992330C5 valve test at Refuge Hall C: measured 77.82 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 674, "text": "Cylinder asset SN-992330C5 seal test at Refuge Hall C: measured 8.97 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 675, "text": "Cylinder asset SN-992330C5 thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 676, "text": "Cylinder asset SN-5FA8AA71 hydrostatic test at Pier 2 Warehouse: measured 232.26 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 677, "text": "Cylinder asset SN-5FA8AA71 leak test at Dock B Annex: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 678, "text": "Cylinder asset SN-5FA8AA71 valve test at Staging Yard B: measured 76.3 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 679, "text": "Cylinder asset SN-5FA8AA71 seal test at Refuge Hall C: measured 9.12 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 680, "text": "Cylinder asset SN-5FA8AA71 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 681, "text": "Cylinder asset SN-722049E4 hydrostatic test at Tank Farm: measured 219.12 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 682, "text": "Cylinder asset SN-722049E4 leak test at Tank Farm: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 683, "text": "Cylinder asset SN-722049E4 valve test at Staging Yard B: measured 49.66 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 684, "text": "Cylinder asset SN-722049E4 seal test at Staging Yard B: measured 14.04 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 685, "text": "Cylinder asset SN-722049E4 thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 686, "text": "Cylinder asset SN-4573E230 hydrostatic test at Pier 2 Warehouse: measured 126.84 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 687, "text": "Cylinder asset SN-4573E230 leak test at Staging Yard B: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 688, "text": "Cylinder asset SN-4573E230 valve test at Refuge Hall C: measured 55.52 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 689, "text": "Cylinder asset SN-4573E230 seal test at Staging Yard B: measured 12.37 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 690, "text": "Cylinder asset SN-4573E230 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 691, "text": "Cylinder asset SN-1661140A hydrostatic test at Pier 2 Warehouse: measured 182.98 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 692, "text": "Cylinder asset SN-1661140A leak test at Dock B Annex: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 693, "text": "Cylinder asset SN-1661140A valve test at Staging Yard B: measured 73.13 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 694, "text": "Cylinder asset SN-1661140A seal test at Dock B Annex: measured 10.19 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 695, "text": "Cylinder asset SN-1661140A thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 696, "text": "Cylinder asset SN-4C598614 hydrostatic test at Dock B Annex: measured 173.59 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 697, "text": "Cylinder asset SN-4C598614 leak test at Staging Yard B: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 698, "text": "Cylinder asset SN-4C598614 valve test at Dock B Annex: measured 55.84 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 699, "text": "Cylinder asset SN-4C598614 seal test at Staging Yard B: measured 14.81 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 700, "text": "Cylinder asset SN-4C598614 thread test at Staging Yard B: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 701, "text": "Cylinder asset SN-5A8FFD0A hydrostatic test at Staging Yard B: measured 174.91 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 702, "text": "Cylinder asset SN-5A8FFD0A leak test at Staging Yard B: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 703, "text": "Cylinder asset SN-5A8FFD0A valve test at Tank Farm: measured 58.03 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 704, "text": "Cylinder asset SN-5A8FFD0A seal test at Pier 2 Warehouse: measured 13.99 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 705, "text": "Cylinder asset SN-5A8FFD0A thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 706, "text": "Cylinder asset SN-6FFF94FC hydrostatic test at Staging Yard B: measured 132.61 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 707, "text": "Cylinder asset SN-6FFF94FC leak test at Staging Yard B: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 708, "text": "Cylinder asset SN-6FFF94FC valve test at Staging Yard B: measured 75.62 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 709, "text": "Cylinder asset SN-6FFF94FC seal test at Staging Yard B: measured 12.86 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 710, "text": "Cylinder asset SN-6FFF94FC thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 711, "text": "Cylinder asset SN-A4A90C9C hydrostatic test at Staging Yard B: measured 218.08 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 712, "text": "Cylinder asset SN-A4A90C9C leak test at Staging Yard B: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 713, "text": "Cylinder asset SN-A4A90C9C valve test at Refuge Hall C: measured 74.92 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 714, "text": "Cylinder asset SN-A4A90C9C seal test at Tank Farm: measured 9.11 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 715, "text": "Cylinder asset SN-A4A90C9C thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 716, "text": "Cylinder asset SN-DD780E03 hydrostatic test at Dock B Annex: measured 207.5 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 717, "text": "Cylinder asset SN-DD780E03 leak test at Refuge Hall C: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 718, "text": "Cylinder asset SN-DD780E03 valve test at Pier 2 Warehouse: measured 71.69 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 719, "text": "Cylinder asset SN-DD780E03 seal test at Staging Yard B: measured 8.89 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 720, "text": "Cylinder asset SN-DD780E03 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 721, "text": "Cylinder asset SN-1002FB5E hydrostatic test at Dock B Annex: measured 160.99 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 722, "text": "Cylinder asset SN-1002FB5E leak test at Staging Yard B: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 723, "text": "Cylinder asset SN-1002FB5E valve test at Refuge Hall C: measured 55.94 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 724, "text": "Cylinder asset SN-1002FB5E seal test at Refuge Hall C: measured 12.06 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 725, "text": "Cylinder asset SN-1002FB5E thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 726, "text": "Cylinder asset SN-B38F0062 hydrostatic test at Dock B Annex: measured 217.6 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 727, "text": "Cylinder asset SN-B38F0062 leak test at Staging Yard B: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 728, "text": "Cylinder asset SN-B38F0062 valve test at Staging Yard B: measured 60.76 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 729, "text": "Cylinder asset SN-B38F0062 seal test at Dock B Annex: measured 12.04 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 730, "text": "Cylinder asset SN-B38F0062 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 731, "text": "Cylinder asset SN-7307209E hydrostatic test at Pier 2 Warehouse: measured 165.27 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 732, "text": "Cylinder asset SN-7307209E leak test at Pier 2 Warehouse: measured 0.38 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 733, "text": "Cylinder asset SN-7307209E valve test at Dock B Annex: measured 54.45 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 734, "text": "Cylinder asset SN-7307209E seal test at Refuge Hall C: measured 14.76 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 735, "text": "Cylinder asset SN-7307209E thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 736, "text": "Cylinder asset SN-0FA185C8 hydrostatic test at Tank Farm: measured 192.4 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 737, "text": "Cylinder asset SN-0FA185C8 leak test at Refuge Hall C: measured 0.34 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 738, "text": "Cylinder asset SN-0FA185C8 valve test at Dock B Annex: measured 61.05 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 739, "text": "Cylinder asset SN-0FA185C8 seal test at Refuge Hall C: measured 13.23 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 740, "text": "Cylinder asset SN-0FA185C8 thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 741, "text": "Cylinder asset SN-223135CB hydrostatic test at Staging Yard B: measured 126.25 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 742, "text": "Cylinder asset SN-223135CB leak test at Tank Farm: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 743, "text": "Cylinder asset SN-223135CB valve test at Staging Yard B: measured 75.3 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 744, "text": "Cylinder asset SN-223135CB seal test at Tank Farm: measured 11.57 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 745, "text": "Cylinder asset SN-223135CB thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 746, "text": "Cylinder asset SN-8FDFB385 hydrostatic test at Staging Yard B: measured 137.47 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 747, "text": "Cylinder asset SN-8FDFB385 leak test at Dock B Annex: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 748, "text": "Cylinder asset SN-8FDFB385 valve test at Tank Farm: measured 45.19 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 749, "text": "Cylinder asset SN-8FDFB385 seal test at Pier 2 Warehouse: measured 13.63 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 750, "text": "Cylinder asset SN-8FDFB385 thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 751, "text": "Cylinder asset SN-6FF05462 hydrostatic test at Pier 2 Warehouse: measured 173.18 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 752, "text": "Cylinder asset SN-6FF05462 leak test at Dock B Annex: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 753, "text": "Cylinder asset SN-6FF05462 valve test at Pier 2 Warehouse: measured 75.34 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 754, "text": "Cylinder asset SN-6FF05462 seal test at Pier 2 Warehouse: measured 10.67 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 755, "text": "Cylinder asset SN-6FF05462 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 756, "text": "Cylinder asset SN-64C4AF9E hydrostatic test at Staging Yard B: measured 140.54 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 757, "text": "Cylinder asset SN-64C4AF9E leak test at Dock B Annex: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 758, "text": "Cylinder asset SN-64C4AF9E valve test at Tank Farm: measured 78.4 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 759, "text": "Cylinder asset SN-64C4AF9E seal test at Refuge Hall C: measured 10.82 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 760, "text": "Cylinder asset SN-64C4AF9E thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 761, "text": "Cylinder asset SN-D79F1B9C hydrostatic test at Tank Farm: measured 156.54 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 762, "text": "Cylinder asset SN-D79F1B9C leak test at Pier 2 Warehouse: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 763, "text": "Cylinder asset SN-D79F1B9C valve test at Staging Yard B: measured 73.72 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 764, "text": "Cylinder asset SN-D79F1B9C seal test at Dock B Annex: measured 10.49 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 765, "text": "Cylinder asset SN-D79F1B9C thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 766, "text": "Cylinder asset SN-674AAD0E hydrostatic test at Tank Farm: measured 181.34 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 767, "text": "Cylinder asset SN-674AAD0E leak test at Tank Farm: measured 0.43 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 768, "text": "Cylinder asset SN-674AAD0E valve test at Pier 2 Warehouse: measured 64.85 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 769, "text": "Cylinder asset SN-674AAD0E seal test at Dock B Annex: measured 11.28 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 770, "text": "Cylinder asset SN-674AAD0E thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 771, "text": "Cylinder asset SN-EADD0FBC hydrostatic test at Tank Farm: measured 191.3 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 772, "text": "Cylinder asset SN-EADD0FBC leak test at Staging Yard B: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 773, "text": "Cylinder asset SN-EADD0FBC valve test at Pier 2 Warehouse: measured 78.01 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 774, "text": "Cylinder asset SN-EADD0FBC seal test at Dock B Annex: measured 10.77 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 775, "text": "Cylinder asset SN-EADD0FBC thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 776, "text": "Cylinder asset SN-DEDEBFEE hydrostatic test at Staging Yard B: measured 216.33 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 777, "text": "Cylinder asset SN-DEDEBFEE leak test at Pier 2 Warehouse: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 778, "text": "Cylinder asset SN-DEDEBFEE valve test at Tank Farm: measured 79.92 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 779, "text": "Cylinder asset SN-DEDEBFEE seal test at Refuge Hall C: measured 14.61 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 780, "text": "Cylinder asset SN-DEDEBFEE thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 781, "text": "Cylinder asset SN-CEA92F2E hydrostatic test at Refuge Hall C: measured 206.91 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 782, "text": "Cylinder asset SN-CEA92F2E leak test at Pier 2 Warehouse: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 783, "text": "Cylinder asset SN-CEA92F2E valve test at Pier 2 Warehouse: measured 50.8 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 784, "text": "Cylinder asset SN-CEA92F2E seal test at Pier 2 Warehouse: measured 15.13 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 785, "text": "Cylinder asset SN-CEA92F2E thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 786, "text": "Cylinder asset SN-424B4C2F hydrostatic test at Pier 2 Warehouse: measured 154.59 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 787, "text": "Cylinder asset SN-424B4C2F leak test at Staging Yard B: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 788, "text": "Cylinder asset SN-424B4C2F valve test at Pier 2 Warehouse: measured 46.23 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 789, "text": "Cylinder asset SN-424B4C2F seal test at Dock B Annex: measured 11.03 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 790, "text": "Cylinder asset SN-424B4C2F thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 791, "text": "Cylinder asset SN-420A844A hydrostatic test at Staging Yard B: measured 226.63 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 792, "text": "Cylinder asset SN-420A844A leak test at Refuge Hall C: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 793, "text": "Cylinder asset SN-420A844A valve test at Tank Farm: measured 51.16 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 794, "text": "Cylinder asset SN-420A844A seal test at Refuge Hall C: measured 12.12 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 795, "text": "Cylinder asset SN-420A844A thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 796, "text": "Cylinder asset SN-F02D300C hydrostatic test at Pier 2 Warehouse: measured 196.62 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 797, "text": "Cylinder asset SN-F02D300C leak test at Pier 2 Warehouse: measured 0.52 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 798, "text": "Cylinder asset SN-F02D300C valve test at Pier 2 Warehouse: measured 53.58 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 799, "text": "Cylinder asset SN-F02D300C seal test at Refuge Hall C: measured 14.6 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 800, "text": "Cylinder asset SN-F02D300C thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 801, "text": "Cylinder asset SN-798E2DF6 hydrostatic test at Pier 2 Warehouse: measured 191.57 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 802, "text": "Cylinder asset SN-798E2DF6 leak test at Dock B Annex: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 803, "text": "Cylinder asset SN-798E2DF6 valve test at Pier 2 Warehouse: measured 52.37 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 804, "text": "Cylinder asset SN-798E2DF6 seal test at Pier 2 Warehouse: measured 15.04 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 805, "text": "Cylinder asset SN-798E2DF6 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 806, "text": "Cylinder asset SN-66BCF043 hydrostatic test at Tank Farm: measured 225.23 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 807, "text": "Cylinder asset SN-66BCF043 leak test at Pier 2 Warehouse: measured 0.43 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 808, "text": "Cylinder asset SN-66BCF043 valve test at Dock B Annex: measured 52.22 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 809, "text": "Cylinder asset SN-66BCF043 seal test at Tank Farm: measured 13.85 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 810, "text": "Cylinder asset SN-66BCF043 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 811, "text": "Cylinder asset SN-2181A58E hydrostatic test at Staging Yard B: measured 167.96 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 812, "text": "Cylinder asset SN-2181A58E leak test at Pier 2 Warehouse: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 813, "text": "Cylinder asset SN-2181A58E valve test at Dock B Annex: measured 51.98 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 814, "text": "Cylinder asset SN-2181A58E seal test at Pier 2 Warehouse: measured 13.02 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 815, "text": "Cylinder asset SN-2181A58E thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 816, "text": "Cylinder asset SN-873DB90F hydrostatic test at Staging Yard B: measured 153.51 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 817, "text": "Cylinder asset SN-873DB90F leak test at Staging Yard B: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 818, "text": "Cylinder asset SN-873DB90F valve test at Staging Yard B: measured 71.68 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 819, "text": "Cylinder asset SN-873DB90F seal test at Staging Yard B: measured 14.26 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 820, "text": "Cylinder asset SN-873DB90F thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 821, "text": "Cylinder asset SN-CD716AA1 hydrostatic test at Tank Farm: measured 169.19 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 822, "text": "Cylinder asset SN-CD716AA1 leak test at Tank Farm: measured 0.51 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 823, "text": "Cylinder asset SN-CD716AA1 valve test at Refuge Hall C: measured 76.24 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 824, "text": "Cylinder asset SN-CD716AA1 seal test at Tank Farm: measured 14.42 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 825, "text": "Cylinder asset SN-CD716AA1 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 826, "text": "Cylinder asset SN-80DF9790 hydrostatic test at Pier 2 Warehouse: measured 158.55 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 827, "text": "Cylinder asset SN-80DF9790 leak test at Pier 2 Warehouse: measured 0.42 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 828, "text": "Cylinder asset SN-80DF9790 valve test at Refuge Hall C: measured 56.23 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 829, "text": "Cylinder asset SN-80DF9790 seal test at Pier 2 Warehouse: measured 13.45 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 830, "text": "Cylinder asset SN-80DF9790 thread test at Dock B Annex: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 831, "text": "Cylinder asset SN-05C23895 hydrostatic test at Tank Farm: measured 177.52 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 832, "text": "Cylinder asset SN-05C23895 leak test at Pier 2 Warehouse: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 833, "text": "Cylinder asset SN-05C23895 valve test at Staging Yard B: measured 63.54 Nm against 62.0 Nm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 834, "text": "Cylinder asset SN-05C23895 seal test at Pier 2 Warehouse: measured 8.86 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 835, "text": "Cylinder asset SN-05C23895 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 836, "text": "Cylinder asset SN-10979904 hydrostatic test at Tank Farm: measured 189.61 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 837, "text": "Cylinder asset SN-10979904 leak test at Refuge Hall C: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 838, "text": "Cylinder asset SN-10979904 valve test at Refuge Hall C: measured 54.68 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 839, "text": "Cylinder asset SN-10979904 seal test at Pier 2 Warehouse: measured 11.95 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 840, "text": "Cylinder asset SN-10979904 thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 841, "text": "Cylinder asset SN-A5B7F8CA hydrostatic test at Tank Farm: measured 150.69 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 842, "text": "Cylinder asset SN-A5B7F8CA leak test at Pier 2 Warehouse: measured 0.46 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 843, "text": "Cylinder asset SN-A5B7F8CA valve test at Pier 2 Warehouse: measured 75.45 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 844, "text": "Cylinder asset SN-A5B7F8CA seal test at Refuge Hall C: measured 11.11 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 845, "text": "Cylinder asset SN-A5B7F8CA thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 846, "text": "Cylinder asset SN-AC0D46BB hydrostatic test at Pier 2 Warehouse: measured 141.24 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 847, "text": "Cylinder asset SN-AC0D46BB leak test at Refuge Hall C: measured 0.45 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 848, "text": "Cylinder asset SN-AC0D46BB valve test at Pier 2 Warehouse: measured 68.08 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 849, "text": "Cylinder asset SN-AC0D46BB seal test at Tank Farm: measured 14.24 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 850, "text": "Cylinder asset SN-AC0D46BB thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 851, "text": "Cylinder asset SN-D9E756A3 hydrostatic test at Refuge Hall C: measured 173.49 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 852, "text": "Cylinder asset SN-D9E756A3 leak test at Pier 2 Warehouse: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 853, "text": "Cylinder asset SN-D9E756A3 valve test at Dock B Annex: measured 69.64 Nm against 62.0 Nm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 854, "text": "Cylinder asset SN-D9E756A3 seal test at Tank Farm: measured 12.87 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 855, "text": "Cylinder asset SN-D9E756A3 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 856, "text": "Cylinder asset SN-4E8E9307 hydrostatic test at Dock B Annex: measured 142.98 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 857, "text": "Cylinder asset SN-4E8E9307 leak test at Refuge Hall C: measured 0.52 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 858, "text": "Cylinder asset SN-4E8E9307 valve test at Pier 2 Warehouse: measured 44.69 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 859, "text": "Cylinder asset SN-4E8E9307 seal test at Refuge Hall C: measured 8.61 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 860, "text": "Cylinder asset SN-4E8E9307 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 861, "text": "Cylinder asset SN-9EC375B9 hydrostatic test at Pier 2 Warehouse: measured 227.12 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 862, "text": "Cylinder asset SN-9EC375B9 leak test at Dock B Annex: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 863, "text": "Cylinder asset SN-9EC375B9 valve test at Staging Yard B: measured 76.3 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 864, "text": "Cylinder asset SN-9EC375B9 seal test at Dock B Annex: measured 11.15 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 865, "text": "Cylinder asset SN-9EC375B9 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 866, "text": "Cylinder asset SN-B4FD5218 hydrostatic test at Tank Farm: measured 161.55 bar against 180.0 bar limit, inspector S. Devi, result PASS"}
+{"doc_id": 867, "text": "Cylinder asset SN-B4FD5218 leak test at Staging Yard B: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 868, "text": "Cylinder asset SN-B4FD5218 valve test at Staging Yard B: measured 53.16 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 869, "text": "Cylinder asset SN-B4FD5218 seal test at Tank Farm: measured 14.22 mbar against 12.0 mbar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 870, "text": "Cylinder asset SN-B4FD5218 thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 871, "text": "Cylinder asset SN-43C260D4 hydrostatic test at Refuge Hall C: measured 135.1 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 872, "text": "Cylinder asset SN-43C260D4 leak test at Tank Farm: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 873, "text": "Cylinder asset SN-43C260D4 valve test at Dock B Annex: measured 45.16 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 874, "text": "Cylinder asset SN-43C260D4 seal test at Dock B Annex: measured 9.8 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 875, "text": "Cylinder asset SN-43C260D4 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 876, "text": "Cylinder asset SN-1D23FB73 hydrostatic test at Dock B Annex: measured 164.65 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 877, "text": "Cylinder asset SN-1D23FB73 leak test at Refuge Hall C: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 878, "text": "Cylinder asset SN-1D23FB73 valve test at Staging Yard B: measured 55.56 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 879, "text": "Cylinder asset SN-1D23FB73 seal test at Refuge Hall C: measured 10.92 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 880, "text": "Cylinder asset SN-1D23FB73 thread test at Tank Farm: measured 0.04 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 881, "text": "Cylinder asset SN-ED165DA2 hydrostatic test at Pier 2 Warehouse: measured 176.53 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 882, "text": "Cylinder asset SN-ED165DA2 leak test at Refuge Hall C: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 883, "text": "Cylinder asset SN-ED165DA2 valve test at Refuge Hall C: measured 57.77 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 884, "text": "Cylinder asset SN-ED165DA2 seal test at Staging Yard B: measured 10.81 mbar against 12.0 mbar limit, inspector S. Devi, result PASS"}
+{"doc_id": 885, "text": "Cylinder asset SN-ED165DA2 thread test at Dock B Annex: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 886, "text": "Cylinder asset SN-865C97CC hydrostatic test at Dock B Annex: measured 201.31 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 887, "text": "Cylinder asset SN-865C97CC leak test at Tank Farm: measured 0.49 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 888, "text": "Cylinder asset SN-865C97CC valve test at Refuge Hall C: measured 49.36 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 889, "text": "Cylinder asset SN-865C97CC seal test at Refuge Hall C: measured 13.52 mbar against 12.0 mbar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 890, "text": "Cylinder asset SN-865C97CC thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 891, "text": "Cylinder asset SN-AAAF1FE6 hydrostatic test at Dock B Annex: measured 177.98 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 892, "text": "Cylinder asset SN-AAAF1FE6 leak test at Dock B Annex: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 893, "text": "Cylinder asset SN-AAAF1FE6 valve test at Tank Farm: measured 44.71 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 894, "text": "Cylinder asset SN-AAAF1FE6 seal test at Dock B Annex: measured 13.35 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 895, "text": "Cylinder asset SN-AAAF1FE6 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 896, "text": "Cylinder asset SN-8D5B2921 hydrostatic test at Refuge Hall C: measured 204.37 bar against 180.0 bar limit, inspector T. Novak, result FAIL"}
+{"doc_id": 897, "text": "Cylinder asset SN-8D5B2921 leak test at Tank Farm: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector A. Farouk, result PASS"}
+{"doc_id": 898, "text": "Cylinder asset SN-8D5B2921 valve test at Refuge Hall C: measured 63.04 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 899, "text": "Cylinder asset SN-8D5B2921 seal test at Dock B Annex: measured 11.15 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 900, "text": "Cylinder asset SN-8D5B2921 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 901, "text": "Cylinder asset SN-BBB3CBC3 hydrostatic test at Staging Yard B: measured 135.78 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 902, "text": "Cylinder asset SN-BBB3CBC3 leak test at Refuge Hall C: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 903, "text": "Cylinder asset SN-BBB3CBC3 valve test at Tank Farm: measured 74.02 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 904, "text": "Cylinder asset SN-BBB3CBC3 seal test at Refuge Hall C: measured 11.24 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 905, "text": "Cylinder asset SN-BBB3CBC3 thread test at Refuge Hall C: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 906, "text": "Cylinder asset SN-EE426825 hydrostatic test at Refuge Hall C: measured 143.21 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 907, "text": "Cylinder asset SN-EE426825 leak test at Tank Farm: measured 0.32 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 908, "text": "Cylinder asset SN-EE426825 valve test at Dock B Annex: measured 68.39 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 909, "text": "Cylinder asset SN-EE426825 seal test at Refuge Hall C: measured 15.22 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 910, "text": "Cylinder asset SN-EE426825 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 911, "text": "Cylinder asset SN-08B98A14 hydrostatic test at Tank Farm: measured 161.49 bar against 180.0 bar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 912, "text": "Cylinder asset SN-08B98A14 leak test at Refuge Hall C: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 913, "text": "Cylinder asset SN-08B98A14 valve test at Tank Farm: measured 51.74 Nm against 62.0 Nm limit, inspector S. Devi, result PASS"}
+{"doc_id": 914, "text": "Cylinder asset SN-08B98A14 seal test at Tank Farm: measured 15.17 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 915, "text": "Cylinder asset SN-08B98A14 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 916, "text": "Cylinder asset SN-250EB2B1 hydrostatic test at Refuge Hall C: measured 131.77 bar against 180.0 bar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 917, "text": "Cylinder asset SN-250EB2B1 leak test at Staging Yard B: measured 0.31 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 918, "text": "Cylinder asset SN-250EB2B1 valve test at Refuge Hall C: measured 64.87 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 919, "text": "Cylinder asset SN-250EB2B1 seal test at Pier 2 Warehouse: measured 10.71 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 920, "text": "Cylinder asset SN-250EB2B1 thread test at Dock B Annex: measured 0.04 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 921, "text": "Cylinder asset SN-959E0564 hydrostatic test at Staging Yard B: measured 213.96 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 922, "text": "Cylinder asset SN-959E0564 leak test at Dock B Annex: measured 0.4 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 923, "text": "Cylinder asset SN-959E0564 valve test at Pier 2 Warehouse: measured 70.45 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 924, "text": "Cylinder asset SN-959E0564 seal test at Staging Yard B: measured 14.55 mbar against 12.0 mbar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 925, "text": "Cylinder asset SN-959E0564 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 926, "text": "Cylinder asset SN-1BB3B4E8 hydrostatic test at Pier 2 Warehouse: measured 148.49 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 927, "text": "Cylinder asset SN-1BB3B4E8 leak test at Pier 2 Warehouse: measured 0.44 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result FAIL"}
+{"doc_id": 928, "text": "Cylinder asset SN-1BB3B4E8 valve test at Dock B Annex: measured 57.34 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 929, "text": "Cylinder asset SN-1BB3B4E8 seal test at Tank Farm: measured 13.29 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 930, "text": "Cylinder asset SN-1BB3B4E8 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 931, "text": "Cylinder asset SN-55449270 hydrostatic test at Refuge Hall C: measured 202.07 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 932, "text": "Cylinder asset SN-55449270 leak test at Refuge Hall C: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 933, "text": "Cylinder asset SN-55449270 valve test at Staging Yard B: measured 46.54 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 934, "text": "Cylinder asset SN-55449270 seal test at Refuge Hall C: measured 10.04 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 935, "text": "Cylinder asset SN-55449270 thread test at Pier 2 Warehouse: measured 0.05 mm against 0.05 mm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 936, "text": "Cylinder asset SN-FA9DEFB0 hydrostatic test at Pier 2 Warehouse: measured 218.45 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 937, "text": "Cylinder asset SN-FA9DEFB0 leak test at Pier 2 Warehouse: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 938, "text": "Cylinder asset SN-FA9DEFB0 valve test at Pier 2 Warehouse: measured 54.88 Nm against 62.0 Nm limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 939, "text": "Cylinder asset SN-FA9DEFB0 seal test at Refuge Hall C: measured 10.26 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 940, "text": "Cylinder asset SN-FA9DEFB0 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 941, "text": "Cylinder asset SN-A949C9D8 hydrostatic test at Pier 2 Warehouse: measured 152.96 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 942, "text": "Cylinder asset SN-A949C9D8 leak test at Pier 2 Warehouse: measured 0.35 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 943, "text": "Cylinder asset SN-A949C9D8 valve test at Refuge Hall C: measured 49.64 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 944, "text": "Cylinder asset SN-A949C9D8 seal test at Staging Yard B: measured 11.74 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 945, "text": "Cylinder asset SN-A949C9D8 thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 946, "text": "Cylinder asset SN-DB408E07 hydrostatic test at Tank Farm: measured 161.02 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 947, "text": "Cylinder asset SN-DB408E07 leak test at Staging Yard B: measured 0.3 kPa/s against 0.4 kPa/s limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 948, "text": "Cylinder asset SN-DB408E07 valve test at Refuge Hall C: measured 71.45 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 949, "text": "Cylinder asset SN-DB408E07 seal test at Pier 2 Warehouse: measured 11.15 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 950, "text": "Cylinder asset SN-DB408E07 thread test at Tank Farm: measured 0.05 mm against 0.05 mm limit, inspector S. Devi, result PASS"}
+{"doc_id": 951, "text": "Cylinder asset SN-F4DC5B70 hydrostatic test at Pier 2 Warehouse: measured 188.18 bar against 180.0 bar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 952, "text": "Cylinder asset SN-F4DC5B70 leak test at Refuge Hall C: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 953, "text": "Cylinder asset SN-F4DC5B70 valve test at Dock B Annex: measured 51.59 Nm against 62.0 Nm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 954, "text": "Cylinder asset SN-F4DC5B70 seal test at Tank Farm: measured 10.3 mbar against 12.0 mbar limit, inspector T. Novak, result PASS"}
+{"doc_id": 955, "text": "Cylinder asset SN-F4DC5B70 thread test at Refuge Hall C: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 956, "text": "Cylinder asset SN-E8E16DBB hydrostatic test at Refuge Hall C: measured 223.09 bar against 180.0 bar limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 957, "text": "Cylinder asset SN-E8E16DBB leak test at Tank Farm: measured 0.29 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 958, "text": "Cylinder asset SN-E8E16DBB valve test at Dock B Annex: measured 53.14 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 959, "text": "Cylinder asset SN-E8E16DBB seal test at Dock B Annex: measured 14.51 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 960, "text": "Cylinder asset SN-E8E16DBB thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 961, "text": "Cylinder asset SN-6AD5515E hydrostatic test at Dock B Annex: measured 206.56 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 962, "text": "Cylinder asset SN-6AD5515E leak test at Dock B Annex: measured 0.36 kPa/s against 0.4 kPa/s limit, inspector S. Devi, result PASS"}
+{"doc_id": 963, "text": "Cylinder asset SN-6AD5515E valve test at Tank Farm: measured 80.51 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 964, "text": "Cylinder asset SN-6AD5515E seal test at Refuge Hall C: measured 8.89 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 965, "text": "Cylinder asset SN-6AD5515E thread test at Refuge Hall C: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 966, "text": "Cylinder asset SN-4C87DEB1 hydrostatic test at Pier 2 Warehouse: measured 196.95 bar against 180.0 bar limit, inspector S. Devi, result FAIL"}
+{"doc_id": 967, "text": "Cylinder asset SN-4C87DEB1 leak test at Staging Yard B: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 968, "text": "Cylinder asset SN-4C87DEB1 valve test at Refuge Hall C: measured 49.32 Nm against 62.0 Nm limit, inspector T. Novak, result PASS"}
+{"doc_id": 969, "text": "Cylinder asset SN-4C87DEB1 seal test at Staging Yard B: measured 14.89 mbar against 12.0 mbar limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 970, "text": "Cylinder asset SN-4C87DEB1 thread test at Staging Yard B: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 971, "text": "Cylinder asset SN-374DD45E hydrostatic test at Pier 2 Warehouse: measured 135.89 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 972, "text": "Cylinder asset SN-374DD45E leak test at Pier 2 Warehouse: measured 0.48 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 973, "text": "Cylinder asset SN-374DD45E valve test at Tank Farm: measured 49.57 Nm against 62.0 Nm limit, inspector M. Haddad, result PASS"}
+{"doc_id": 974, "text": "Cylinder asset SN-374DD45E seal test at Staging Yard B: measured 10.39 mbar against 12.0 mbar limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 975, "text": "Cylinder asset SN-374DD45E thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector R. Okonkwo, result FAIL"}
+{"doc_id": 976, "text": "Cylinder asset SN-33C6DF5B hydrostatic test at Refuge Hall C: measured 153.96 bar against 180.0 bar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 977, "text": "Cylinder asset SN-33C6DF5B leak test at Pier 2 Warehouse: measured 0.37 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result PASS"}
+{"doc_id": 978, "text": "Cylinder asset SN-33C6DF5B valve test at Dock B Annex: measured 65.98 Nm against 62.0 Nm limit, inspector T. Novak, result FAIL"}
+{"doc_id": 979, "text": "Cylinder asset SN-33C6DF5B seal test at Tank Farm: measured 12.72 mbar against 12.0 mbar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 980, "text": "Cylinder asset SN-33C6DF5B thread test at Tank Farm: measured 0.06 mm against 0.05 mm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 981, "text": "Cylinder asset SN-565027B1 hydrostatic test at Refuge Hall C: measured 157.36 bar against 180.0 bar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 982, "text": "Cylinder asset SN-565027B1 leak test at Pier 2 Warehouse: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 983, "text": "Cylinder asset SN-565027B1 valve test at Pier 2 Warehouse: measured 76.38 Nm against 62.0 Nm limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 984, "text": "Cylinder asset SN-565027B1 seal test at Dock B Annex: measured 15.44 mbar against 12.0 mbar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 985, "text": "Cylinder asset SN-565027B1 thread test at Pier 2 Warehouse: measured 0.04 mm against 0.05 mm limit, inspector T. Novak, result PASS"}
+{"doc_id": 986, "text": "Cylinder asset SN-2E2EF797 hydrostatic test at Dock B Annex: measured 219.57 bar against 180.0 bar limit, inspector M. Haddad, result FAIL"}
+{"doc_id": 987, "text": "Cylinder asset SN-2E2EF797 leak test at Pier 2 Warehouse: measured 0.41 kPa/s against 0.4 kPa/s limit, inspector T. Novak, result FAIL"}
+{"doc_id": 988, "text": "Cylinder asset SN-2E2EF797 valve test at Pier 2 Warehouse: measured 57.85 Nm against 62.0 Nm limit, inspector A. Farouk, result PASS"}
+{"doc_id": 989, "text": "Cylinder asset SN-2E2EF797 seal test at Refuge Hall C: measured 8.4 mbar against 12.0 mbar limit, inspector R. Okonkwo, result PASS"}
+{"doc_id": 990, "text": "Cylinder asset SN-2E2EF797 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector S. Devi, result FAIL"}
+{"doc_id": 991, "text": "Cylinder asset SN-09DE3FCD hydrostatic test at Tank Farm: measured 145.51 bar against 180.0 bar limit, inspector T. Novak, result PASS"}
+{"doc_id": 992, "text": "Cylinder asset SN-09DE3FCD leak test at Tank Farm: measured 0.33 kPa/s against 0.4 kPa/s limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 993, "text": "Cylinder asset SN-09DE3FCD valve test at Refuge Hall C: measured 74.32 Nm against 62.0 Nm limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 994, "text": "Cylinder asset SN-09DE3FCD seal test at Refuge Hall C: measured 9.86 mbar against 12.0 mbar limit, inspector A. Farouk, result PASS"}
+{"doc_id": 995, "text": "Cylinder asset SN-09DE3FCD thread test at Staging Yard B: measured 0.04 mm against 0.05 mm limit, inspector J. Lindqvist, result PASS"}
+{"doc_id": 996, "text": "Cylinder asset SN-1F0BFD00 hydrostatic test at Tank Farm: measured 193.97 bar against 180.0 bar limit, inspector J. Lindqvist, result FAIL"}
+{"doc_id": 997, "text": "Cylinder asset SN-1F0BFD00 leak test at Staging Yard B: measured 0.39 kPa/s against 0.4 kPa/s limit, inspector M. Haddad, result PASS"}
+{"doc_id": 998, "text": "Cylinder asset SN-1F0BFD00 valve test at Dock B Annex: measured 78.57 Nm against 62.0 Nm limit, inspector A. Farouk, result FAIL"}
+{"doc_id": 999, "text": "Cylinder asset SN-1F0BFD00 seal test at Dock B Annex: measured 10.87 mbar against 12.0 mbar limit, inspector M. Haddad, result PASS"}
+{"doc_id": 1000, "text": "Cylinder asset SN-1F0BFD00 thread test at Pier 2 Warehouse: measured 0.06 mm against 0.05 mm limit, inspector T. Novak, result FAIL"}

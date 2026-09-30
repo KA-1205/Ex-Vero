@@ -1,0 +1,49 @@
+# A genuinely small target: what a 512 MB / 1 CPU node can actually afford.
+#
+# The default `disaster-response.yaml` loads bge-small AND CLIP ViT-B/32 plus a
+# CLIP text adapter. That is several hundred MB of weights, which does not fit
+# under `--memory=512m` — the container would be OOM-killed before it could
+# answer a single query, and any telemetry it managed to report would be
+# fiction.
+#
+# This config is the honest one for a constrained node: one small text
+# embedder, BM25 (built into Qdrant Edge, so no extra library), and the
+# extractive generator only. Nothing here is stubbed — it is the same code
+# path with a smaller model set, selected the same way as any other model.
+#
+# Select it with EDGE_CONFIG_PATH=config/tiny-edge.yaml
+
+models:
+  embedders:
+    - name: text
+      modality: text
+      provider: fastembed
+      model: BAAI/bge-small-en-v1.5
+      version: bge-small-en-v1.5
+  sparse:
+    - name: text_bm25
+      provider: qdrant-edge
+      modifier: idf
+  generator:
+    # No Ollama on a 512 MB node: there is no room for a 1.5B generator beside
+    # the embedder. The extractive generator always answers from local facts,
+    # so the node still functions fully offline.
+    prefer: offline
+    offline:
+      provider: extractive
+      version: extractive-v1
+      fallback: extractive
+
+policy:
+  novelty_threshold_high: 0.98
+  novelty_threshold_low: 0.70
+  urgency_keywords:
+    - "structural collapse"
+    - "gas leak"
+    - "flood"
+
+memory:
+  max_local_points: 200
+
+consensus:
+  confidence_threshold: 0.66

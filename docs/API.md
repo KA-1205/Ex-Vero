@@ -311,14 +311,46 @@ Live CPU/RAM/latency read from the real cgroup/process. Labeled as an emulated c
 - **200**
 ```json
 {
-  "target_label": "emulated constrained target (1 CPU / 512 MB container)",
+  "target_label": "emulated constrained target (1.0 CPU / 512 MB container)",
   "cpu_pct": 63.2,
   "ram_mb": 218.4,
   "ram_limit_mb": 512,
-  "model_load_ms": 1840,
+  "model_load_ms": 71445,
   "query_latency_p50_ms": 38.1,
   "query_latency_p95_ms": 71.9
 }
+```
+
+Every field is measured, and each is honest about what it could not measure:
+
+| Field | Source | When it is absent |
+| --- | --- | --- |
+| `target_label` | `cpu.max` / `memory.max` in this cgroup | says `no CPU limit / no memory limit container` — never a number it did not read |
+| `cpu_pct` | `cpu.stat` `usage_usec`, differenced between two samples, as a percentage of the cgroup's quota | first call after start is `0.0`; there is no previous sample to difference against |
+| `ram_mb` | `/proc/self/status` `VmRSS` | `0.0` if unreadable |
+| `ram_limit_mb` | `memory.max` (v2) / `memory.limit_in_bytes` (v1) | `null`. It does **not** fall back to host RAM |
+| `model_load_ms` | wall-clock of startup, from adapter loading through fleet provisioning | `0.0` if the app has not finished starting |
+| `query_latency_p50_ms` / `_p95_ms` | real served queries, from the latency recorder | `0.0` before any query is served |
+
+Two properties worth relying on:
+
+- **`cpu_pct` is quota-relative.** `100.0` means the container's entire CPU
+  budget is in use. On an unconstrained host (no `cpu.max` quota) the reading
+  is relative to a single core instead.
+- **Polled faster than 250 ms, `cpu_pct` returns the last measured value
+  unchanged.** cgroup CPU accounting is quantised to the scheduler tick, so a
+  window shorter than a tick reports a partial slice as if it covered the whole
+  window — observed reading up to 251% for a 1-CPU budget. The reader refuses
+  to produce a new number inside that window rather than invent one, so a fresh
+  figure appears at most every 250 ms.
+
+### `GET /health`
+Readiness for orchestrators, derived from real startup state rather than a
+fixed reply. `status` is `starting` until adapters, BM25 and the demo fleet are
+all up, then `ok`.
+- **200**
+```json
+{ "status": "ok", "adapters": ["text"], "devices": 7, "model_load_ms": 71445 }
 ```
 
 ---
@@ -343,21 +375,72 @@ observable.
 
 ## 13. Benchmarks
 
+Both benchmark routes recompute from data on every call — the labeled fixtures
+in `tests/fixtures/` and a real Qdrant Edge shard. No figure below is stored;
+the values shown are one measured run and will move if the fixtures, the
+configured threshold, or the text model change.
+
 ### `GET /benchmark/resolver-vs-lww`
-Computed resolver-vs-last-write-wins accuracy over the labeled fixture set.
+Scores the real trust-weighted fold (`cloud-gateway/consensus_fold.py::fold_consensus`)
+against a real last-write-wins baseline — highest hub `seq` wins — over the
+labeled dispute scenarios. A scenario counts correct when the strategy's chosen
+value equals the fixture's known-correct value.
+
+Note `resolver_abstained`: a DISPUTED fold resolves to nothing, and abstaining
+is scored as *no answer*, never as a hit. `by_shape` breaks the result down by
+dispute pattern, including the shapes the fold loses.
 - **200**
 ```json
 {
-  "resolver_accuracy": 0.94,
-  "lww_accuracy": 0.71,
-  "scenarios": 300,
-  "trajectory": [ { "seq": 1, "event": "OBSERVED", "resolver": 0.73, "lww": 1.0 } ]
+  "scenarios": 32,
+  "resolver_correct": 18,
+  "lww_correct": 4,
+  "resolver_accuracy": 0.5625,
+  "lww_accuracy": 0.125,
+  "accuracy_delta": 0.4375,
+  "resolver_abstained": 10,
+  "by_shape": {
+    "minority_late_wrong": { "scenarios": 18, "resolver_correct": 18, "lww_correct": 0 },
+    "contested": { "scenarios": 6, "resolver_correct": 0, "lww_correct": 0 },
+    "late_correction": { "scenarios": 4, "resolver_correct": 0, "lww_correct": 4 },
+    "corroboration_foiled": { "scenarios": 4, "resolver_correct": 0, "lww_correct": 0 }
+  },
+  "threshold": 0.66,
+  "fixture": "tests/fixtures/conflict_facts.jsonl"
 }
 ```
 
 ### `GET /benchmark/recall`
-Dense-only vs hybrid recall@5 on the labeled set.
-- **200** → `{ "dense_recall_at_5": 0.62, "hybrid_recall_at_5": 0.84, "labeled_queries": 40 }`
+Dense-only vs fused hybrid (dense + BM25, RRF) recall@5 over the labeled query
+set, both legs ranked against the same 1000-point corpus shard. A query counts
+as recalled when a known-relevant id lands in the top 5. The corpus is seeded
+into a dedicated `__benchmark__` device shard on first call, so it never mixes
+with a real device's memory.
+
+`by_shape` shows the win is localized, not uniform: fusion earns its margin on
+exact-identifier lookups, while dense already handles the semantic and
+paraphrase queries.
+- **200**
+```json
+{
+  "k": 5,
+  "labeled_queries": 32,
+  "dense_hits": 20,
+  "hybrid_hits": 23,
+  "dense_recall_at_5": 0.625,
+  "hybrid_recall_at_5": 0.7188,
+  "hybrid_only_hits": 3,
+  "by_shape": {
+    "serial_lookup": { "queries": 24, "dense_hits": 12, "hybrid_hits": 15, "dense_recall_at_5": 0.5, "hybrid_recall_at_5": 0.625 },
+    "semantic": { "queries": 4, "dense_hits": 4, "hybrid_hits": 4, "dense_recall_at_5": 1.0, "hybrid_recall_at_5": 1.0 },
+    "paraphrase": { "queries": 4, "dense_hits": 4, "hybrid_hits": 4, "dense_recall_at_5": 1.0, "hybrid_recall_at_5": 1.0 }
+  },
+  "corpus_points": 1000,
+  "fixture": "tests/fixtures/recall_queries.jsonl",
+  "model": "text",
+  "model_version": "bge-small-en-v1.5"
+}
+```
 
 ---
 
