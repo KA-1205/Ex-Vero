@@ -19,6 +19,21 @@ models:
     - name: text_bm25
       provider: qdrant-edge   # BM25 is built into Qdrant Edge — no extra lib
       modifier: idf
+  generator:
+    # The Answer layer (src/edge_node/answer.py) resolves this into a generator
+    # chain via registry.build_generators. `prefer` selects the primary; the
+    # ExtractiveGenerator is always appended as the never-fails fallback, so a
+    # device with no reachable model still answers. Swapping the model is a
+    # one-line edit here — no kernel change. An `online:` (openai-compatible)
+    # block can be added and selected with `prefer: online`; it is omitted here
+    # rather than shipped as a placeholder.
+    prefer: offline
+    offline:
+      provider: ollama
+      model: qwen2.5:1.5b
+      version: qwen2.5-1.5b-instruct
+      endpoint: http://localhost:11434
+      fallback: extractive
 
 policy:
   novelty_threshold_high: 0.98

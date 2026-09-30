@@ -30,7 +30,7 @@ from qdrant_edge import (
 from datetime import datetime
 
 from .adapter import Adapter
-from .registry import load_adapters
+from .registry import load_adapters, build_generators
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY, SYNCED_KEY
 from .sync_transport import GatewayTransport
@@ -38,6 +38,7 @@ from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
 from . import network
 from .retrieval import hybrid_query
+from .answer import answer_question
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -49,6 +50,7 @@ adapters: List[Adapter] = None
 edge_config: EdgeConfig = None
 decision_engine: DecisionEngine = None
 bm25: Bm25 = None
+generators: list = None  # Phase 7: the config-selected RAG generator chain
 device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard}
 event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
 sync_transport = None  # SyncTransport; GatewayTransport in runtime, stub in tests
@@ -59,7 +61,7 @@ SHARD_BASE_PATH = "./shards"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport
+    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -92,6 +94,13 @@ async def lifespan(app: FastAPI):
 
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
+
+    # Answer layer (Phase 7): resolve the config-selected generator chain. The
+    # chain always ends in the extractive fallback, so the device can answer even
+    # with no reachable model. Built here so it is a runtime, config-driven
+    # object — never hardcoded in the query handler.
+    generators = build_generators(full_config)
+    print(f"Generator chain: {[g.name for g in generators]}")
 
     # Network layer (offline/degraded/full). Apply the config-driven link
     # parameters; the interceptor wraps ONLY the sync client below, never query.
@@ -130,8 +139,12 @@ class CaptureRequest(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    device_id: str
     text: str  # the query text
+    # `device_id` is authoritative from the path; kept optional in the body for
+    # backward compatibility with earlier callers that sent it there.
+    device_id: Optional[str] = None
+    answer: bool = True   # when true, generate a grounded RAG answer (Phase 7)
+    limit: int = 10       # retrieval fan-out
 
 
 class PointResponse(BaseModel):
@@ -140,9 +153,22 @@ class PointResponse(BaseModel):
     payload: dict
 
 
+class SourceRef(BaseModel):
+    """A cited retrieved fact backing the answer (docs/API.md §4)."""
+    id: int
+    score: float
+    value: Optional[str] = None
+    consensus_state: Optional[str] = None
+
+
 class QueryResponse(BaseModel):
     results: List[PointResponse]
     latency_ms: float
+    # Present only when an answer was generated (`answer: true`).
+    answer: Optional[str] = None
+    answer_path: Optional[str] = None    # "offline" | "online" | "extractive"
+    model: Optional[str] = None
+    sources: Optional[List[SourceRef]] = None
 
 
 def get_shard_path(device_id: str, shard_type: str) -> str:
@@ -360,8 +386,10 @@ async def query(device_id: str, request: QueryRequest):
     dense_vector = adapter.embed(request.text)
     sparse_vector = bm25.embed_query(request.text)
 
-    # The retrieval module imports no transport and no network simulator, so
-    # `latency_ms` measures local search only — the offline promise (invariant 8).
+    # The retrieval and answer modules import no transport and no network
+    # simulator, so `latency_ms` measures local search + local generation only —
+    # the offline promise (invariant 8). Timed end-to-end so the number reflects
+    # what the caller actually waited for.
     start_time = time.time()
     hits = hybrid_query(
         mutable_shard=mutable_shard,
@@ -369,13 +397,27 @@ async def query(device_id: str, request: QueryRequest):
         dense_vector=dense_vector,
         sparse_vector=sparse_vector,
         dense_name=adapter.name,
+        limit=request.limit,
     )
-    latency_ms = (time.time() - start_time) * 1000
 
     results = [
         PointResponse(id=h.id, score=h.score, payload=h.payload) for h in hits
     ]
-    return QueryResponse(results=results, latency_ms=latency_ms)
+
+    answer_fields = {}
+    # Grounded RAG answer over the retrieved context. Skipped when the caller
+    # asks for retrieval only, or when no generator chain is wired.
+    if request.answer and generators:
+        result = answer_question(request.text, hits, generators)
+        answer_fields = {
+            "answer": result.answer,
+            "answer_path": result.answer_path,
+            "model": result.model,
+            "sources": [SourceRef(**s) for s in result.sources],
+        }
+
+    latency_ms = (time.time() - start_time) * 1000
+    return QueryResponse(results=results, latency_ms=latency_ms, **answer_fields)
 
 
 @app.get("/devices/{device_id}/feed")

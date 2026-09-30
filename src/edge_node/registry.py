@@ -19,6 +19,54 @@ from .adapter import (
 _VALID_MODALITIES = {"text", "vision"}
 
 
+def build_generators(config: dict) -> list:
+    """Resolve the `models.generator` config into an ordered generator chain.
+
+    The Answer layer (Phase 7) tries the chain head-first and reports the
+    `answer_path` of whichever generator serves. The chain ALWAYS ends in the
+    `ExtractiveGenerator`, which needs no model and never fails — so a device
+    with no reachable model still answers. `prefer` selects the primary
+    (`offline` = Ollama, `online` = cloud); an absent/unknown block yields the
+    extractive-only chain.
+
+    This is the single place that names concrete generator classes, so swapping
+    the model is a one-line YAML edit (the same rule the embedders follow).
+    """
+    from .adapter import CloudGenerator, ExtractiveGenerator, OllamaGenerator
+
+    gen_cfg = (config.get("models") or {}).get("generator", {}) or {}
+    prefer = gen_cfg.get("prefer", "offline")
+
+    def build_offline():
+        spec = gen_cfg.get("offline")
+        if not spec or spec.get("provider") != "ollama":
+            return None
+        return OllamaGenerator(
+            model=spec.get("model", "qwen2.5:1.5b"),
+            endpoint=spec.get("endpoint", "http://localhost:11434"),
+            version=spec.get("version"),
+        )
+
+    def build_online():
+        spec = gen_cfg.get("online")
+        if not spec or spec.get("provider") not in ("openai-compatible", "openai"):
+            return None
+        return CloudGenerator(
+            model=spec.get("model"),
+            endpoint=spec.get("endpoint", ""),
+            api_key=spec.get("api_key", ""),
+            version=spec.get("version"),
+        )
+
+    primary = build_online() if prefer == "online" else build_offline()
+
+    chain = []
+    if primary is not None:
+        chain.append(primary)
+    chain.append(ExtractiveGenerator())  # always-available, never-fails fallback
+    return chain
+
+
 def _resolve_embedder(spec: dict) -> Embedder:
     """Turn one embedder spec into an adapter object."""
     name = spec.get("name")

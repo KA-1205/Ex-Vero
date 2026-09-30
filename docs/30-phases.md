@@ -31,7 +31,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 4 | Partial-snapshot pull | DONE |
 | 5 | Multi-device consensus | DONE |
 | 6 | Network layer | DONE |
-| 7 | Answer layer (on-device RAG) | TODO |
+| 7 | Answer layer (on-device RAG) | DONE |
 | 8 | Eviction + inspection endpoints | TODO |
 | 9 | Benchmarks (measured) | PARTIAL |
 | 10 | Docker + telemetry integration | TODO |
@@ -381,7 +381,36 @@ test), the same question returns a grounded answer citing real retrieved ids and
 **Guardrails:** answer only from retrieved context (no free generation); never call the network in
 unit tests; the generator is config-selected.
 
+**Result:** new `src/edge_node/answer.py` is the RAG orchestrator (retrieve → augment → generate) and
+imports **only** the standard library — never `qdrant_edge`, the sync transport, or the network
+simulator (invariant 8, proven by a clean-subprocess import-graph test, red under mutation). Retrieval
+stays the Phase-0 server-side-RRF hybrid over both shards (`retrieval.py`); `answer_question` augments
+by putting **only** the top-k retrieved values into the prompt context — CONFIRMED facts promoted ahead
+of uncorroborated ones, DISPUTED surfaced with a visible `[DISPUTED]` flag rather than silently dropped
+(read from each hit's `consensus_state`, so the answer path never reaches the gateway). Three generators
+behind the `Generator` Protocol live in the registry (`adapter.py`): `ExtractiveGenerator` (no model,
+stitches snippets — the always-available fallback), `OllamaGenerator` (offline, `qwen2.5:1.5b` via
+`POST /api/generate`), and `CloudGenerator` (online, openai-compatible); `registry.build_generators`
+resolves the config `models.generator` block into a chain that always ends in extractive, so the device
+answers even with no reachable model. The orchestrator tries the chain head-first and reports the
+serving generator's `answer_path` (`offline`/`online`/`extractive`) + `name`; `sources` cites the exact
+retrieved point ids with score + consensus state. `main.py`'s `POST /query` gained `answer`/`limit` and
+returns `answer`/`answer_path`/`model`/`latency_ms`/`sources` (docs/API.md §4 shape — no route change);
+`latency_ms` is measured over local search + local generation only. Tests (`tests/test_answer.py`):
+answer-module isolation (inv 8), a grounded answer over three facts citing real ids with the correct
+`answer_path` under `offline` (the acceptance test), the generator seeing **only** retrieved context
+(grounding guard), CONFIRMED-preferred/DISPUTED-flagged augment, chain fallback past an unreachable model,
+config-selected chain, and a live-Ollama integration test (warm-up-or-skip, verified passing locally).
+Each guard was confirmed real by mutation (ungrounded stitch, dropped consensus preference, injected
+outside context, broken isolation all flip a test red). Full suite green (69, +3 skipped integration).
+
 **Out of scope:** fine-tuning (never), streaming tokens (nice-to-have).
+
+**Deferred:** stamping the gateway fold's `consensus_state` onto pulled facts so the prefer-CONFIRMED /
+flag-DISPUTED augment is driven end-to-end in production (today it activates on any fact that carries
+`consensus_state`, exercised by the tests; the on-device query path stays offline and never calls the
+gateway fold). A cloud `online:` generator block is resolvable but omitted from shipped config rather
+than shipped as a placeholder.
 
 ---
 

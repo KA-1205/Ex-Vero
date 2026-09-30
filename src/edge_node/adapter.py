@@ -227,3 +227,134 @@ def _clip_leg(model: str, leg: Literal["text", "vision"]) -> str:
 
 # Backward-compatible name for the earlier "Step 1" text adapter.
 TextAdapter = TextDenseAdapter
+
+
+# ---------------------------------------------------------------------------
+# Generators (Phase 7) — the RAG backends behind the `Generator` Protocol. All
+# three answer ONLY from the retrieved context they are handed; none reaches for
+# outside knowledge. Each carries an `answer_path` label the Answer layer reports
+# so the UI can show which path served a given answer.
+#
+# The registry (`registry.build_generators`) is the only place that names these
+# classes; the kernel talks to them through the Protocol, so swapping the model
+# is a one-line YAML edit. `httpx` is imported lazily inside the network-backed
+# generators (mirroring how `fastembed` is imported lazily above) — this module
+# must stay importable on a tiny device with no HTTP stack loaded, and the
+# answer path must not pull in the sync transport / network simulator.
+# ---------------------------------------------------------------------------
+def build_grounded_prompt(question: str, context: List[str]) -> str:
+    """Assemble the strict-RAG prompt: the model may use ONLY these facts.
+
+    Kept here (not in the orchestrator) so every network-backed generator frames
+    the grounding instruction identically. The Answer layer has already selected
+    and ordered the context lines (CONFIRMED first, DISPUTED flagged).
+    """
+    if context:
+        facts = "\n".join(f"- {line}" for line in context)
+    else:
+        facts = "(no relevant local records)"
+    return (
+        "You are a disaster-response field assistant. Answer the question using "
+        "ONLY the facts listed in the context below. Do not use any outside "
+        "knowledge. If the context does not contain the answer, say you do not "
+        "have that information. Treat any fact marked [DISPUTED] as unconfirmed.\n\n"
+        f"Context:\n{facts}\n\n"
+        f"Question: {question}\n"
+        "Answer:"
+    )
+
+
+class ExtractiveGenerator:
+    """The always-available fallback: no model, no network — it stitches the top
+    retrieved snippets into a short grounded summary. This is what keeps a tiny
+    device (or one with no reachable model) able to answer at all, and it can
+    never fabricate because its output is assembled straight from the context.
+    """
+
+    name = "extractive"
+    answer_path = "extractive"
+
+    def __init__(self, max_snippets: int = 3):
+        self.max_snippets = max_snippets
+
+    def generate(self, question: str, context: List[str]) -> str:
+        if not context:
+            return "No local records match that question."
+        snippets = context[: self.max_snippets]
+        return "Based on local records: " + " | ".join(snippets)
+
+
+class OllamaGenerator:
+    """On-device generation via a local Ollama daemon (default `qwen2.5:1.5b`).
+
+    This is the `offline` path: the model runs on the device, so it needs no
+    connectivity. `generate` raises on any transport/HTTP error so the Answer
+    layer falls back to the next generator in the chain (ultimately extractive)
+    rather than returning nothing.
+    """
+
+    answer_path = "offline"
+
+    def __init__(
+        self,
+        model: str = "qwen2.5:1.5b",
+        endpoint: str = "http://localhost:11434",
+        version: str = None,
+        timeout: float = 60.0,
+    ):
+        self.model = model
+        self.name = model
+        self.version = version or model
+        self.endpoint = endpoint.rstrip("/")
+        self.timeout = timeout
+
+    def generate(self, question: str, context: List[str]) -> str:
+        import httpx
+
+        prompt = build_grounded_prompt(question, context)
+        r = httpx.post(
+            f"{self.endpoint}/api/generate",
+            json={"model": self.model, "prompt": prompt, "stream": False},
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        return r.json()["response"].strip()
+
+
+class CloudGenerator:
+    """Online generation via an OpenAI-compatible chat endpoint.
+
+    This is the `online` path. Same grounding contract as the offline model;
+    `generate` raises on failure so the chain can fall back.
+    """
+
+    answer_path = "online"
+
+    def __init__(
+        self,
+        model: str,
+        endpoint: str,
+        api_key: str = "",
+        version: str = None,
+        timeout: float = 60.0,
+    ):
+        self.model = model
+        self.name = model
+        self.version = version or model
+        self.endpoint = endpoint.rstrip("/")
+        self.api_key = api_key
+        self.timeout = timeout
+
+    def generate(self, question: str, context: List[str]) -> str:
+        import httpx
+
+        prompt = build_grounded_prompt(question, context)
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        r = httpx.post(
+            f"{self.endpoint}/v1/chat/completions",
+            json={"model": self.model, "messages": [{"role": "user", "content": prompt}]},
+            headers=headers,
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
