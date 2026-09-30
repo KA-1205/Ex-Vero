@@ -5,6 +5,7 @@ import io
 import asyncio
 from typing import List, Dict, Optional, Any, Set
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import yaml
@@ -217,6 +218,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# The Vite dev server runs on :5173 and the node answers on :8000, so every API
+# call the UI makes is cross-origin. Without this the browser silently discards
+# each response and the dashboard renders empty while the API looks perfectly
+# healthy from curl — which is exactly the "no data" confusion this avoids.
+# The node binds to the local machine only; it is not a public deployment.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

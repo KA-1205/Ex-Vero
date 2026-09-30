@@ -1,7 +1,7 @@
 [project]
 name = "edge-node"
 version = "0.1.0"
-description = "Aegis Edge — offline-first edge memory kernel device node"
+description = "Ex-Vero — offline-first edge memory kernel device node"
 readme = "README.md"
 authors = [
     { name = "Kartik Arora", email = "kartikarora.1205@outlook.com" }

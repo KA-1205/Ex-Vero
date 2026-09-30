@@ -22,8 +22,8 @@ import pytest
 pytestmark = pytest.mark.integration
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMAGE = "aegis-edge-phase10-test"
-CONTAINER = "aegis-edge-phase10"
+IMAGE = "ex-vero-edge-phase10-test"
+CONTAINER = "ex-vero-edge-phase10"
 CPU_LIMIT = 1
 MEM_LIMIT_MB = 512
 PORT = 8099

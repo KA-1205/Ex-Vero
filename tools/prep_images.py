@@ -1,4 +1,4 @@
-"""Prepare a small, deterministic Aegis Edge image seed from a Roboflow export.
+"""Prepare a small, deterministic Ex-Vero image seed from a Roboflow export.
 
 The input is a YOLOv8 export with ``train``, ``valid`` and/or ``test`` folders.
 Images with an empty annotation file are treated as the explicit ``none`` class.

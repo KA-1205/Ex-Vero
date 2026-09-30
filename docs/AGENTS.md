@@ -1,4 +1,4 @@
-# AGENTS.md — Aegis Edge
+# AGENTS.md — Ex-Vero
 
 **Read this before writing code.** It is the build guide: the verified Qdrant Edge facts,
 the traps that silently corrupt data, the invariants that must each have a test, and the

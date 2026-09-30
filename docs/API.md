@@ -1,4 +1,4 @@
-# Aegis Edge — API Contract (`API.md`)
+# Ex-Vero — API Contract (`API.md`)
 
 **Role of this document:** the complete request/response contract between the backend and
 the frontend, so the UI team can build in parallel against fixed shapes. This is the

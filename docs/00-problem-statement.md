@@ -65,7 +65,7 @@ The product is the **intelligence layer on top of Qdrant**:
 Qdrant Edge is the substrate that makes all three possible offline; Qdrant Server is
 where the fleet's knowledge converges.
 
-## 3. What we are building — Aegis Edge
+## 3. What we are building — Ex-Vero
 
 An **offline-first edge memory kernel** demonstrated as a **disaster-response fleet**
 (paramedic tablets and triage kiosks — the hardest case: worst connectivity, highest

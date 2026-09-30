@@ -1,4 +1,4 @@
-# Aegis Edge — the full Phase 10 stack, every node under a real budget.
+# Ex-Vero — the full Phase 10 stack, every node under a real budget.
 #
 #   docker compose -f docker/docker-compose.yml up --build
 #

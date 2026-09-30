@@ -1,4 +1,4 @@
-"""Phase 1 — Device provisioning for the Aegis Edge fleet.
+"""Phase 1 — Device provisioning for the Ex-Vero fleet.
 
 Ensures that the demo fleet (cam-01, cam-02, cam-03, dev-01, dev-02, dev-03, dev-04)
 is initialized with persistent local storage, seed metadata, and initial observations

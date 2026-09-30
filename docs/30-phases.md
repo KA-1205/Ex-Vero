@@ -1,4 +1,4 @@
-# Aegis Edge — Execution Roadmap (the live phase plan)
+# Ex-Vero — Execution Roadmap (the live phase plan)
 
 **Role of this document:** the forward, numbered plan that `/p <n>` executes. Each phase is
 written to be executed with **no guessing**: it names the exact files, the concrete steps, the

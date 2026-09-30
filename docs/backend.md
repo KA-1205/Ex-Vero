@@ -1,4 +1,4 @@
-# Aegis Edge — Backend Specification
+# Ex-Vero — Backend Specification
 
 **Role of this document:** the engineering core. It defines every backend part, what
 each part is *for*, and what we *expect* from it (the acceptance bar). Read

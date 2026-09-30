@@ -1,4 +1,4 @@
-# Aegis Edge — Product & Software Requirements (PRD / SRS)
+# Ex-Vero — Product & Software Requirements (PRD / SRS)
 
 **Role of this document:** the requirements contract. It states, in testable terms, what
 the product must do (functional requirements), how well it must do it (non-functional

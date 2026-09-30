@@ -36,7 +36,7 @@ export function TopBar() {
             to="/"
             className="navbar-brand flex items-center justify-between font-serif text-[22px] leading-[1.05] tracking-tight text-[#F3F7FA]"
           >
-            <span>AEGIS<br />EDGE</span>
+            <span>EX-VERO</span>
             <svg aria-hidden="true" viewBox="0 0 32 32" className="w-8 h-8 text-[#DCE8F0] fill-current">
               <path d="M16 0c1.7 9.3 3.2 12.3 12 16-8.8 3.7-10.3 6.7-12 16C14.3 22.7 12.8 19.7 4 16 12.8 12.3 14.3 9.3 16 0Z" />
             </svg>

@@ -1,4 +1,4 @@
-# Aegis Edge — Frontend Specification
+# Ex-Vero — Frontend Specification
 
 **Role of this document:** the UI layer only. It consumes the REST/WebSocket contract in
 `backend.md` §10 and renders it. **No model or policy logic lives in the browser** — the

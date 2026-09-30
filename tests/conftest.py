@@ -1,4 +1,4 @@
-"""Global pytest fixtures for Aegis Edge tests.
+"""Global pytest fixtures for Ex-Vero tests.
 
 Key fixture: `clean_shards` — automatically wipes the `./shards/` directory
 created during test runs so disk space doesn't accumulate between invocations.

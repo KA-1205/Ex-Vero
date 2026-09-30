@@ -1,6 +1,6 @@
 # Image seed preparation
 
-`prep_images.py` converts a Roboflow YOLOv8 export into the Aegis Edge image
+`prep_images.py` converts a Roboflow YOLOv8 export into the Ex-Vero image
 seed. It is offline after the export is downloaded:
 
 ```powershell

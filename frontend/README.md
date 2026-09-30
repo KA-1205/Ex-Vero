@@ -1,6 +1,6 @@
-# Aegis Edge — Frontend
+# Ex-Vero — Frontend
 
-React + Vite + TypeScript + Tailwind command console for the Aegis Edge
+React + Vite + TypeScript + Tailwind command console for the Ex-Vero
 fleet, built to the spec in the repo's `frontend.md`. No component library —
 a custom "tactical ops console" design system (near-black, monospace data,
 hairline borders, no gradients/shadows).

@@ -8,7 +8,7 @@
 # startup would mean the node needed the network before it could answer, and it
 # would load them *inside* the memory budget we are trying to measure.
 #
-#   docker build -f docker/edge.Dockerfile -t aegis-edge .
+#   docker build -f docker/edge.Dockerfile -t ex-vero-edge .
 FROM python:3.11-slim
 
 # Keep the image lean: no compiler toolchain, no build cache, no git history.
@@ -37,10 +37,22 @@ RUN pip install --no-cache-dir \
 
 # 2) Bake the weights in, while the layer is still unconstrained. This is a
 #    build-time cost, not a startup cost inside the budget.
+#
+#    Both CLIP legs and the small text model are warmed, because the default
+#    config (config/disaster-response.yaml) loads all three and this image is
+#    meant to run offline. A node given the smaller config/tiny-edge.yaml
+#    simply never touches the CLIP weights.
+#
+#    The CLIP names are the per-modality legs the app resolves too
+#    (`_clip_leg` splits "Qdrant/clip-ViT-B-32" into -text / -vision); the
+#    family name itself is not a loadable fastembed model.
 #    embed() (not just constructing) is what actually pulls the model down.
 RUN python -c "\
-from fastembed import TextEmbedding; \
-TextEmbedding('BAAI/bge-small-en-v1.5').embed(['warmup'])" \
+from fastembed import TextEmbedding, ImageEmbedding; \
+from PIL import Image; \
+TextEmbedding('BAAI/bge-small-en-v1.5').embed(['warmup']); \
+TextEmbedding('Qdrant/clip-ViT-B-32-text').embed(['warmup']); \
+ImageEmbedding('Qdrant/clip-ViT-B-32-vision').embed([Image.new('RGB', (8, 8), (0, 0, 0))])" \
  && du -sh "$FASTEMBED_CACHE_PATH"
 
 # Now that the weights are baked in, forbid network lookups at runtime. Set

@@ -1,4 +1,4 @@
-# Aegis Edge — Architecture
+# Ex-Vero — Architecture
 
 **Role of this document:** the system view. It shows the processes, the data flow, the
 Qdrant Edge shard model, the sync loop, and the consensus fold in one place, so anyone

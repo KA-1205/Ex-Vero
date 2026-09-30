@@ -41,7 +41,7 @@ export function Login() {
 
       <header className="relative z-10 flex items-center justify-between border-b border-line px-4 py-2">
         <Link to="/" className="font-mono text-sm font-semibold tracking-wide text-ink">
-          AEGIS EDGE
+          EX-VERO
         </Link>
         <span className="font-mono text-[11px] text-ink-faint">SECURE ACCESS</span>
       </header>

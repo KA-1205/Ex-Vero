@@ -23,7 +23,7 @@ export function Landing() {
       <header className="relative z-10 flex items-center justify-between px-4 py-2 border-b border-line">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm font-semibold tracking-wide text-ink">
-            AEGIS EDGE
+            EX-VERO
           </span>
           <span className="text-[11px] text-ink-faint font-mono hidden sm:inline">
             edge memory kernel
@@ -45,7 +45,7 @@ export function Landing() {
 
         <div className="text-center max-w-2xl">
           <h1 className="font-mono text-5xl sm:text-7xl font-semibold tracking-tight text-ink">
-            AEGIS EDGE
+            EX-VERO
           </h1>
           <p className="mt-5 text-sm sm:text-base font-sans leading-relaxed" style={{ color: '#102A43' }}>
             An offline-first edge memory kernel that decides what's worth remembering,

@@ -1,4 +1,4 @@
-"""Aegis Edge — Cloud Gateway.
+"""Ex-Vero — Cloud Gateway.
 
 The hub side of the sync protocol (backend.md §6). One real FastAPI process in
 front of a real Qdrant Server. **Qdrant is the only datastore here — no SQL, no
@@ -31,6 +31,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import time
 from typing import Any, Dict, List, Optional
 
 from contextlib import asynccontextmanager
@@ -43,6 +44,19 @@ from qdrant_client import QdrantClient, models
 from consensus_fold import DEFAULT_DEVICE_TRUST, DEFAULT_THRESHOLD, derive_device_trust, fold_consensus
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
+# Creating a collection on a cold Qdrant Server legitimately takes tens of
+# seconds — measured at 20s for the events collection on first boot, before
+# optimizers settle. A 2s budget guaranteed failure on exactly the cold start
+# this gateway runs under `docker compose up`, which is what tipped it onto its
+# in-memory fallback and made every later ingest 500.
+QDRANT_TIMEOUT_S = float(os.environ.get("QDRANT_TIMEOUT_S", "60"))
+QDRANT_CONNECT_ATTEMPTS = int(os.environ.get("QDRANT_CONNECT_ATTEMPTS", "5"))
+# Falling back to an in-memory store means the hub keeps "working" while the
+# data goes nowhere, which is worse than being down. It stays available for
+# local single-process use and for tests, but now has to be asked for.
+ALLOW_MEMORY_FALLBACK = os.environ.get(
+    "GATEWAY_ALLOW_MEMORY_FALLBACK", ""
+).strip().lower() in ("1", "true", "yes")
 FACTS_COLLECTION = "facts"
 EVENTS_COLLECTION = "fact_events"
 DENSE_VECTOR = "dense"
@@ -58,7 +72,7 @@ async def _lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="Aegis Edge — Cloud Gateway", lifespan=_lifespan)
+app = FastAPI(title="Ex-Vero — Cloud Gateway", lifespan=_lifespan)
 
 # The gateway is the single sequencer for hub-assigned event ordering. Guarded by
 # a lock so concurrent ingests get distinct, monotonic seqs.
@@ -152,18 +166,35 @@ def _startup() -> None:
         _init_sequencer()
         return
 
-    # Try connecting to QDRANT_URL with retries; fall back to in-memory if unreachable
+    # Connect to QDRANT_URL, retrying: the first attempt routinely loses the
+    # race against a cold Qdrant Server, and a single attempt is not a
+    # connection strategy.
     last_err: Optional[Exception] = None
-    try:
-        client = QdrantClient(url=QDRANT_URL, timeout=2.0)
-        _ensure_events_collection()
-        _init_sequencer()
-        return
-    except Exception as e:
-        last_err = e
+    for attempt in range(1, QDRANT_CONNECT_ATTEMPTS + 1):
+        try:
+            client = QdrantClient(url=QDRANT_URL, timeout=QDRANT_TIMEOUT_S)
+            _ensure_events_collection()
+            _init_sequencer()
+            return
+        except Exception as e:  # noqa: BLE001 - report whatever went wrong
+            last_err = e
+            print(
+                f"Qdrant at {QDRANT_URL} not ready "
+                f"(attempt {attempt}/{QDRANT_CONNECT_ATTEMPTS}): {type(e).__name__}: {e}"
+            )
+            if attempt < QDRANT_CONNECT_ATTEMPTS:
+                time.sleep(min(2.0 * attempt, 10.0))
 
-    # Fallback to local in-memory Qdrant so gateway functions without external Docker
-    print(f"Warning: Qdrant at {QDRANT_URL} not reachable ({last_err}); falling back to in-memory Qdrant")
+    if not ALLOW_MEMORY_FALLBACK:
+        raise RuntimeError(
+            f"Qdrant at {QDRANT_URL} unreachable after {QDRANT_CONNECT_ATTEMPTS} "
+            f"attempts ({last_err}). Refusing to fall back to an in-memory store, "
+            f"because the hub would accept writes and lose them. Set "
+            f"GATEWAY_ALLOW_MEMORY_FALLBACK=1 to allow it deliberately."
+        )
+
+    # Deliberate local-only mode, opted into above.
+    print(f"Falling back to in-memory Qdrant (GATEWAY_ALLOW_MEMORY_FALLBACK set)")
     client = QdrantClient(location=":memory:")
     _ensure_events_collection()
     _init_sequencer()

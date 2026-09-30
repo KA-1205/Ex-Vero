@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Aegis Edge light field-console palette
+        // Ex-Vero light field-console palette
         base: {
           DEFAULT: '#E1EBEB', // page background
           raised: '#FFFFFF',  // panels

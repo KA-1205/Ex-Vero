@@ -1,6 +1,6 @@
 <div align="center">
 
-# Aegis Edge
+# Ex-Vero
 
 **An offline-first edge memory kernel on Qdrant Edge — each device is a smart notepad that searches and answers offline, and a walkie-talkie that disputes and converges with the fleet when it reconnects.**
 
@@ -12,9 +12,103 @@ Built for Qdrant · Problem Statement 03 — AI-Powered Edge Memory & Intelligen
 ![Qdrant Server](https://img.shields.io/badge/hub-Qdrant%20Server-8A2BE2?style=flat-square)
 ![No SQL](https://img.shields.io/badge/datastore-Qdrant%20only-cc3836?style=flat-square)
 
-[Overview](#overview) • [How it works](#how-it-works) • [The five demo moments](#the-five-demo-moments) • [Architecture](#architecture) • [Tech stack](#tech-stack) • [Docs](#docs)
+[Quick start](#quick-start) • [Overview](#overview) • [How it works](#how-it-works) • [The five demo moments](#the-five-demo-moments) • [Architecture](#architecture) • [Tech stack](#tech-stack) • [Docs](#docs)
 
 </div>
+
+---
+
+## Quick start
+
+Everything runs in Docker: the Qdrant hub, the cloud gateway, Ollama, and a
+**real 1-CPU / 512 MB constrained edge node**.
+
+**Prerequisites:** Docker with Compose, Python 3.11+, Node 18+.
+
+**1 — start the stack**
+
+```bash
+cd edge-node
+docker compose -f docker/docker-compose.yml up --build
+```
+
+**2 — start the dashboard** (separate terminal)
+
+```bash
+cd edge-node/frontend
+npm install        # once
+npm run dev
+```
+
+Open **http://localhost:5173**. It talks to the edge node on `:8000` by default;
+override with `VITE_API_BASE_URL` if you need to.
+
+**3 — first run only:** pull the answer model. Without it, answers fall back to
+extractive mode (correct, but less impressive).
+
+```bash
+docker compose -f docker/docker-compose.yml exec ollama pull qwen2.5:1.5b
+```
+
+### Where things are
+
+| Service | URL | What it is |
+| --- | --- | --- |
+| Dashboard | http://localhost:5173 | React UI |
+| Edge node | http://localhost:8000/docs | FastAPI, interactive route docs |
+| Cloud gateway | http://localhost:8088 | Sync + consensus fold |
+| Qdrant | http://localhost:6333/dashboard | Hub — inspect the `facts` collection |
+| Ollama | http://localhost:11434 | Local answer model |
+
+### Captured facts reach Qdrant only after a push
+
+This is the offline-first design, not a bug. A capture is stored **on the
+device**; nothing leaves until you push it, and the hub never receives data it
+wasn't handed.
+
+```bash
+curl -sX POST localhost:8000/devices/dev-01/push
+```
+
+Then refresh the Qdrant dashboard and the point appears in `facts` (and in
+`fact_events`, the append-only log). Device ids are `dev-01`…`dev-04` and
+`cam-01`…`cam-03`.
+
+### Prove the constraint is real
+
+```bash
+docker inspect docker-edge-tiny-1 --format 'NanoCPus={{.HostConfig.NanoCpus}} Memory={{.HostConfig.Memory}}'
+# NanoCPus=1000000000 Memory=536870912   ← 1 CPU, 512 MB
+
+curl -s localhost:8000/devices/dev-01/telemetry
+# {"target_label": "emulated constrained target (1.0 CPU / 512 MB container)", ...}
+```
+
+### Tests
+
+```bash
+cd edge-node
+.venv/bin/python -m pytest -q
+
+# the container acceptance test needs a Docker daemon
+docker info >/dev/null && .venv/bin/python -m pytest tests/test_telemetry_container.py -q
+```
+
+### Stop
+
+```bash
+docker compose -f docker/docker-compose.yml down          # keep data
+docker compose -f docker/docker-compose.yml down -v       # wipe volumes
+```
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Dashboard loads but shows no data | Browser blocked cross-origin calls to `:8000` | Hard-refresh (`Ctrl+Shift+R`) |
+| Qdrant dashboard empty | Nothing pushed yet | `POST /devices/{id}/push` |
+| Answers slow or timing out | Ollama model not pulled | `exec ollama pull qwen2.5:1.5b` |
+| Gateway restarts in a loop | Qdrant not ready | It retries 5×; if it still fails it stops loudly rather than silently using memory |
 
 ---
 
@@ -27,7 +121,7 @@ ways: it floods bad connections, it corrupts shared knowledge when two devices d
 it lets deleted facts ghost back into existence, and it treats a dozen devices reporting
 the same event no differently than two.
 
-**Aegis Edge is the intelligence layer above the vector store that fixes those four
+**Ex-Vero is the intelligence layer above the vector store that fixes those four
 things** — built entirely on Qdrant. Qdrant Edge is the on-device engine, Qdrant Server
 is the cloud hub, and Qdrant is the only datastore anywhere. No SQL, no second store.
 
@@ -125,8 +219,15 @@ guarantee rather than lucky timing.
 
 ## Project status
 
-Backend build phases 1–6 exist in `edge-node/` (capture, hybrid search, decision engine,
-outbox/push, snapshot pull, consensus fold, semantic conflict detection) with a passing
-test suite against an in-memory hub. In progress: promoting the hub to a real Qdrant
-Server, the network layer with measured effects, the on-device RAG answer layer, local
-memory eviction, telemetry from real cgroup stats, and the frontend.
+All ten backend build phases in `edge-node/` are complete and audited — capture,
+hybrid search, decision engine, outbox/push, snapshot pull, consensus fold,
+semantic conflict detection, network layer, on-device RAG, measured benchmarks,
+and telemetry from real cgroup stats. The React dashboard is built and wired to
+the live backend contract.
+
+Verified in a real `--cpus=1 --memory=512m` container: `cpu_pct` reads 0.19% idle
+and 100.2% under load, RSS ~296 MB, and the target label reports the container's
+actual limits rather than a typed-in figure. Benchmarks score real code against
+labeled fixtures — no figure is stored, and the recall and resolver margins are
+deliberately narrower than the original hardcoded claims, with per-shape results
+returned so a reader can see where each number comes from.
