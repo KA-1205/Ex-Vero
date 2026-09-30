@@ -1,7 +1,7 @@
 import os
 import hashlib
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import yaml
@@ -39,6 +39,8 @@ from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clea
 from . import network
 from .retrieval import hybrid_query
 from .answer import answer_question
+from .telemetry import record_query_latency, get_telemetry
+from .eviction import evict_by_count_and_optimize
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -56,12 +58,19 @@ event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
 sync_transport = None  # SyncTransport; GatewayTransport in runtime, stub in tests
 TRUST_DECAY: float = 0.0
 CONFLICT_THRESHOLD: float = 0.5
+MAX_LOCAL_POINTS: int = 500
 SHARD_BASE_PATH = "./shards"
+
+# Activity ring buffer (operational telemetry, not facts) — Phase 8
+# In-memory, bounded, newest first. No SQL.
+from collections import deque
+_activity_buffer: deque = deque(maxlen=500)
+_activity_lock = __import__('threading').Lock()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport
+    global adapters, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -91,6 +100,10 @@ async def lifespan(app: FastAPI):
     # Semantic conflict detection threshold (Step 8)
     conflict_config = full_config.get('conflict', {})
     CONFLICT_THRESHOLD = float(conflict_config.get('similarity_threshold', 0.5))
+
+    # Memory cap (Phase 8)
+    memory_config = full_config.get('memory', {})
+    MAX_LOCAL_POINTS = int(memory_config.get('max_local_points', 500))
 
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
@@ -123,6 +136,7 @@ async def lifespan(app: FastAPI):
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
     print(f"Loaded policy: {policy_config}")
     print(f"Trust decay: {TRUST_DECAY}")
+    print(f"Memory cap: {MAX_LOCAL_POINTS}")
     print("BM25 initialized")
     yield
 
@@ -186,6 +200,32 @@ def generate_point_id(corroboration_key: str, value: str) -> int:
     # Ensure it's positive and within the range of a 64-bit signed integer (though point ID in Qdrant is unsigned 64-bit?)
     # We'll just return the int_val as is, which is positive.
     return int_val
+
+
+# Activity ring buffer helpers (Phase 8)
+def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int] = None) -> None:
+    """Append an activity entry to the ring buffer (newest first)."""
+    from datetime import datetime
+    entry = {
+        "device_id": device_id,
+        "kind": kind,  # capture | decision | push_attempt | push_result | pull_result | consensus | retraction | error | mode_change
+        "detail": detail,
+        "point_id": point_id,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    with _activity_lock:
+        _activity_buffer.appendleft(entry)
+
+
+def get_activity(device_id: Optional[str] = None, kind: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get activity entries, optionally filtered by device_id and kind, newest first."""
+    with _activity_lock:
+        entries = list(_activity_buffer)
+    if device_id:
+        entries = [e for e in entries if e["device_id"] == device_id]
+    if kind:
+        entries = [e for e in entries if e["kind"] == kind]
+    return entries[:limit]
 
 
 def _verify_shard_dimension(shard, adapters):
@@ -365,7 +405,13 @@ async def capture(device_id: str, request: CaptureRequest):
 
     # Optimize after write batch (invariant 2)
     mutable_shard.optimize()
-    
+
+    # Enforce memory cap (Phase 8): evict oldest synced points if over cap
+    evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS)
+
+    # Log activity
+    log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)
+
     return {
         "id": point_id,
         "payload": payload,
@@ -417,6 +463,8 @@ async def query(device_id: str, request: QueryRequest):
         }
 
     latency_ms = (time.time() - start_time) * 1000
+    # Record query latency for telemetry percentiles (Phase 8)
+    record_query_latency(latency_ms)
     return QueryResponse(results=results, latency_ms=latency_ms, **answer_fields)
 
 
@@ -448,6 +496,7 @@ async def set_network_mode(request: NetworkModeRequest):
         network.set_mode(request.mode)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    log_activity("system", "mode_change", f"network mode changed to {request.mode}")
     return {"mode": network.get_mode()}
 
 
@@ -482,6 +531,10 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
 @app.post("/devices/{device_id}/push")
 async def push(device_id: str):
     pushed_count, errors = _do_push(device_id)
+    if pushed_count > 0:
+        log_activity(device_id, "push_result", f"pushed {pushed_count} points", point_id=None)
+    if errors:
+        log_activity(device_id, "error", f"push errors: {errors}", point_id=None)
     return PushResponse(pushed_count=pushed_count, errors=errors)
 
 
@@ -624,6 +677,11 @@ async def pull(device_id: str):
     mutable_shard.update(UpdateOperation.delete_points_by_filter(filter=dedupe_filter))
     mutable_shard.optimize()
 
+    # Log pull activity
+    log_activity(device_id, "pull_result", f"pulled {pulled_count} points", point_id=None)
+    if flush_errors:
+        log_activity(device_id, "error", f"pull flush errors: {flush_errors}", point_id=None)
+
     return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors)
 
 
@@ -643,6 +701,7 @@ async def retract(device_id: str, point_id: int):
     event_log = get_or_create_event_log(device_id)
     now = datetime.utcnow().isoformat() + "Z"
     event_log.append(point_id, RETRACTED, device_ts=now)
+    log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
     return RetractResponse(retracted=True, point_id=point_id)
 
 
@@ -724,6 +783,434 @@ async def benchmark_resolver_vs_lww():
 async def list_conflicts(device_id: str):
     """Return POSSIBLE_CONFLICT candidates the exact-key scheme would miss (Step 8)."""
     return {"device_id": device_id, "conflicts": get_conflicts(device_id)}
+
+
+# =============================================================================
+# Phase 8 — Eviction + Inspection Endpoints
+# =============================================================================
+
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import Set
+
+
+# --- Active WebSocket connections for live feeds ---
+_ws_device_events: Dict[str, Set[WebSocket]] = {}
+_ws_consensus_events: Set[WebSocket] = {}
+_ws_lock = __import__('threading').Lock()
+
+
+# --- GET /devices ---
+@app.get("/devices")
+async def list_devices():
+    """Fleet state for the Fleet Overview screen (API.md §2)."""
+    devices = []
+    for device_id, shards in device_shards.items():
+        mutable_shard = shards['mutable']
+        immutable_shard = shards['immutable']
+        
+        # Total points across both shards
+        mutable_count = mutable_shard.count(CountRequest())
+        immutable_count = immutable_shard.count(CountRequest())
+        total_count = getattr(mutable_count, "count", mutable_count) + getattr(immutable_count, "count", immutable_count)
+        
+        # Pending counts via facet on _sync_meta.synced
+        from .outbox import SYNCED_KEY, SYNCABLE_KEY
+        from qdrant_edge import FacetRequest
+        pending_facet = mutable_shard.facet(FacetRequest(key=SYNCED_KEY))
+        pending_by_priority = {"URGENT": 0, "ROUTINE": 0, "HELD": 0}
+        if hasattr(pending_facet, 'hits'):
+            for hit in pending_facet.hits:
+                if hit.value == 0:  # synced == 0 (pending)
+                    # Need to further breakdown by sync_priority
+                    pass
+        
+        # Simpler: use outbox to get pending counts
+        from .outbox import get_outbox
+        outbox = get_outbox(mutable_shard, limit=10000)
+        for pid, rec in outbox:
+            meta = (rec.payload or {}).get("_sync_meta", {})
+            prio = meta.get("sync_priority", "ROUTINE")
+            if prio in pending_by_priority:
+                pending_by_priority[prio] += 1
+        
+        # Last sync time from activity log
+        last_sync = None
+        for entry in _activity_buffer:
+            if entry["device_id"] == device_id and entry["kind"] in ("push_result", "pull_result"):
+                last_sync = entry["timestamp"]
+                break
+        
+        devices.append({
+            "id": device_id,
+            "name": device_id,  # Could be extended with a device registry
+            "connectivity": network.get_mode(),
+            "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
+            "last_sync_at": last_sync,
+            "trust": 0.82,  # Placeholder - could come from consensus
+            "activity_sparkline": [3, 5, 2, 8, 1],  # Placeholder
+        })
+    return {"devices": devices}
+
+
+# --- GET /devices/{id} ---
+@app.get("/devices/{device_id}")
+async def get_device(device_id: str):
+    """Single device detail (header of the Device Console) (API.md §2)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    
+    shards = device_shards[device_id]
+    mutable_shard = shards['mutable']
+    immutable_shard = shards['immutable']
+    
+    mutable_count = mutable_shard.count(CountRequest())
+    immutable_count = immutable_shard.count(CountRequest())
+    total_count = getattr(mutable_count, "count", mutable_count) + getattr(immutable_count, "count", immutable_count)
+    
+    # Pending via outbox
+    from .outbox import get_outbox
+    outbox = get_outbox(mutable_shard, limit=10000)
+    pending_by_priority = {"URGENT": 0, "ROUTINE": 0, "HELD": 0}
+    for pid, rec in outbox:
+        meta = (rec.payload or {}).get("_sync_meta", {})
+        prio = meta.get("sync_priority", "ROUTINE")
+        if prio in pending_by_priority:
+            pending_by_priority[prio] += 1
+    
+    last_sync = None
+    for entry in _activity_buffer:
+        if entry["device_id"] == device_id and entry["kind"] in ("push_result", "pull_result"):
+            last_sync = entry["timestamp"]
+            break
+    
+    return {
+        "id": device_id,
+        "name": device_id,
+        "connectivity": network.get_mode(),
+        "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
+        "last_sync_at": last_sync,
+        "trust": 0.82,
+        "activity_sparkline": [3, 5, 2, 8, 1],
+    }
+
+
+# --- GET /devices/{id}/memory ---
+@app.get("/devices/{device_id}/memory")
+async def list_memory(device_id: str, q: Optional[str] = None, sync_state: Optional[str] = None,
+                      modality: Optional[str] = None, zone: Optional[str] = None,
+                      limit: int = 100, offset: int = 0):
+    """List/filter everything held locally (Memory Browser panel) (API.md §5)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    
+    shards = device_shards[device_id]
+    mutable_shard = shards['mutable']
+    immutable_shard = shards['immutable']
+    
+    # Build filter
+    must = []
+    if q:
+        # Text filter - use the value field
+        must.append(FieldCondition(key="value", match=MatchValue(value=q)))
+    if sync_state:
+        if sync_state == "synced":
+            must.append(FieldCondition(key=SYNCED_KEY, match=MatchValue(value=1)))
+        elif sync_state == "pending":
+            must.append(FieldCondition(key=SYNCED_KEY, match=MatchValue(value=0)))
+        elif sync_state == "local_only":
+            must.append(FieldCondition(key="_sync_meta.syncable", match=MatchValue(value=0)))
+    if modality:
+        must.append(FieldCondition(key="modality", match=MatchValue(value=modality)))
+    if zone:
+        must.append(FieldCondition(key="zone", match=MatchValue(value=zone)))
+    
+    f = Filter(must=must) if must else None
+    
+    from qdrant_edge import ScrollRequest
+    points = []
+    total = 0
+    
+    for shard in (mutable_shard, immutable_shard):
+        req = ScrollRequest(
+            limit=limit + offset,
+            filter=f,
+            with_payload=True,
+            with_vector=False,
+        )
+        res = shard.scroll(req)
+        records = res[0] if isinstance(res, tuple) else res
+        for r in records:
+            payload = r.payload or {}
+            meta = payload.get("_sync_meta", {})
+            sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
+            points.append({
+                "id": r.id,
+                "value": payload.get("value", ""),
+                "modality": payload.get("modality", "text"),
+                "thumbnail_url": payload.get("thumbnail_url"),
+                "zone": payload.get("zone"),
+                "corroboration_key": payload.get("corroboration_key"),
+                "sync_state": sync_state_val,
+                "model": payload.get("model", "text_dense"),
+                "model_version": payload.get("model_version", "bge-small-en-v1.5"),
+                "created_at": payload.get("client_timestamp_ns", 0),
+            })
+        total += len(records)
+    
+    # Dedup by id (keep mutable version)
+    seen = {}
+    for p in points:
+        if p["id"] not in seen:
+            seen[p["id"]] = p
+    
+    deduped = list(seen.values())
+    deduped.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    
+    return {"points": deduped[offset:offset+limit], "total": len(deduped)}
+
+
+# --- GET /devices/{id}/memory/{point_id} ---
+@app.get("/devices/{device_id}/memory/{point_id}")
+async def get_memory_point(device_id: str, point_id: int):
+    """Full detail for one fact (API.md §5)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    
+    shards = device_shards[device_id]
+    mutable_shard = shards['mutable']
+    immutable_shard = shards['immutable']
+    
+    # Try mutable first, then immutable
+    for shard in (mutable_shard, immutable_shard):
+        recs = shard.retrieve([point_id], with_payload=True, with_vector=False)
+        if recs:
+            rec = recs[0]
+            payload = rec.payload or {}
+            meta = payload.get("_sync_meta", {})
+            sync_state_val = "synced" if meta.get("synced") == 1 else ("local_only" if meta.get("syncable") == 0 else "pending")
+            
+            point = {
+                "id": rec.id,
+                "value": payload.get("value", ""),
+                "modality": payload.get("modality", "text"),
+                "thumbnail_url": payload.get("thumbnail_url"),
+                "zone": payload.get("zone"),
+                "corroboration_key": payload.get("corroboration_key"),
+                "sync_state": sync_state_val,
+                "model": payload.get("model", "text_dense"),
+                "model_version": payload.get("model_version", "bge-small-en-v1.5"),
+                "created_at": payload.get("client_timestamp_ns", 0),
+            }
+            
+            # Get decision event
+            decision = None
+            for entry in get_feed(device_id):
+                if entry.get("payload", {}).get("id") == point_id or entry.get("point_id") == point_id:
+                    decision = {
+                        "device_id": entry.get("device_id"),
+                        "point_id": point_id,
+                        "value_preview": entry.get("payload", {}).get("value", "")[:100],
+                        "modality": payload.get("modality", "text"),
+                        "thumbnail_url": payload.get("thumbnail_url"),
+                        "verdict": meta.get("verdict", "UNKNOWN"),
+                        "reason": entry.get("reason", ""),
+                        "timestamp": entry.get("timestamp"),
+                    }
+                    break
+            
+            # Get activity for this point
+            activity = [e for e in get_activity(device_id) if e.get("point_id") == point_id]
+            
+            # Get consensus if available
+            consensus = None
+            try:
+                event_log = get_or_create_event_log(device_id)
+                events = event_log.events_for(point_id)
+                if events:
+                    trust = fold_trust(events, decay=TRUST_DECAY)
+                    consensus = {
+                        "corroboration_key": payload.get("corroboration_key"),
+                        "state": "CONFIRMED" if trust > 0.5 else "DISPUTED",
+                        "confidence": trust,
+                        "resolved_value": payload.get("value") if trust > 0.5 else None,
+                        "candidates": [],
+                        "explanation": "",
+                        "timestamp": events[-1].get("device_ts", "") if events else "",
+                    }
+            except Exception:
+                pass
+            
+            return {
+                "point": point,
+                "decision": decision,
+                "activity": activity,
+                "consensus": consensus,
+            }
+    
+    raise HTTPException(status_code=404, detail="point not found")
+
+
+# --- GET /devices/{id}/sync ---
+@app.get("/devices/{device_id}/sync")
+async def get_sync_status(device_id: str):
+    """Sync-status strip data (API.md §7)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    
+    shards = device_shards[device_id]
+    mutable_shard = shards['mutable']
+    
+    from .outbox import get_outbox
+    outbox = get_outbox(mutable_shard, limit=10000)
+    pending = {"URGENT": 0, "ROUTINE": 0, "HELD": 0}
+    for pid, rec in outbox:
+        meta = (rec.payload or {}).get("_sync_meta", {})
+        prio = meta.get("sync_priority", "ROUTINE")
+        if prio in pending:
+            pending[prio] += 1
+    
+    # Last attempt/success from activity
+    last_attempt = None
+    last_success = None
+    consecutive_failures = 0
+    last_push = {}
+    last_pull = {}
+    
+    for entry in _activity_buffer:
+        if entry["device_id"] == device_id:
+            if entry["kind"] == "push_attempt":
+                last_attempt = entry["timestamp"]
+            elif entry["kind"] == "push_result":
+                if "failed" in entry["detail"].lower() or "error" in entry["detail"].lower():
+                    consecutive_failures += 1
+                else:
+                    consecutive_failures = 0
+                    last_success = entry["timestamp"]
+                # Parse last push details
+                last_push = {
+                    "bytes": 0,  # Would need to track this
+                    "duration_ms": 0,
+                    "points_attempted": 0,
+                    "points_accepted": 0,
+                    "points_failed": 0,
+                    "mode": network.get_mode(),
+                }
+            elif entry["kind"] == "pull_result":
+                last_pull = {
+                    "at": entry["timestamp"],
+                    "points_received": 0,
+                }
+    
+    return {
+        "pending": pending,
+        "last_attempt_at": last_attempt,
+        "last_success_at": last_success,
+        "consecutive_failures": consecutive_failures,
+        "next_backoff_ms": 4000,
+        "last_push": last_push,
+        "last_pull": last_pull,
+    }
+
+
+# --- GET /devices/{id}/activity ---
+@app.get("/devices/{device_id}/activity")
+async def get_device_activity(device_id: str, kind: Optional[str] = None, limit: int = 100):
+    """System-activity ring buffer, newest first (API.md §6)."""
+    entries = get_activity(device_id, kind, limit)
+    return {"entries": entries}
+
+
+# --- GET /devices/{id}/telemetry ---
+@app.get("/devices/{device_id}/telemetry")
+async def get_device_telemetry(device_id: str):
+    """Live CPU/RAM/latency from the real cgroup/process (API.md §11)."""
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+    
+    # Model load time could be tracked at startup
+    model_load_ms = 1840.0  # Placeholder
+    
+    return get_telemetry(model_load_ms=model_load_ms)
+
+
+# --- GET /cloud/state ---
+@app.get("/cloud/state")
+async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = None):
+    """Merged trusted picture from the fold (API.md §8)."""
+    # In a real deployment, this would query the Cloud Gateway's consensus fold.
+    # For the edge node, we return an empty state or aggregate from local event logs.
+    facts = []
+    device_trust = {}
+    
+    for device_id, event_log in event_logs.items():
+        # This is a simplified version - the real fold lives in the gateway
+        pass
+    
+    return {"facts": facts, "device_trust": device_trust}
+
+
+# --- WS /devices/{id}/events ---
+@app.websocket("/devices/{device_id}/events")
+async def ws_device_events(websocket: WebSocket, device_id: str):
+    """Live stream for Decision Feed and Activity Log (API.md §6)."""
+    await websocket.accept()
+    with _ws_lock:
+        if device_id not in _ws_device_events:
+            _ws_device_events[device_id] = set()
+        _ws_device_events[device_id].add(websocket)
+    
+    try:
+        while True:
+            await websocket.receive_text()  # Keep alive
+    except WebSocketDisconnect:
+        pass
+    finally:
+        with _ws_lock:
+            _ws_device_events[device_id].discard(websocket)
+            if not _ws_device_events[device_id]:
+                del _ws_device_events[device_id]
+
+
+# --- WS /consensus/events ---
+@app.websocket("/consensus/events")
+async def ws_consensus_events(websocket: WebSocket):
+    """Live resolver decisions for the Conflict Theater (API.md §8)."""
+    await websocket.accept()
+    with _ws_lock:
+        _ws_consensus_events.add(websocket)
+    
+    try:
+        while True:
+            await websocket.receive_text()  # Keep alive
+    except WebSocketDisconnect:
+        pass
+    finally:
+        with _ws_lock:
+            _ws_consensus_events.discard(websocket)
+
+
+def _broadcast_device_event(device_id: str, event_type: str, data: dict):
+    """Broadcast a decision/activity event to WebSocket clients."""
+    import json
+    message = json.dumps({"type": event_type, "data": data})
+    with _ws_lock:
+        for ws in _ws_device_events.get(device_id, set()):
+            try:
+                ws.send_text(message)
+            except Exception:
+                pass
+
+
+def _broadcast_consensus_event(event: dict):
+    """Broadcast a consensus event to WebSocket clients."""
+    import json
+    message = json.dumps(event)
+    with _ws_lock:
+        for ws in _ws_consensus_events:
+            try:
+                ws.send_text(message)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

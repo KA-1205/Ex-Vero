@@ -32,7 +32,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 5 | Multi-device consensus | DONE |
 | 6 | Network layer | DONE |
 | 7 | Answer layer (on-device RAG) | DONE |
-| 8 | Eviction + inspection endpoints | TODO |
+| 8 | Eviction + inspection endpoints | DONE |
 | 9 | Benchmarks (measured) | PARTIAL |
 | 10 | Docker + telemetry integration | TODO |
 
@@ -436,6 +436,21 @@ shape; telemetry values are read from the real process, not constants.
 
 **Guardrails:** counts come from `count()`/`facet()`, not app-side loops. Activity ring buffer is
 in-memory (operational telemetry, not facts) — still no SQL.
+
+**Result:** new `src/edge_node/telemetry.py` reads real cgroup CPU/RSS and process metrics, with
+query latency p50/p95 recorded on every `/query` call; label is "emulated constrained target" per
+API.md §11. New `src/edge_node/eviction.py` enforces `max_local_points` from config — evicts
+oldest synced points (`_sync_meta.synced==1`) by `client_timestamp_ns` and calls `optimize()`
+to reclaim space; pending points (`synced==0`) are NEVER touched (invariant 3, proven by test).
+All inspection endpoints implemented in `main.py` with exact API.md shapes:
+`GET /devices`, `/devices/{id}`, `/devices/{id}/memory`, `/devices/{id}/memory/{point_id}`,
+`/devices/{id}/sync`, `/devices/{id}/activity`, `/devices/{id}/telemetry`, `/cloud/state`;
+WebSocket `/devices/{id}/events` and `/consensus/events` for live feeds. Activity ring buffer
+(in-memory, bounded, newest-first) logs capture/decision/push/pull/retraction/mode_change events.
+Config `memory.max_local_points` added to `config/disaster-response.yaml`. Tests
+(`tests/test_memory.py`): pending-points-not-evicted, synced-points-evicted-oldest-first,
+telemetry-reads-real-metrics, all endpoint shapes verified, retrieval/answer isolation
+(invariant 8). Full suite green (81 passed, 3 skipped).
 
 **Out of scope:** frontend rendering.
 

@@ -83,3 +83,9 @@ network:
   latency_max_ms: 1200
   byte_rate_bytes_per_sec: 8000  # ~64 kbps cap over real payload bytes
   failure_rate: 0.08             # ~8% of degraded requests genuinely drop
+
+# Local memory cap (Phase 8). When the mutable shard exceeds this count,
+# the oldest synced points are evicted (pending points are never touched).
+# The UI shows used/cap so eviction is visibly working (backend.md §5).
+memory:
+  max_local_points: 500
