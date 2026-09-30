@@ -27,7 +27,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 0 | Edge API probe + doc reconcile | DONE |
 | 1 | Decision Engine fix | DONE |
 | 2 | Model Adapter Registry | DONE |
-| 3 | Real Qdrant Server hub + outbox | PARTIAL |
+| 3 | Real Qdrant Server hub + outbox | DONE |
 | 4 | Partial-snapshot pull | WEAK |
 | 5 | Multi-device consensus | HALF |
 | 6 | Network layer | TODO |
@@ -189,6 +189,21 @@ real server runs via compose in an integration test marked accordingly.)
 
 **Guardrails:** never mark synced before ack. No SQL in the gateway — `fact_events` is a Qdrant
 collection. Delta only, never a full snapshot upload.
+
+**Result:** the outbox is now a real `scroll` view over the mutable shard
+(`_sync_meta.synced == 0 AND syncable == 1`, URGENT before ROUTINE); `synced`/`syncable`/
+`client_sequence` are stored as **Integer 0/1** and Integer-indexed so the view actually drains
+(the Phase 0 bool-filter trap). `push()` runs the delta handshake (`GET /delta/{device}`), pushes
+only rows above the hub high-water mark through a `SyncTransport`, and marks synced **only on ack**
+(`set_payload_by_filter` merging `_sync_meta`); on failure the point stays `synced == 0` and on the
+device. New `cloud-gateway/` (FastAPI + `qdrant-client`) owns the `facts` + append-only `fact_events`
+Qdrant collections — no SQL — with idempotent upserts and a hub-assigned event `seq`; `docker/
+docker-compose.yml` brings up `qdrant/qdrant` + the gateway with `QDRANT_URL`. `hub.py` (in-memory)
+deleted. Tests: `tests/test_sync.py` — forced mid-push failure leaves the point pending + queryable
+(invariant 1), recovery marks it synced and the hub holds it (invariant 9), delta re-push is a
+no-op, KEEP_LOCAL never leaves the device, URGENT drains before ROUTINE, plus an integration test
+against the real compose stack (skipped without `GATEWAY_URL`, verified passing locally). Full suite
+green (42, +1 skipped integration).
 
 **Out of scope:** the consensus fold logic (phase 5) — here the gateway just stores events.
 

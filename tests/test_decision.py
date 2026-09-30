@@ -221,6 +221,8 @@ def test_decision_engine_keep_local_not_pushed():
             main.decision_engine = DecisionEngine(policy_config)
             from qdrant_edge import Bm25
             main.bm25 = Bm25()
+            from sync_helpers import StubTransport
+            main.sync_transport = StubTransport()
             clear_feed()
             
             client = TestClient(main.app)

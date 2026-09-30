@@ -218,72 +218,53 @@ def test_hybrid_search():
 
 
 def test_push_outbox():
-    # Test that /push marks points as synced and does not error.
+    # The outbox scroll-view must actually drain: after push, the syncable
+    # points are marked synced (Integer 0->1), the hub holds them, and a second
+    # push moves nothing (delta handshake). This is the opposite of the old
+    # "push that never fails" trivial check.
     with tempfile.TemporaryDirectory() as tmpdir:
         old_cwd = os.getcwd()
         os.chdir(tmpdir)
         try:
-            # Initialize app state
-            config_path = str(main.DEFAULT_CONFIG_PATH)
-            main.adapters = load_adapters(config_path)
-            vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
-            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
-            main.edge_config = EdgeConfig(
-                vectors=vectors,
-                sparse_vectors=sparse_vectors,
-                max_search_threads=2,
-                search_pool_core=0,
-            )
-            main.device_shards = {}
-            with open(config_path, 'r') as f:
-                full_config = yaml.safe_load(f)
-            policy_config = full_config.get('policy', {})
-            from edge_node.decision_engine import DecisionEngine
-            main.decision_engine = DecisionEngine(policy_config)
-            from qdrant_edge import Bm25
-            main.bm25 = Bm25()
-            from edge_node.decision_engine import clear_feed, get_feed
-            clear_feed()
-             
+            _init_app_state()
             client = TestClient(main.app)
             device_id = "test_device"
-             
-            # Capture two facts
-            texts = ["first fact", "second fact"]
+
+            # Two syncable (urgent) facts so the outbox is non-empty.
+            texts = ["structural collapse at first ave", "gas leak at second ave"]
             point_ids = []
             for txt in texts:
                 resp = client.post(
                     f"/devices/{device_id}/capture",
-                    json={
-                        "device_id": device_id,
-                        "corroboration_key": f"key{txt}",
-                        "value": txt
-                    }
+                    json={"device_id": device_id, "corroboration_key": f"key-{txt}", "value": txt},
                 )
                 assert resp.status_code == 200
-                data = resp.json()
-                point_ids.append(data["id"])
-             
-            # Push should succeed and return a count (we expect 2 but may vary due to outbox detection)
+                assert resp.json()["verdict"] == "QUEUE_HIGH"
+                point_ids.append(resp.json()["id"])
+
+            # First push drains both to the hub.
             push_resp = client.post(f"/devices/{device_id}/push")
             assert push_resp.status_code == 200
-            push_data = push_resp.json()
-            assert isinstance(push_data["pushed_count"], int)
-            assert push_data["pushed_count"] >= 0
-            assert push_data["errors"] == []
-             
-            # Second push should also succeed (may return same count if detection fails)
+            assert push_resp.json()["pushed_count"] == 2
+            assert push_resp.json()["errors"] == []
+            for pid in point_ids:
+                assert main.sync_transport.server_has(device_id, pid)
+
+            # Every synced point flipped to 1 -> outbox is now empty.
+            shard = main.device_shards[device_id]["mutable"]
+            from edge_node.outbox import get_outbox
+            assert get_outbox(shard, limit=100) == []
+
+            # Second push moves nothing (delta), no duplicates on the hub.
             push_resp2 = client.post(f"/devices/{device_id}/push")
             assert push_resp2.status_code == 200
-            push_data2 = push_resp2.json()
-            assert isinstance(push_data2["pushed_count"], int)
-            assert push_data2["pushed_count"] >= 0
-            assert push_data2["errors"] == []
-             
-            # Ensure feed still has entries (decision feed unaffected)
+            assert push_resp2.json()["pushed_count"] == 0
+            assert main.sync_transport.server_count(device_id) == 2
+
+            # Decision feed unaffected.
+            from edge_node.decision_engine import get_feed
             feed = get_feed(device_id)
             assert len(feed) == 2
-             
         finally:
             os.chdir(old_cwd)
 
@@ -294,28 +275,8 @@ def test_pull_after_push():
         old_cwd = os.getcwd()
         os.chdir(tmpdir)
         try:
-            # Initialize app state
-            config_path = str(main.DEFAULT_CONFIG_PATH)
-            main.adapters = load_adapters(config_path)
-            vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in main.adapters}
-            sparse_vectors = {"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)}
-            main.edge_config = EdgeConfig(
-                vectors=vectors,
-                sparse_vectors=sparse_vectors,
-                max_search_threads=2,
-                search_pool_core=0,
-            )
-            main.device_shards = {}
-            with open(config_path, 'r') as f:
-                full_config = yaml.safe_load(f)
-            policy_config = full_config.get('policy', {})
-            from edge_node.decision_engine import DecisionEngine
-            main.decision_engine = DecisionEngine(policy_config)
-            from qdrant_edge import Bm25
-            main.bm25 = Bm25()
-            from edge_node.decision_engine import clear_feed, get_feed
-            clear_feed()
-             
+            _init_app_state()
+
             client = TestClient(main.app)
             device_id = "test_device"
              
@@ -396,6 +357,9 @@ def _init_app_state():
     main.TRUST_DECAY = float(policy_config.get('trust_decay', 0.0))
     from qdrant_edge import Bm25
     main.bm25 = Bm25()
+    # Inject the in-process sync stub so push/pull run without a network.
+    from sync_helpers import StubTransport
+    main.sync_transport = StubTransport()
     clear_feed()
     from edge_node.conflicts import clear_conflicts
     clear_conflicts()

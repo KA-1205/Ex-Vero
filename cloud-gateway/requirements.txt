@@ -1,0 +1,6 @@
+# Cloud Gateway dependencies. Pinned; the gateway runs in its own container and
+# talks to a real Qdrant Server over QDRANT_URL. No SQL / second datastore.
+fastapi==0.115.6
+uvicorn==0.34.0
+qdrant-client==1.12.1
+pydantic==2.10.4

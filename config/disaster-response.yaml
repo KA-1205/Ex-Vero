@@ -44,5 +44,7 @@ conflict:
   similarity_threshold: 0.01
 
 hub:
-  url: "http://localhost:6333"
+  # The edge node talks to the Cloud Gateway (cloud-gateway/), which owns the
+  # Qdrant Server hub. This is the gateway URL, not Qdrant's 6333 port.
+  url: "http://localhost:8088"
   api_key: ""

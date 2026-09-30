@@ -29,8 +29,8 @@ from datetime import datetime
 from .adapter import Adapter
 from .registry import load_adapters
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
-from .outbox import add_sync_meta, get_outbox, mark_synced, get_outbox_points
-from .hub import hub
+from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY
+from .sync_transport import GatewayTransport
 from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
 
@@ -46,6 +46,7 @@ decision_engine: DecisionEngine = None
 bm25: Bm25 = None
 device_shards: Dict[str, dict] = {}  # device_id -> {'mutable': shard, 'immutable': shard}
 event_logs: Dict[str, EventLog] = {}  # device_id -> EventLog
+sync_transport = None  # SyncTransport; GatewayTransport in runtime, stub in tests
 TRUST_DECAY: float = 0.0
 CONFLICT_THRESHOLD: float = 0.5
 SHARD_BASE_PATH = "./shards"
@@ -53,7 +54,7 @@ SHARD_BASE_PATH = "./shards"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY, CONFLICT_THRESHOLD
+    global adapters, edge_config, decision_engine, bm25, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
@@ -91,6 +92,9 @@ async def lifespan(app: FastAPI):
     hub_config = full_config.get('hub', {})
     hub_url = hub_config.get('url')
     hub_api_key = hub_config.get('api_key')
+    # The sync transport is the ONLY egress to the Cloud Gateway. Tests inject a
+    # stub in its place; the runtime path always uses a real HTTP client.
+    sync_transport = GatewayTransport(hub_url) if hub_url else None
     print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
@@ -192,7 +196,11 @@ def get_or_create_shards(device_id: str):
         _verify_shard_dimension(mutable_shard, adapters)
         info = mutable_shard.info()
         print(f"Loaded mutable shard for {device_id}: {info}")
-    
+
+    # Integer indexes for the outbox view (synced / syncable / client_sequence).
+    # A bool field would silently match nothing (Phase 0 trap); integers work.
+    ensure_indexes(mutable_shard)
+
     # Create or load immutable shard (empty for now)
     if not os.path.exists(immutable_path):
         os.makedirs(immutable_path, exist_ok=True)
@@ -205,7 +213,7 @@ def get_or_create_shards(device_id: str):
     device_shards[device_id] = {
         'mutable': mutable_shard,
         'immutable': immutable_shard,
-        'unsynced_ids': set()
+        'client_seq': 0,  # per-device monotonic sequence for the delta handshake
     }
     return device_shards[device_id]
 
@@ -231,8 +239,7 @@ def get_or_create_event_log(device_id: str) -> EventLog:
 async def capture(device_id: str, request: CaptureRequest):
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
-    unsynced_set = shards['unsynced_ids']
-    
+
     # Use the first adapter (text) for step 1
     adapter = adapters[0]
     dense_vector = adapter.embed(request.value)
@@ -263,26 +270,28 @@ async def capture(device_id: str, request: CaptureRequest):
     # Log decision for feed
     log_decision(device_id, payload, verdict, reason)
     
-    # Store verdict and sync_priority in _sync_meta for push ordering
-    if "_sync_meta" not in payload:
-        payload["_sync_meta"] = {}
-    payload["_sync_meta"]["verdict"] = verdict
-    # Determine base sync_priority from verdict
+    # Store verdict + sync bookkeeping in _sync_meta so the outbox view and the
+    # delta handshake can honour it. `synced`/`syncable` are Integer 0/1 (a bool
+    # would silently match nothing in scroll — Phase 0 trap).
+    meta = payload.setdefault("_sync_meta", {})
+    meta["synced"] = 0
+    meta["verdict"] = verdict
+    # A verdict decides whether the fact may ever leave the device. The decision
+    # engine already downgrades an incomplete QUEUE_LOW to KEEP_LOCAL, so any
+    # QUEUE_* verdict that reaches here is sync-eligible.
     if verdict == "QUEUE_HIGH":
-        base_priority = "URGENT"
-    elif verdict in ["QUEUE_LOW", "REDACT_AND_QUEUE"]:
-        base_priority = "ROUTINE"
-    else:
-        base_priority = "HELD"
-    # Override to HELD if incomplete (regardless of verdict)
-    # Check completeness using the same logic as decision engine
-    missing = [f for f in ["status", "timestamp", "reporter_device_id"] if f not in payload]
-    if missing:
-        # Incomplete - override to HELD
-        payload["_sync_meta"]["sync_priority"] = "HELD"
-    else:
-        # Complete - use base priority from verdict
-        payload["_sync_meta"]["sync_priority"] = base_priority
+        meta["sync_priority"] = "URGENT"
+        meta["syncable"] = 1
+    elif verdict in ("QUEUE_LOW", "REDACT_AND_QUEUE"):
+        meta["sync_priority"] = "ROUTINE"
+        meta["syncable"] = 1
+    else:  # KEEP_LOCAL / REJECT -> never pushed
+        meta["sync_priority"] = "HELD"
+        meta["syncable"] = 0
+    # Per-device monotonic client_sequence: the delta handshake pushes only rows
+    # above the hub's high-water mark, and the outbox orders by it.
+    shards['client_seq'] += 1
+    meta["client_sequence"] = shards['client_seq']
     
     # Compute BM25 sparse vector for the document (embed_document)
     sparse_vector = bm25.embed_document(request.value)
@@ -313,12 +322,7 @@ async def capture(device_id: str, request: CaptureRequest):
     # Upsert the point using UpdateOperation
     operation = UpdateOperation.upsert_points(points=[point])
     mutable_shard.update(operation)
-    
-    # Mark as unsynced only if verdict allows syncing
-    # KEEP_LOCAL and REJECT should not be pushed
-    if verdict in ["QUEUE_HIGH", "QUEUE_LOW", "REDACT_AND_QUEUE"]:
-        unsynced_set.add(point_id)
-    
+
     # Optimize after write batch (invariant 2)
     mutable_shard.optimize()
     
@@ -408,88 +412,85 @@ class PushResponse(BaseModel):
     errors: List[str] = []
 
 
+def _envelope_from_record(rec, adapter_name: str) -> dict:
+    """Serialize a shard record into a JSON-safe push envelope.
+
+    Carries the dense + sparse vectors and the full payload (which already
+    stamps the model + version — invariant 9), plus the client_sequence used by
+    the delta handshake.
+    """
+    vec = rec.vector or {}
+    dense = vec.get(adapter_name)
+    sparse = vec.get("text_bm25")
+    sparse_obj = None
+    if sparse is not None:
+        sparse_obj = {"indices": list(sparse.indices), "values": list(sparse.values)}
+    meta = (rec.payload or {}).get("_sync_meta", {})
+    return {
+        "id": rec.id,
+        "vector": list(dense) if dense is not None else None,
+        "sparse": sparse_obj,
+        "payload": rec.payload,
+        "client_sequence": meta.get("client_sequence", 0),
+    }
+
+
 @app.post("/devices/{device_id}/push")
 async def push(device_id: str):
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
-    unsynced_set = shards['unsynced_ids']
-    
-    if not unsynced_set:
+
+    if sync_transport is None:
+        # No transport wired: fail loudly rather than silently "succeeding".
+        return PushResponse(pushed_count=0, errors=["no sync transport configured"])
+
+    # The outbox is a filtered VIEW over the mutable shard
+    # (synced == 0 AND syncable == 1), URGENT before ROUTINE — not a second store.
+    outbox = get_outbox(mutable_shard, limit=1000)
+    if not outbox:
         return PushResponse(pushed_count=0, errors=[])
-    
-    # Convert set to list and sort by priority: URGENT before ROUTINE
-    point_ids = list(unsynced_set)
-    
-    # Retrieve points to get their sync_priority for sorting
+
+    adapter_name = adapters[0].name
+
+    # Delta handshake: push only rows above the hub's high-water mark for this
+    # device, so a re-push after a crash moves nothing and never duplicates.
     try:
-        records = mutable_shard.retrieve(point_ids, with_payload=True, with_vector=False)
-        # Create a list of (point_id, priority) tuples for sorting
-        point_priorities = []
-        for record in records:
-            point_id = record.id
-            sync_payload = record.payload.get("_sync_meta", {})
-            priority = sync_payload.get("sync_priority", "HELD")
-            # Convert priority to sort order: URGENT=0, ROUTINE=1, HELD=2 (though HELD shouldn't be in unsynced_set)
-            priority_order = {"URGENT": 0, "ROUTINE": 1, "HELD": 2}.get(priority, 2)
-            point_priorities.append((point_id, priority_order))
-        
-        # Sort by priority (URGENT first)
-        point_priorities.sort(key=lambda x: x[1])
-        sorted_point_ids = [point_id for point_id, _ in point_priorities]
+        hub_seq = sync_transport.get_delta(device_id)
     except Exception as e:
-        # If retrieval fails, fall back to original order
-        sorted_point_ids = point_ids
-    
-    # Retrieve points to create snapshot (in priority order)
+        return PushResponse(pushed_count=0, errors=[f"delta handshake failed: {e}"])
+
+    envelopes = []
+    ids_in_order = []
+    for pid, rec in outbox:
+        env = _envelope_from_record(rec, adapter_name)
+        if env["client_sequence"] <= hub_seq:
+            continue  # already on the hub — delta-only
+        envelopes.append(env)
+        ids_in_order.append(pid)
+
+    if not envelopes:
+        return PushResponse(pushed_count=0, errors=[])
+
+    # Push to the gateway. Mark synced ONLY on ack (invariant 1): on any failure
+    # we leave synced == 0, so the point stays pending and on the device — a
+    # failed push is never silent data loss.
     try:
-        records = mutable_shard.retrieve(sorted_point_ids, with_payload=True, with_vector=True)
-        # Convert Record objects to Point objects
-        points = [Point(id=rec.id, vector=rec.vector, payload=rec.payload) for rec in records]
+        ack = sync_transport.push(device_id, envelopes)
     except Exception as e:
-        # If retrieve fails, we can't create snapshot
-        points = []
-    
-    # Create snapshot of these points and store in hub
-    try:
-        if points:
-            version = hub.create_snapshot(points)
-        else:
-            pass
-    except Exception as e:
-        # If snapshot creation fails, we still continue but log
-        pass
-    
-    # Simulate push to hub: in real implementation we would send points to hub_url
-    # For now we assume push always succeeds.
-    try:
-        # Mark all points as synced: set _sync_meta.synced = True where _sync_meta.synced is false
-        from qdrant_edge import Filter, FieldCondition, MatchValue, UpdateOperation
-        condition = FieldCondition(
-            key="_sync_meta.synced",
-            match=MatchValue(value=False)
-        )
-        f_filter = Filter(must=[condition])
-        update_op = UpdateOperation.set_payload_by_filter(
-            filter=f_filter,
-            payload={"_sync_meta": {"synced": True}}
-        )
-        mutable_shard.update(update_op)
-        # Optimize after update (optional but good)
-        mutable_shard.optimize()
-        # Append an OBSERVED event per pushed point (Step 6: event-sourced consensus)
-        event_log = get_or_create_event_log(device_id)
-        now = datetime.utcnow().isoformat() + "Z"
-        for pid in sorted_point_ids:
-            event_log.append(pid, OBSERVED, device_ts=now)
-        # Clear unsynced set
-        unsynced_set.clear()
-        pushed = len(sorted_point_ids)
-        errors = []
-    except Exception as e:
-        pushed = 0
-        errors = [str(e)]
-    
-    return PushResponse(pushed_count=pushed, errors=errors)
+        return PushResponse(pushed_count=0, errors=[f"push failed: {e}"])
+
+    acked = set(ack.get("acked_ids", ids_in_order))
+    mark_ids = [pid for pid in ids_in_order if pid in acked]
+    mark_synced(mutable_shard, mark_ids)
+
+    # Append a local OBSERVED event per pushed point (consensus trust view),
+    # in push order so URGENT precedes ROUTINE.
+    event_log = get_or_create_event_log(device_id)
+    now = datetime.utcnow().isoformat() + "Z"
+    for pid in mark_ids:
+        event_log.append(pid, OBSERVED, device_ts=now)
+
+    return PushResponse(pushed_count=len(mark_ids), errors=[])
 
 
 class PullResponse(BaseModel):
@@ -499,29 +500,46 @@ class PullResponse(BaseModel):
 
 @app.post("/devices/{device_id}/pull")
 async def pull(device_id: str):
+    """Pull hub facts into the immutable shard.
+
+    Phase 3 fetches the device's facts from the gateway and upserts them; Phase 4
+    replaces this with real partial snapshots (snapshot_manifest → partial/create
+    → update_from_snapshot). The immutable shard is written only from the hub,
+    never locally.
+    """
     shards = get_or_create_shards(device_id)
     immutable_shard = shards['immutable']
-    
-    # Get latest snapshot from hub
-    snapshot_points = hub.get_latest_snapshot()
-    if not snapshot_points:
-        return PullResponse(pulled_count=0, errors=["No snapshot available"])
-    
-    # Upsert snapshot points into immutable shard
+
+    if sync_transport is None:
+        return PullResponse(pulled_count=0, errors=["no sync transport configured"])
+
     try:
-        # Build list of Point objects (they are already Point)
-        points_to_upsert = snapshot_points
-        operation = UpdateOperation.upsert_points(points=points_to_upsert)
-        immutable_shard.update(operation)
-        # Optimize after upsert
-        immutable_shard.optimize()
-        pulled = len(points_to_upsert)
-        errors = []
+        envelopes = sync_transport.pull(device_id)
     except Exception as e:
-        pulled = 0
-        errors = [str(e)]
-    
-    return PullResponse(pulled_count=pulled, errors=errors)
+        return PullResponse(pulled_count=0, errors=[f"pull failed: {e}"])
+
+    if not envelopes:
+        return PullResponse(pulled_count=0, errors=[])
+
+    from qdrant_edge import SparseVector
+
+    points = []
+    for env in envelopes:
+        vector = {}
+        if env.get("vector") is not None:
+            vector[adapters[0].name] = env["vector"]
+        if env.get("sparse") is not None:
+            vector["text_bm25"] = SparseVector(
+                indices=env["sparse"]["indices"], values=env["sparse"]["values"]
+            )
+        points.append(Point(id=env["id"], vector=vector, payload=env["payload"]))
+
+    try:
+        immutable_shard.update(UpdateOperation.upsert_points(points=points))
+        immutable_shard.optimize()
+        return PullResponse(pulled_count=len(points), errors=[])
+    except Exception as e:
+        return PullResponse(pulled_count=0, errors=[str(e)])
 
 
 class RetractResponse(BaseModel):

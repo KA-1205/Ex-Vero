@@ -1,83 +1,121 @@
-"""
-Outbox module for Step 4.
+"""Outbox — a filtered *view* over the mutable shard, never a second store.
 
-The outbox is a filtered view over the mutable Edge shard:
-    SELECT * FROM points WHERE _sync_meta.synced IS FALSE
+The pending queue is exactly `scroll(_sync_meta.synced == 0 AND
+_sync_meta.syncable == 1)`, priority-ordered so URGENT facts drain before
+ROUTINE ones (backend.md §6.1).
 
-We implement:
-- add_sync_meta(payload) -> payload with default _sync_meta = {"synced": False}
-- get_outbox(shard, limit) -> list of (point_id, point) where not synced
-- get_outbox_points(shard, limit) -> list of point objects where not synced
-- mark_synced(shard, point_ids) -> UpdateOperation to set _sync_meta.synced = True
+Two Phase-0 facts shape this module (AGENTS.md §3.1):
+  * A Python-`bool` payload field matches *nothing* in `scroll`/`count`/
+    `set_payload_by_filter` — a silent zero that would make the outbox drain
+    zero points. So `synced`/`syncable` are stored as Integer 0/1 and
+    Integer-indexed.
+  * `scroll(order_by=...)` only works on a range-indexed key, so
+    `client_sequence` is Integer-indexed too and used for stable ordering.
 """
 
 from typing import List, Tuple, Dict, Any
-from qdrant_edge import EdgeShard, Point, UpdateOperation, FieldCondition, MatchValue, Filter
+from qdrant_edge import (
+    EdgeShard,
+    Point,
+    UpdateOperation,
+    FieldCondition,
+    MatchValue,
+    Filter,
+    HasIdCondition,
+    ScrollRequest,
+    OrderBy,
+    Direction,
+    PayloadSchemaType,
+)
+
+# Nested payload keys (dotted) for the sync bookkeeping stored on every point.
+SYNCED_KEY = "_sync_meta.synced"            # 0 = pending, 1 = acked by hub
+SYNCABLE_KEY = "_sync_meta.syncable"        # 1 = verdict permits sync
+SEQUENCE_KEY = "_sync_meta.client_sequence"  # per-device monotonic ordering
+
+# Push order for the priority buckets; lower drains first.
+_PRIORITY_ORDER = {"URGENT": 0, "ROUTINE": 1, "HELD": 2}
+
 
 def add_sync_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure payload has _sync_meta with synced=False."""
-    if "_sync_meta" not in payload:
-        payload["_sync_meta"] = {"synced": False}
-    elif "synced" not in payload["_sync_meta"]:
-        payload["_sync_meta"]["synced"] = False
+    """Ensure `_sync_meta.synced` exists as Integer 0 (pending), never a bool.
+
+    Storing a Python `bool` here is the Phase-0 trap: the outbox filter would
+    silently match nothing. Integer 0/1 filters correctly.
+    """
+    meta = payload.setdefault("_sync_meta", {})
+    if "synced" not in meta:
+        meta["synced"] = 0
     return payload
 
+
+def ensure_indexes(shard: EdgeShard) -> None:
+    """Create the Integer indexes the outbox filter/order rely on (idempotent)."""
+    for field in ("_sync_meta.synced", "_sync_meta.syncable", "_sync_meta.client_sequence"):
+        try:
+            shard.update(
+                UpdateOperation.create_field_index(
+                    field_name=field, schema=PayloadSchemaType.Integer
+                )
+            )
+        except Exception:
+            # Index already exists / benign on a populated shard.
+            pass
+
+
 def get_outbox(shard: EdgeShard, limit: int = 100) -> List[Tuple[int, Point]]:
+    """Return pending, syncable points as (point_id, record), URGENT first.
+
+    Ordered by `client_sequence` at the shard (a real range-indexed sort) and
+    then bucketed by priority in Python so URGENT drains ahead of ROUTINE.
     """
-    Scroll over the shard to find points where _sync_meta.synced is False.
-    Returns list of (point_id, Point).
-    """
-    # Build a filter for _sync_meta.synced == false
-    condition = FieldCondition(
-        key="_sync_meta.synced",
-        match=MatchValue(value=False)
+    f_filter = Filter(
+        must=[
+            FieldCondition(key=SYNCED_KEY, match=MatchValue(value=0)),
+            FieldCondition(key=SYNCABLE_KEY, match=MatchValue(value=1)),
+        ]
     )
-    f_filter = Filter(must=[condition])
-    # Use scroll if available; otherwise fallback to query with limit.
-    try:
-        # Attempt scroll
-        scroll_result = shard.scroll(
-            limit=limit,
-            filter=f_filter,
-            with_payload=True,
-            with_vector=False
-        )
-        # scroll returns (points, next_page_offset) or just list depending on version
-        if isinstance(scroll_result, tuple):
-            points = scroll_result[0]
-        else:
-            points = scroll_result
-        return [(p.id, p) for p in points]
-    except AttributeError:
-        # scroll not available, fallback to query with match_all and filter client-side
-        # We'll use a dummy query vector (zero) but we don't know vector name/dim.
-        # Since we cannot reliably query without a vector, we'll return empty list.
-        # This is a limitation; but for the test we can rely on mark_synced being called
-        # only when we know there are unsynced points (we could track count separately).
-        # For now, we return empty list to avoid errors.
-        return []
-    except Exception as e:
-        # On any error, return empty list to avoid breaking push
-        return []
+    req = ScrollRequest(
+        limit=limit,
+        filter=f_filter,
+        with_payload=True,
+        with_vector=True,  # push needs the vectors to build the envelope
+        order_by=OrderBy(key=SEQUENCE_KEY, direction=Direction.Asc),
+    )
+    res = shard.scroll(req)
+    records = res[0] if isinstance(res, tuple) else res
+
+    def priority_of(rec) -> int:
+        meta = (rec.payload or {}).get("_sync_meta", {})
+        return _PRIORITY_ORDER.get(meta.get("sync_priority", "ROUTINE"), 1)
+
+    def sequence_of(rec) -> int:
+        meta = (rec.payload or {}).get("_sync_meta", {})
+        return meta.get("client_sequence", 0)
+
+    # Stable: (priority bucket, client_sequence). URGENT before ROUTINE, and
+    # within a bucket the earliest-captured fact goes first.
+    ordered = sorted(records, key=lambda r: (priority_of(r), sequence_of(r)))
+    return [(r.id, r) for r in ordered]
+
 
 def get_outbox_points(shard: EdgeShard, limit: int = 100) -> List[Point]:
-    """
-    Return list of Point objects where _sync_meta.synced is False.
-    """
-    outbox = get_outbox(shard, limit)
-    return [point for _, point in outbox]
+    return [rec for _, rec in get_outbox(shard, limit)]
 
-def mark_synced(shard: EdgeShard, point_ids: List[int]) -> UpdateOperation:
+
+def mark_synced(shard: EdgeShard, point_ids: List[int]) -> None:
+    """Flip `_sync_meta.synced` to 1 for the acked ids, merging (not replacing)
+    the nested `_sync_meta` object so priority/sequence/verdict survive.
+
+    Uses `key="_sync_meta"` so only the `synced` sub-field is written; passing a
+    full `{"_sync_meta": {...}}` without a key would clobber the sibling fields.
     """
-    Create an UpdateOperation to set _sync_meta.synced = True for given point IDs.
-    """
-    # Build payload patch: {"_sync_meta": {"synced": True}}
-    payload_patch = {"_sync_meta": {"synced": True}}
-    # Use UpdateOperation.set_payload_by_filter with a Filter matching IDs
-    from qdrant_edge import Filter, HasIdCondition
-    id_condition = HasIdCondition(point_ids=set(point_ids))
-    f_filter = Filter(must=[id_condition])
-    return UpdateOperation.set_payload_by_filter(
-        filter=f_filter,
-        payload=payload_patch
+    if not point_ids:
+        return
+    op = UpdateOperation.set_payload_by_filter(
+        filter=Filter(must=[HasIdCondition(point_ids=set(point_ids))]),
+        payload={"synced": 1},
+        key="_sync_meta",
     )
+    shard.update(op)
+    shard.optimize()
