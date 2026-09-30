@@ -57,3 +57,14 @@ hub:
   # Qdrant Server hub. This is the gateway URL, not Qdrant's 6333 port.
   url: "http://localhost:8088"
   api_key: ""
+
+network:
+  # The transport interceptor (src/edge_node/network.py) wraps ONLY the sync
+  # client — never the query/answer path. `degraded` effects are real: a genuine
+  # latency sleep, a token-bucket byte cap over actual payload bytes, and a real
+  # failure rate that leaves the point pending (mark-after-ack). Start `full`.
+  mode: "full"                    # offline | degraded | full
+  latency_min_ms: 400            # degraded round-trip latency window
+  latency_max_ms: 1200
+  byte_rate_bytes_per_sec: 8000  # ~64 kbps cap over real payload bytes
+  failure_rate: 0.08             # ~8% of degraded requests genuinely drop

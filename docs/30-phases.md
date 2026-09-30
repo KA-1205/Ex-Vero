@@ -30,7 +30,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 3 | Real Qdrant Server hub + outbox | DONE |
 | 4 | Partial-snapshot pull | DONE |
 | 5 | Multi-device consensus | DONE |
-| 6 | Network layer | TODO |
+| 6 | Network layer | DONE |
 | 7 | Answer layer (on-device RAG) | TODO |
 | 8 | Eviction + inspection endpoints | TODO |
 | 9 | Benchmarks (measured) | PARTIAL |
@@ -332,6 +332,26 @@ import `network` (the isolation proof); query latency under `offline` is unchang
 mark-after-ack rule from phase 3 holds under real failures.
 
 **Guardrails:** the query path never references the simulator. Effects are real, never a label.
+
+**Result:** new `src/edge_node/network.py` is a transport interceptor with a global mode
+(`offline`/`degraded`/`full`) that wraps **only** the sync client (`get_delta`/`push`/`pull`/
+`pull_snapshot`) via `NetworkTransport`. Effects are real: `offline` raises `NetworkError`
+(connection refused) before any I/O; `degraded` does a genuine `time.sleep` latency (config
+400–1200 ms), a real `TokenBucket` byte cap over the actual serialized payload bytes (~64 kbps),
+and a real failure rate (~8%) that raises so `push` leaves the point pending (mark-after-ack,
+invariant 1). `full` passes through. Each push logs bytes/duration/attempted/accepted/failed/
+priority-mix/mode. To make invariant 8 architectural, the hybrid query moved into a new
+`src/edge_node/retrieval.py` that imports **only** `qdrant_edge` — never the transport or the
+simulator; `main.py`'s `/query` calls it, so `latency_ms` measures local search alone. `main.py`
+now wires `NetworkTransport(GatewayTransport(...))` and exposes `GET`/`POST /network/mode`; config
+gained a `network:` block. Tests (`tests/test_network.py`): a clean-subprocess import-graph check
+that `retrieval` pulls in neither `network` nor `sync_transport` (invariant 8, verified red by
+mutation), query stays fully answerable under `offline` with latency uninflated by an 800 ms wire,
+`degraded` injects real measured latency and (over a seeded coin-flip wire) genuinely fails some
+pushes while landing others, mark-after-ack holds under a forced drop (invariant 1), `offline`
+refuses and the outbox accumulates, URGENT drains before ROUTINE, and the token bucket is a real
+proportional wait. Full suite green (62, +3 skipped integration). `docs/API.md` already lists
+`POST /network/mode`; no route contract change for the frontend.
 
 **Out of scope:** UI wiring (frontend lane).
 

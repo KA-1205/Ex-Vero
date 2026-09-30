@@ -17,8 +17,6 @@ from qdrant_edge import (
     UpdateOperation,
     Query,
     QueryRequest as EdgeQueryRequest,
-    Prefetch,
-    Fusion,
     Bm25,
     Bm25Config,
     Modifier,
@@ -38,6 +36,8 @@ from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNC
 from .sync_transport import GatewayTransport
 from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
+from . import network
+from .retrieval import hybrid_query
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
@@ -93,13 +93,22 @@ async def lifespan(app: FastAPI):
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
 
+    # Network layer (offline/degraded/full). Apply the config-driven link
+    # parameters; the interceptor wraps ONLY the sync client below, never query.
+    net_config = full_config.get('network', {})
+    if net_config:
+        network.configure(**{k: v for k, v in net_config.items() if k != 'mode'})
+    if net_config.get('mode'):
+        network.set_mode(net_config['mode'])
+
     # Hub configuration (for push)
     hub_config = full_config.get('hub', {})
     hub_url = hub_config.get('url')
     hub_api_key = hub_config.get('api_key')
     # The sync transport is the ONLY egress to the Cloud Gateway. Tests inject a
-    # stub in its place; the runtime path always uses a real HTTP client.
-    sync_transport = GatewayTransport(hub_url) if hub_url else None
+    # stub in its place; the runtime path always uses a real HTTP client, wrapped
+    # by the network interceptor so intermittent-connectivity effects are real.
+    sync_transport = network.NetworkTransport(GatewayTransport(hub_url)) if hub_url else None
     print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
@@ -351,65 +360,53 @@ async def query(device_id: str, request: QueryRequest):
     dense_vector = adapter.embed(request.text)
     sparse_vector = bm25.embed_query(request.text)
 
+    # The retrieval module imports no transport and no network simulator, so
+    # `latency_ms` measures local search only — the offline promise (invariant 8).
     start_time = time.time()
-
-    # Build prefetches for dense and sparse
-    dense_prefetch = Prefetch(
-        limit=25,
-        query=Query.Nearest(query=dense_vector, using=adapter.name),
+    hits = hybrid_query(
+        mutable_shard=mutable_shard,
+        immutable_shard=immutable_shard,
+        dense_vector=dense_vector,
+        sparse_vector=sparse_vector,
+        dense_name=adapter.name,
     )
-    sparse_prefetch = Prefetch(
-        limit=25,
-        query=Query.Nearest(query=sparse_vector, using="text_bm25"),
-    )
+    latency_ms = (time.time() - start_time) * 1000
 
-    # Fusion with RRF
-    fusion = Fusion.Rrf(k=60)
-
-    edge_request = EdgeQueryRequest(
-        limit=10,
-        prefetches=[dense_prefetch, sparse_prefetch],
-        query=fusion,
-        with_payload=True,
-        with_vector=False,
-    )
-
-    # Query both shards
-    mutable_results = mutable_shard.query(edge_request)
-    immutable_results = immutable_shard.query(edge_request)
-
-    end_time = time.time()
-    latency_ms = (end_time - start_time) * 1000
-
-    # Deduplicate by point ID, keeping the higher score if duplicate
-    seen = {}
-    for res in mutable_results:
-        pid = res.id
-        if pid not in seen or res.score > seen[pid].score:
-            seen[pid] = res
-    for res in immutable_results:
-        pid = res.id
-        if pid not in seen or res.score > seen[pid].score:
-            seen[pid] = res
-
-    # Sort by score descending
-    sorted_results = sorted(seen.values(), key=lambda x: x.score, reverse=True)
-
-    # Format response
-    results = []
-    for res in sorted_results:
-        results.append(PointResponse(
-            id=res.id,
-            score=res.score,
-            payload=res.payload
-        ))
-
+    results = [
+        PointResponse(id=h.id, score=h.score, payload=h.payload) for h in hits
+    ]
     return QueryResponse(results=results, latency_ms=latency_ms)
 
 
 @app.get("/devices/{device_id}/feed")
 async def get_device_feed(device_id: str):
     return get_feed(device_id)
+
+
+class NetworkModeRequest(BaseModel):
+    mode: str  # "offline" | "degraded" | "full"
+
+
+@app.get("/network/mode")
+async def get_network_mode():
+    """Current link state + the config-driven degraded parameters, plus the
+    measured per-push log (bytes/duration/attempted/accepted/failed/priority)."""
+    return {
+        "mode": network.get_mode(),
+        "config": network.config_dict(),
+        "push_log": network.get_push_log(),
+    }
+
+
+@app.post("/network/mode")
+async def set_network_mode(request: NetworkModeRequest):
+    """Flip the global link mode. This is the single 'reconnect the fleet' knob;
+    it affects sync only — the query/answer path never reads it."""
+    try:
+        network.set_mode(request.mode)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"mode": network.get_mode()}
 
 
 class PushResponse(BaseModel):
