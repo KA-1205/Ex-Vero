@@ -384,7 +384,8 @@ offline.
 | `GET /devices/{id}/activity` | system-activity ring buffer, newest first |
 | `POST /devices/{id}/retract/{point_id}` | append a RETRACTED event |
 | `GET /devices/{id}/conflicts` | POSSIBLE_CONFLICT candidates |
-| `GET /benchmark/resolver-vs-lww` | computed resolver-vs-LWW accuracy |
+| `GET /benchmark/resolver-vs-lww` | computed resolver-vs-LWW accuracy over the labeled dispute fixture |
+| `GET /benchmark/recall` | measured dense-only vs hybrid recall@5 over the labeled query set |
 
 ---
 

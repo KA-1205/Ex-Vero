@@ -33,7 +33,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 6 | Network layer | DONE |
 | 7 | Answer layer (on-device RAG) | DONE |
 | 8 | Eviction + inspection endpoints | DONE |
-| 9 | Benchmarks (measured) | PARTIAL |
+| 9 | Benchmarks (measured) | DONE |
 | 10 | Docker + telemetry integration | TODO |
 
 **Critical path:** 0 → 1 → 2 → 3 → 4 → 5 → 7. Phases 6, 8, 9, 10 run alongside.
@@ -477,6 +477,24 @@ hardcoded.
 **Guardrails:** fixtures live in the repo; endpoints recompute, never return constants.
 
 **Out of scope:** tuning to hit a specific headline number — report whatever is measured.
+
+**Delivered:** `src/edge_node/benchmark.py` holds the measurement logic;
+`tests/fixtures/` holds the labeled data (`conflict_facts.jsonl` — 32 facts, 4 dispute shapes;
+`recall_corpus.jsonl` + `recall_queries.jsonl` — 1000-point corpus, 32 labeled queries across 3
+query shapes, regenerable via `tools/gen_benchmark_fixtures.py`). Both routes score real code
+against real state: the resolver leg runs the gateway's own `fold_consensus` against a real
+last-write-wins baseline, and the recall leg indexes the labeled corpus into a dedicated
+`__benchmark__` Qdrant Edge shard so both legs rank the same points.
+
+Measured on this machine (bge-small-en-v1.5, threshold 0.66) — resolver **0.5625** vs LWW
+**0.125** over 32 scenarios; hybrid recall@5 **0.7188** vs dense **0.625** over 32 queries. Both
+margins are narrower than the old hardcoded 0.94/0.71 and 0.84/0.62 claims, and deliberately so:
+the fixtures include shapes the system *loses* (a `corroboration_foiled` case where the fold
+confirms a wrong value, `late_correction` where recency was right and the fold abstains, and
+`contested` where it must decline), plus dense-adequate semantic and paraphrase queries where
+fusion adds nothing. Per-shape results are returned in `by_shape` so a reader can see where each
+number comes from rather than taking an aggregate on faith. Full suite green (103 passed,
+4 skipped).
 
 ---
 
