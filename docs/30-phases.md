@@ -34,7 +34,7 @@ old committed "Step 1–8" labels (several are partial/broken — see the audit)
 | 7 | Answer layer (on-device RAG) | DONE |
 | 8 | Eviction + inspection endpoints | DONE |
 | 9 | Benchmarks (measured) | DONE |
-| 10 | Docker + telemetry integration | TODO |
+| 10 | Docker + telemetry integration | DONE |
 
 **Critical path:** 0 → 1 → 2 → 3 → 4 → 5 → 7. Phases 6, 8, 9, 10 run alongside.
 
@@ -515,6 +515,38 @@ reports RSS/CPU read from that container's cgroup; the label matches the real li
 **Guardrails:** never report a Pi number we didn't measure; label emulated targets as such.
 
 **Out of scope:** cloud deployment, k8s.
+
+**Delivered:** `docker/edge.Dockerfile` builds the edge with `BAAI/bge-small-en-v1.5` baked into
+the image (weights downloaded at build time, not inside the memory budget being measured) and
+`HF_HUB_OFFLINE=1` set *after* the bake so runtime cannot reach for the network.
+`docker/docker-compose.yml` brings up Qdrant, the gateway, Ollama, and three constrained edge
+nodes — `edge-tiny` (1 CPU / 512 MB), `edge-standard` (2 CPU / 2 GB), `edge-large` (4 CPU / 4 GB).
+`config/tiny-edge.yaml` is the honest 512 MB model set: the default config's bge-small + CLIP
+ViT-B/32 does not fit in 512 MB and the container would be OOM-killed before answering anything.
+
+Telemetry was substantially fake and is now measured. `read_cgroup_cpu_pct()` was dead code that
+always returned `0.0`; the reader that was actually called never touched a cgroup — it divided
+*process* CPU by *host uptime* (an average since boot) and capped the result at 100, so a
+multi-core budget could never read above 100 and no amount of load could move it within a
+sampling window. It now differences `cpu.stat` `usage_usec` between two samples against
+`cpu.max`, on cgroup v2 and v1 (nanoseconds on v1), quota-relative. `ram_limit_mb` no longer
+falls back to host `MemTotal`, and `model_load_ms` was a hardcoded `1840.0` placeholder, ~39x
+below the real figure (71445 ms in the 1-CPU container) — it is now wall-clock from adapter
+loading through fleet provisioning. Added `GET /health` (derived from real startup state) because
+the container had no readiness signal at all, and `EDGE_CONFIG_PATH` / `EDGE_HUB_URL` so one
+config file works on a laptop and inside the compose network.
+
+A measurement artifact was found and fixed while proving the criterion: cgroup CPU accounting is
+quantised to the scheduler tick, so a window shorter than a tick reports a partial slice as a
+whole one. On the saturated 1-CPU container a 20 ms window read a median of 108% and peaked at
+134%, and back-to-back HTTP sampling produced **251% for a 1-CPU budget** — physically
+impossible. The reader now refuses to produce a new figure inside 250 ms and returns the last
+real one, and the acceptance test asserts the reading stays within a possible band.
+
+Verified: `docker inspect` confirms the compose limits are applied (`NanoCPUs=1000000000`,
+`Memory=536870912`) and the node self-reports `emulated constrained target (1.0 CPU / 512 MB
+container)` with RSS 296 MB and no OOM kill. Under a burner thread inside the cgroup, `cpu_pct`
+rises 0.19% → 100.2%. Full suite green (133 passed, 4 skipped).
 
 ---
 

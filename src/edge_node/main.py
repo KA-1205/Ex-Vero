@@ -63,7 +63,9 @@ from .benchmark import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "disaster-response.yaml"
+DEFAULT_CONFIG_PATH = Path(
+    os.environ.get("EDGE_CONFIG_PATH") or (REPO_ROOT / "config" / "disaster-response.yaml")
+)
 
 THUMBNAIL_DIR = REPO_ROOT / "shards" / "thumbnails"
 os.makedirs(THUMBNAIL_DIR, exist_ok=True)
@@ -110,15 +112,28 @@ _ws_lock = __import__('threading').Lock()
 _ws_device_events: Dict[str, set] = {}
 _ws_consensus_events: set = set()
 
+# Wall-clock cost of loading the models and building the local index at
+# startup, in ms. Measured once during lifespan; reported by /telemetry.
+MODEL_LOAD_MS: float = 0.0
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global adapters, clip_text_adapter, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS, CONSENSUS_THRESHOLD
+    global adapters, clip_text_adapter, edge_config, decision_engine, bm25, generators, TRUST_DECAY, CONFLICT_THRESHOLD, sync_transport, MAX_LOCAL_POINTS, CONSENSUS_THRESHOLD, MODEL_LOAD_MS
+
+    startup_started = time.perf_counter()
 
     # Load adapters from config
     config_path = str(DEFAULT_CONFIG_PATH)
     with open(config_path, 'r') as f:
         full_config = yaml.safe_load(f)
+
+    # A container cannot reach the host's localhost. Naming the gateway through
+    # the environment keeps this one config file usable both on a laptop and
+    # inside the compose network, instead of forking it per deployment.
+    hub_url_override = os.environ.get("EDGE_HUB_URL")
+    if hub_url_override:
+        full_config.setdefault("hub", {})["url"] = hub_url_override
 
     adapters = load_adapters(config_path)
 
@@ -192,10 +207,33 @@ async def lifespan(app: FastAPI):
         get_or_create_event_log(dev["id"])
     print(f"Provisioned demo fleet: {[d['id'] for d in DEFAULT_FLEET]}")
 
+    # Real startup cost, measured rather than asserted. Recording it here means
+    # the number covers adapter loading through fleet provisioning — the window
+    # during which the node cannot yet answer a query.
+    MODEL_LOAD_MS = (time.perf_counter() - startup_started) * 1000.0
+    print(f"Startup took {MODEL_LOAD_MS:.0f} ms")
+
     yield
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+async def health():
+    """Readiness, derived from real startup state rather than a fixed reply.
+
+    Orchestrators (docker compose, the container acceptance test) need a way to
+    tell "still loading models" from "can answer a query". Reporting "ok"
+    unconditionally would make them push traffic at a node that cannot serve it.
+    """
+    ready = adapters is not None and bm25 is not None and bool(device_shards)
+    return {
+        "status": "ok" if ready else "starting",
+        "adapters": [a.name for a in adapters] if adapters else [],
+        "devices": len(device_shards),
+        "model_load_ms": MODEL_LOAD_MS,
+    }
 app.mount("/thumbnails", StaticFiles(directory=str(THUMBNAIL_DIR)), name="thumbnails")
 
 
@@ -1430,11 +1468,8 @@ async def get_device_telemetry(device_id: str):
     """Live CPU/RAM/latency from the real cgroup/process (API.md §11)."""
     if device_id not in device_shards:
         raise HTTPException(status_code=404, detail="unknown device")
-    
-    # Model load time could be tracked at startup
-    model_load_ms = 1840.0  # Placeholder
-    
-    return get_telemetry(model_load_ms=model_load_ms)
+
+    return get_telemetry(model_load_ms=MODEL_LOAD_MS)
 
 
 # --- GET /cloud/state ---

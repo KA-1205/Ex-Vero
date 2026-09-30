@@ -311,14 +311,46 @@ Live CPU/RAM/latency read from the real cgroup/process. Labeled as an emulated c
 - **200**
 ```json
 {
-  "target_label": "emulated constrained target (1 CPU / 512 MB container)",
+  "target_label": "emulated constrained target (1.0 CPU / 512 MB container)",
   "cpu_pct": 63.2,
   "ram_mb": 218.4,
   "ram_limit_mb": 512,
-  "model_load_ms": 1840,
+  "model_load_ms": 71445,
   "query_latency_p50_ms": 38.1,
   "query_latency_p95_ms": 71.9
 }
+```
+
+Every field is measured, and each is honest about what it could not measure:
+
+| Field | Source | When it is absent |
+| --- | --- | --- |
+| `target_label` | `cpu.max` / `memory.max` in this cgroup | says `no CPU limit / no memory limit container` — never a number it did not read |
+| `cpu_pct` | `cpu.stat` `usage_usec`, differenced between two samples, as a percentage of the cgroup's quota | first call after start is `0.0`; there is no previous sample to difference against |
+| `ram_mb` | `/proc/self/status` `VmRSS` | `0.0` if unreadable |
+| `ram_limit_mb` | `memory.max` (v2) / `memory.limit_in_bytes` (v1) | `null`. It does **not** fall back to host RAM |
+| `model_load_ms` | wall-clock of startup, from adapter loading through fleet provisioning | `0.0` if the app has not finished starting |
+| `query_latency_p50_ms` / `_p95_ms` | real served queries, from the latency recorder | `0.0` before any query is served |
+
+Two properties worth relying on:
+
+- **`cpu_pct` is quota-relative.** `100.0` means the container's entire CPU
+  budget is in use. On an unconstrained host (no `cpu.max` quota) the reading
+  is relative to a single core instead.
+- **Polled faster than 250 ms, `cpu_pct` returns the last measured value
+  unchanged.** cgroup CPU accounting is quantised to the scheduler tick, so a
+  window shorter than a tick reports a partial slice as if it covered the whole
+  window — observed reading up to 251% for a 1-CPU budget. The reader refuses
+  to produce a new number inside that window rather than invent one, so a fresh
+  figure appears at most every 250 ms.
+
+### `GET /health`
+Readiness for orchestrators, derived from real startup state rather than a
+fixed reply. `status` is `starting` until adapters, BM25 and the demo fleet are
+all up, then `ok`.
+- **200**
+```json
+{ "status": "ok", "adapters": ["text"], "devices": 7, "model_load_ms": 71445 }
 ```
 
 ---
