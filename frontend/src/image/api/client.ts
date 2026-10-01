@@ -11,6 +11,9 @@ import * as mock from './mock'
 import { openEventSocket } from '../../api/eventSocket'
 import { resolveApiBaseUrl } from '../../api/apiBase'
 import { resolveAssetUrl } from './assetUrl'
+import { filterMemoryRecords } from '../../api/memoryFilters'
+import type { MemoryFilters } from '../../api/memoryFilters'
+export type { MemoryFilters } from '../../api/memoryFilters'
 
 const BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, '')
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (location.protocol === 'https:' ? '' : 'ws://localhost:8000')
@@ -180,9 +183,8 @@ export async function fetchWeather(): Promise<WeatherConditions> {
   const payload = await response.json() as { current: { time: string; temperature_2m: number; apparent_temperature: number; relative_humidity_2m: number; weather_code: number; wind_speed_10m: number; visibility: number } }
   return { temperature_c: payload.current.temperature_2m, apparent_temperature_c: payload.current.apparent_temperature, relative_humidity_pct: payload.current.relative_humidity_2m, wind_speed_kmh: payload.current.wind_speed_10m, visibility_km: payload.current.visibility / 1000, weather_code: payload.current.weather_code, observed_at: payload.current.time }
 }
-export interface MemoryFilters { q?: string; sync_state?: string; modality?: string; zone?: string; limit?: number; offset?: number }
 export async function fetchMemoryRecords(deviceId: string, filters: MemoryFilters = {}): Promise<MemoryRecord[]> {
-  if (mock.USE_MOCKS) return mock.mockMemoryRecords(deviceId).filter((r) => (!filters.q || r.content_preview.toLowerCase().includes(filters.q.toLowerCase())) && (!filters.sync_state || r.state === filters.sync_state) && (!filters.modality || r.modality === filters.modality) && (!filters.zone || r.zone?.toLowerCase().includes(filters.zone.toLowerCase())))
+  if (mock.USE_MOCKS) return filterMemoryRecords(mock.mockMemoryRecords(deviceId), filters, 'vision')
   const params = new URLSearchParams()
   // Task A1: Image client sends modality=vision on GET /devices/{id}/memory
   const effectiveFilters: MemoryFilters = { modality: 'vision', ...filters }
@@ -193,7 +195,8 @@ export async function fetchMemoryRecords(deviceId: string, filters: MemoryFilter
 }
 export async function fetchMemoryDetail(deviceId: string, pointId: string): Promise<MemoryDetail> {
   if (mock.USE_MOCKS) {
-    const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId) ?? mock.mockMemoryRecords(deviceId)[0]
+    const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId)
+    if (!row) throw new Error('Memory record not found')
     return { point: { id: String(Number(pointId.replace(/\D/g, '')) || 1), value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
   }
   const detail = await getJSON<any>(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
