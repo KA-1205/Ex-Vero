@@ -512,9 +512,16 @@ async def capture(device_id: str, raw_request: Request):
 
     if modality == "vision" and file_bytes:
         if vision_adapter is None:
-            raise HTTPException(status_code=503, detail="vision embedding is not enabled in backend configuration")
-        adapter = vision_adapter
-        dense_vector = adapter.embed(file_bytes)
+            text_image_fallback = os.environ.get("EDGE_ALLOW_TEXT_IMAGE_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
+            if not text_image_fallback:
+                raise HTTPException(status_code=503, detail="vision embedding is not enabled in backend configuration")
+            # Low-memory profile: keep the real image and thumbnail, but index
+            # the supplied caption with the text model instead of loading CLIP.
+            adapter = text_adapter
+            dense_vector = adapter.embed(value)
+        else:
+            adapter = vision_adapter
+            dense_vector = adapter.embed(file_bytes)
         point_id = generate_point_id(corroboration_key, value + str(time.time()))
 
         # Generate thumbnail
