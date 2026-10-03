@@ -137,9 +137,23 @@ def load_adapters(config_path: str) -> List[Embedder]:
 
     Accepts both the Phase 2 `models:` schema and the legacy `adapters:`
     schema so existing call sites keep working during the migration.
+
+    `EDGE_ENABLE_VISION=false` is an intentional low-memory deployment profile:
+    it prevents CLIP model initialization while leaving the full vision config
+    available for a larger host.
     """
     with open(config_path, "r") as f:
         config = yaml.safe_load(f) or {}
+
+    vision_enabled = os.environ.get("EDGE_ENABLE_VISION", "true").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+    if not vision_enabled and "models" in config:
+        models = config.setdefault("models", {})
+        models["embedders"] = [
+            spec for spec in models.get("embedders", [])
+            if spec.get("modality") != "vision"
+        ]
 
     if "models" in config:
         return from_config(config)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
-import { fetchDevices, fetchMemoryRecords, injectConflict, subscribeConsensusEvents } from '../api/client'
+import { fetchDevices, fetchMemoryRecords, injectConflict, mapConsensusEvent, subscribeConsensusEvents } from '../api/client'
 import type { ConsensusEvent, DeviceSummary, MemoryRecord } from '../types'
 import { MonoValue, Panel } from '../components/primitives'
 
@@ -111,12 +111,16 @@ export function ConflictTheater() {
     setResolving(true)
     try {
       // Reconnect and push real conflict for server_room_A.fire_status
-      await injectConflict('server_room_A.fire_status', {
+      const response = await injectConflict('server_room_A.fire_status', {
         [devA.id]: 'fire',
         [devB.id]: 'none',
       })
       setMode('full')
       setReconnected(true)
+      if (response.consensus) {
+        setResolved(mapConsensusEvent(response.consensus))
+        setResolving(false)
+      }
       if (USE_MOCKS) {
         window.setTimeout(() => {
           setResolved(mockConsensusEvents()[0])
