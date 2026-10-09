@@ -1,7 +1,7 @@
 // Numeric frontend REST/WebSocket client. Shapes follow docs/API.md; mocks remain
 // behind the existing switch while backend endpoints are brought online.
 import type {
-  ActivityEntry, ActivityKind, ApiCloudFact, ApiDevice, ApiDeviceTelemetry, ApiSyncStatus,
+  ActivityEntry, ActivityKind, ApiCloudFact, ApiConsensusEvent, ApiDevice, ApiDeviceTelemetry, ApiSyncStatus,
   CaptureRequest, CaptureResponse, CloudFact, CloudState, ConsensusEvent, DecisionEvent,
   DecisionFeedEntry, DeviceEventFrame, DeviceSummary, MemoryDetail, MemoryPoint, MemoryRecord,
   NetworkMode, NetworkModeState, QueryResult, SyncStatus, TelemetrySample, WeatherConditions,
@@ -182,7 +182,18 @@ export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceE
 export async function pushDevice(deviceId: string) { return postJSON(`/devices/${encodeURIComponent(deviceId)}/push`, {}) }
 export async function pullDevice(deviceId: string) { return postJSON(`/devices/${encodeURIComponent(deviceId)}/pull`, {}) }
 export async function retractPoint(deviceId: string, pointId: string) { if (mock.USE_MOCKS) return { retracted: true, point_id: Number(pointId.replace(/\D/g, '')) || 1 }; return postJSON(`/devices/${encodeURIComponent(deviceId)}/retract/${encodeURIComponent(pointId)}`, {}) }
-export async function injectConflict(corroboration_key: string, assignments: Record<string, string>) { if (mock.USE_MOCKS) return { injected: true }; return postJSON('/demo/inject-conflict', { corroboration_key, assignments }) }
+export async function injectConflict(corroboration_key: string, assignments: Record<string, string>): Promise<{ injected: boolean; corroboration_key?: string; consensus?: ApiConsensusEvent }> { if (mock.USE_MOCKS) return { injected: true }; return postJSON('/demo/inject-conflict', { corroboration_key, assignments }) }
+export function mapConsensusEvent(event: ApiConsensusEvent): ConsensusEvent {
+  return {
+    id: `${event.corroboration_key}-${event.timestamp}`,
+    corroboration_key: event.corroboration_key,
+    timestamp: event.timestamp,
+    outcome: event.state === 'RESOLVED_LWW' ? 'LWW' : event.state === 'RETRACTED' ? 'DISPUTED' : event.state,
+    confidence: event.confidence,
+    claims: event.candidates.flatMap((candidate) => candidate.devices.map((device_id) => ({ device_id, value: candidate.value, trust_score: candidate.weight, reported_at: event.timestamp }))),
+    resolution_summary: event.explanation,
+  }
+}
 export async function setRogueMode(deviceId: string, rogue: boolean) { if (mock.USE_MOCKS) return { id: deviceId, rogue }; return postJSON(`/devices/${encodeURIComponent(deviceId)}/rogue`, { rogue }) }
 export function subscribeConsensusEvents(onEvent: (entry: ConsensusEvent) => void): () => void {
   if (mock.USE_MOCKS) return () => undefined

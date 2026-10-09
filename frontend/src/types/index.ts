@@ -35,7 +35,7 @@ export interface ActivityEntry {
 }
 export type DeviceEventFrame = { type: 'decision'; data: DecisionEvent } | { type: 'activity'; data: ActivityEntry }
 export interface MemoryPoint {
-  id: number; value: string; modality: Modality; thumbnail_url: string | null; zone: string | null
+  id: string; value: string; modality: Modality; thumbnail_url: string | null; zone: string | null
   corroboration_key: string; sync_state: MemoryState; model: string; model_version: string; created_at: string
 }
 export interface MemoryPointWithScore extends MemoryPoint { score?: number }
@@ -47,8 +47,8 @@ export interface MemoryRecord {
   state: MemoryState; zone?: string; status?: string; decision_reason: string; sync_verdict?: string
   captured_at: string; activity_ids: string[]; detail?: MemoryDetail; corroboration_key?: string
 }
-export interface QuerySource { id: number; score: number; value: string; consensus_state: string }
-export interface QueryResultHit { id: number; score: number; value?: string; payload?: { value?: string } }
+export interface QuerySource { id: string; score: number; value: string; consensus_state: string }
+export interface QueryResultHit { id: string; score: number; value?: string; payload?: { value?: string } }
 export interface QueryResult {
   answer: string; answer_path: 'offline' | 'online' | 'extractive'; model: string; latency_ms: number
   sources: QuerySource[]; results: QueryResultHit[]
@@ -62,7 +62,7 @@ export interface ConflictRecord {
   zone: string; new_value: string; existing_value: string; new_key: string; existing_key: string
 }
 export interface CaptureResponse {
-  id: number; verdict: Verdict; reason: string; conflicts: ConflictRecord[]
+  id: string; verdict: Verdict; reason: string; conflicts: ConflictRecord[]
   modality?: Modality; thumbnail_url?: string
 }
 export interface ApiSyncStatus {
