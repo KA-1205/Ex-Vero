@@ -18,6 +18,8 @@ services:
     envVars:
       - key: PYTHONPATH
         value: src
+      - key: EDGE_ENABLE_VISION
+        value: "false"
       - key: EDGE_HUB_URL
         fromService:
           type: web

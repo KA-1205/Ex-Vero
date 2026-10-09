@@ -43,7 +43,7 @@ export interface VisionMetadata {
   severity_ladder?: SeverityRung[]
 }
 export interface MemoryPoint {
-  id: number; value: string; modality: Modality; thumbnail_url: string | null; zone: string | null
+  id: string; value: string; modality: Modality; thumbnail_url: string | null; zone: string | null
   corroboration_key: string; sync_state: MemoryState; model: string; model_version: string; created_at: string
   vision?: VisionMetadata
 }

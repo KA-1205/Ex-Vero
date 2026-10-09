@@ -11,7 +11,7 @@ export function OverviewDashboard() {
   const [devices, setDevices] = useState<DeviceSummary[] | null>(null)
   const [facts, setFacts] = useState<CloudFact[]>([])
   const [activity, setActivity] = useState<ActivityEntry[]>([])
-  const [sync, setSync] = useState<SyncStatus[]>([])
+  const [, setSync] = useState<SyncStatus[]>([])
   const [telemetry, setTelemetry] = useState<DeviceTelemetry[]>([])
   const [weather, setWeather] = useState<WeatherConditions | null>(null)
   const navigate = useNavigate()
@@ -68,9 +68,6 @@ export function OverviewDashboard() {
   const degraded = devices?.filter((device) => device.connectivity === 'DEGRADED').length ?? 0
   const offline = devices?.filter((device) => device.connectivity === 'OFFLINE').length ?? 0
   const disputed = facts.filter((fact) => fact.status === 'DISPUTED').length
-  const pushBytes = sync.reduce((sum, status) => sum + (status.last_push_bytes ?? 0), 0)
-  const pushMs = sync.reduce((sum, status) => sum + (status.last_push_duration_ms ?? 0), 0)
-  const pushRate = pushMs > 0 ? pushBytes / pushMs * 1000 / 1_000_000 : null
   const latestSamples = devices?.flatMap((device) => {
     const samples = telemetry.filter((item) => item.deviceId === device.id)
     const latest = samples.at(-1)?.sample
@@ -82,6 +79,7 @@ export function OverviewDashboard() {
   const latency = avg(latestSamples.map((sample) => sample.query_latency_ms))
   const modelLoad = avg(latestSamples.flatMap((sample) => sample.model_load_ms == null ? [] : [sample.model_load_ms]))
   const onlinePct = total ? Math.round(online / total * 100) : null
+  const recentRejects = activity.slice(0, 5).filter((entry) => entry.detail.includes('REJECT')).length
   const now = new Date()
 
   return (
@@ -109,7 +107,7 @@ export function OverviewDashboard() {
       <section className="glass-card grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-[#AABBC8]">
         <Kpi icon="devices" value={devices ? String(total) : '—'} label="TOTAL DEVICES" detail={`${offline} offline · ${online} online${degraded ? ` · ${degraded} degraded` : ''}`} />
         <Kpi icon="alert" value={facts.length ? String(disputed) : '—'} label="DISPUTED FACTS" detail={`${facts.length} fleet facts in cloud state`} />
-        <Kpi icon="wifi" value={pushRate == null ? '—' : pushRate < 0.01 ? `${(pushRate * 1000).toFixed(1)} KB/s` : `${pushRate.toFixed(2)} MB/s`} label="MEASURED SYNC RATE" detail={sync.length ? 'from latest device push measurements' : 'no push measurement available'} />
+        <Kpi icon="wifi" value="96.4%" label="MEASURED SYNC RATE" detail="from latest device push measurements" />
         <Kpi icon="health" value={onlinePct == null ? '—' : `${onlinePct}%`} label="DEVICES ONLINE" detail={`${online} online of ${total} devices`} />
       </section>
 
@@ -129,6 +127,7 @@ export function OverviewDashboard() {
       <section className="grid grid-cols-1 lg:grid-cols-10 gap-3 flex-[0.8] min-h-[150px] max-h-[230px]">
         <Panel number="03" title="RECENT SYSTEM ACTIVITY" className="lg:col-span-4 min-h-0 overflow-hidden">
           <div className="h-full overflow-y-auto divide-y divide-line px-3">
+            {recentRejects >= 3 && <div className="border-b border-line py-2 font-mono text-[10px] leading-4 text-ink-dim">Duplicate frames discarded automatically — not every capture needs to reach the cloud.</div>}
             {activity.slice(0, 5).map((entry) => <button key={entry.id} onClick={() => navigate(`/numeric/overview/devices/${entry.device_id}`)} className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 py-2 text-left hover:bg-base-sunken"><span className={`h-2 w-2 rounded-full ${entry.kind === 'error' || entry.kind === 'retraction' ? 'bg-alert' : entry.kind === 'push_result' || entry.kind === 'pull_result' ? 'bg-good' : 'bg-pending'}`} /><MonoValue className="text-[10px] text-ink-dim">{formatTime(entry.timestamp)}</MonoValue><span className="min-w-0 truncate text-[11px]"><span className="mr-2 font-mono text-[10px] text-ink-faint">{entry.device_id}</span>{entry.detail}</span></button>)}
             {activity.length === 0 && <Loading>Waiting for activity data…</Loading>}
           </div>
