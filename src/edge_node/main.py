@@ -4,7 +4,6 @@ import hashlib
 import secrets
 import threading
 import time
-import io
 import asyncio
 from typing import List, Dict, Optional, Any, Set, Tuple
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
@@ -14,7 +13,6 @@ import yaml
 from pathlib import Path
 from contextlib import asynccontextmanager
 from PIL import Image
-from fastapi.staticfiles import StaticFiles
 
 from qdrant_edge import (
     EdgeShard,
@@ -44,6 +42,8 @@ def _utcnow() -> str:
 
 from .adapter import Adapter, ClipTextAdapter
 from .registry import load_adapters, build_generators
+from . import model_stamp
+from . import snapshot as edge_snapshot
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import (
     add_sync_meta,
@@ -109,6 +109,23 @@ _bench_seeded: set = set()
 SHARD_BASE_PATH = os.environ.get("EDGE_SHARD_DIR", "./shards")
 _rogue_devices: Set[str] = set()
 
+# Embedding-model stamp guard (D2 / T5). A shard carries the space stamp of the
+# model that produced its vectors; loading it under a different model is refused
+# so a cosine search never silently crosses incompatible vector spaces. The
+# cosine floor is config/env-overridable (named default lives in model_stamp).
+STAMP_COSINE = float(os.environ.get("EDGE_STAMP_COSINE", model_stamp.DEFAULT_STAMP_COSINE))
+
+
+def _rebuild_requested() -> bool:
+    """`--rebuild` (argv) or EDGE_REBUILD (env) lets an operator deliberately
+    re-stamp a shard after an intended model change, instead of being blocked."""
+    if os.environ.get("EDGE_REBUILD", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    import sys as _sys
+
+    return "--rebuild" in _sys.argv
+
+
 # Pre-configured demo fleet (Phase 1)
 DEFAULT_FLEET = [
     {"id": "dev-01", "name": "Paramedic Tablet 01", "kind": "paramedic tablet", "latitude": 28.6329, "longitude": 77.2195},
@@ -151,6 +168,9 @@ async def lifespan(app: FastAPI):
         full_config.setdefault("hub", {})["url"] = hub_url_override
 
     adapters = load_adapters(config_path)
+    # Recompute the model space stamp for this (possibly reloaded) model set.
+    global _fleet_stamp_cache
+    _fleet_stamp_cache = None
 
     # Build EdgeConfig from adapters
     vectors = {a.name: EdgeVectorParams(size=a.dim, distance=Distance.Cosine) for a in adapters}
@@ -209,6 +229,13 @@ async def lifespan(app: FastAPI):
     hub_config = full_config.get('hub', {})
     hub_url = hub_config.get('url')
     sync_transport = network.NetworkTransport(GatewayTransport(hub_url)) if hub_url else None
+    # Carry the fleet's model space stamp on every push so the hub refuses a
+    # batch from an incompatible embedding model (D2 / T5).
+    if sync_transport is not None and hasattr(sync_transport, "inner"):
+        try:
+            sync_transport.inner.space_stamps = _current_fleet_stamp()
+        except Exception as exc:  # noqa: BLE001 — never block startup on this
+            print(f"Could not compute model space stamp: {exc}")
     print(f"Hub config loaded: url={hub_url}")
 
     print(f"Loaded {len(adapters)} adapters: {[a.name for a in adapters]}")
@@ -380,30 +407,55 @@ def get_activity(device_id: Optional[str] = None, kind: Optional[str] = None, li
     return entries[:limit]
 
 
-def _verify_shard_dimension(shard, adapters):
-    """Verify that the shard's vector dimensions match the adapters.
-    If the shard was created with different dimensions, querying may raise
-    an exception about dimension mismatch. We attempt a dummy query to
-    detect mismatch and raise a clear error.
+_fleet_stamp_cache: Optional[Dict[str, Any]] = None
+
+
+def _current_fleet_stamp() -> Dict[str, Any]:
+    """The space stamp of the loaded models (D2 / T5), computed once and cached.
+
+    Each slot's stamp is derived from the adapter's identity + real dim + a probe
+    vector it produces — never a typed version string. Used to stamp new shards,
+    verify loaded ones, sign push batches, and check pulled snapshots.
+    """
+    global _fleet_stamp_cache
+    if _fleet_stamp_cache is None:
+        _fleet_stamp_cache = model_stamp.fleet_stamp(adapters or [])
+    return _fleet_stamp_cache
+
+
+def _verify_shard_stamp(shard_dir: str) -> None:
+    """Guard a shard dir against a model change (D2 / T5, replaces the old
+    zero-vector `_verify_shard_dimension`).
+
+    * A freshly created / never-stamped shard is stamped with the live fleet
+      stamp (back-compatible: pre-D2 shards get stamped on first load).
+    * A shard whose stored stamp is incompatible with the live models (different
+      dimension, or a probe vector that no longer agrees by cosine) is REFUSED —
+      we raise so startup fails loudly instead of serving silent garbage. An
+      operator who changed the model on purpose passes `--rebuild` / EDGE_REBUILD
+      to re-stamp it.
     """
     if not adapters:
         return
-    adapter = adapters[0]  # step 1 only uses first adapter
-    try:
-        dummy_vector = [0.0] * adapter.dim
-        query_obj = Query.Nearest(query=dummy_vector, using=adapter.name)
-        # We don't need results, just want to see if the call succeeds
-        edge_request = EdgeQueryRequest(limit=1, query=query_obj, with_vector=False, with_payload=False)
-        shard.query(edge_request)
-    except Exception as e:
-        # If the error indicates a dimension mismatch, raise a clear error.
-        if "dimension" in str(e).lower() or "size" in str(e).lower() or "vector" in str(e).lower():
-            raise RuntimeError(
-                f"Shard dimension mismatch: expected {adapter.dim}-dim vectors from adapter '{adapter.name}'. "
-                f"Underlying error: {e}"
-            )
-        # If the shard is empty, the query may still succeed; other errors (e.g., unrelated) we ignore.
-        pass
+    live = _current_fleet_stamp()
+    stored = model_stamp.read_stamp(shard_dir)
+    if stored is None:
+        model_stamp.write_stamp(shard_dir, live)
+        return
+    problems = model_stamp.diff_fleet(live, stored, min_cosine=STAMP_COSINE)
+    if problems:
+        if _rebuild_requested():
+            print(f"[stamp] --rebuild: re-stamping {shard_dir} ({problems})")
+            model_stamp.write_stamp(shard_dir, live)
+            return
+        raise RuntimeError(
+            "Embedding-model stamp mismatch for shard "
+            f"'{shard_dir}': {problems}. The shard's vectors were produced by a "
+            "different model than the one now loaded; a search across them would "
+            "return silent garbage. Re-embed the data or restart with --rebuild "
+            "(EDGE_REBUILD=1) to re-stamp this shard deliberately."
+        )
+
 
 
 def get_or_create_shards(device_id: str):
@@ -422,10 +474,12 @@ def get_or_create_shards(device_id: str):
     if not os.path.exists(mutable_path):
         os.makedirs(mutable_path, exist_ok=True)
         mutable_shard = EdgeShard.create(mutable_path, edge_config)
+        model_stamp.write_stamp(mutable_path, _current_fleet_stamp())
     else:
         mutable_shard = EdgeShard.load(mutable_path)
-        # Verify that the loaded shard's vector config matches our adapters (invariant 10)
-        _verify_shard_dimension(mutable_shard, adapters)
+        # Refuse to load a shard produced by a different embedding model (D2 /
+        # T5): a cosine search across incompatible spaces returns silent garbage.
+        _verify_shard_stamp(mutable_path)
         info = mutable_shard.info()
         print(f"Loaded mutable shard for {device_id}: {info}")
 
@@ -437,9 +491,10 @@ def get_or_create_shards(device_id: str):
     if not os.path.exists(immutable_path):
         os.makedirs(immutable_path, exist_ok=True)
         immutable_shard = EdgeShard.create(immutable_path, edge_config)
+        model_stamp.write_stamp(immutable_path, _current_fleet_stamp())
     else:
         immutable_shard = EdgeShard.load(immutable_path)
-        _verify_shard_dimension(immutable_shard, adapters)
+        _verify_shard_stamp(immutable_path)
         print(f"Loaded immutable shard for {device_id}: {info}")
     
     max_client_sequence = 0
@@ -1001,6 +1056,25 @@ def _do_pull(device_id: str) -> "PullResponse":
 
     if snapshot_path is None:
         return PullResponse(pulled_count=0, errors=flush_errors, retracted_ids=retracted_ids)
+
+    # Refuse to restore a snapshot whose vectors came from a model incompatible
+    # with ours (D2 / T5): a cosine search across spaces returns silent garbage.
+    # A pre-D2 snapshot carries no stamp and is accepted (back-compatible).
+    incoming_stamp = edge_snapshot.read_snapshot_stamp(snapshot_path)
+    if incoming_stamp:
+        problems = model_stamp.diff_fleet(
+            _current_fleet_stamp(), incoming_stamp, min_cosine=STAMP_COSINE
+        )
+        if problems:
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
+            return PullResponse(
+                pulled_count=0,
+                errors=flush_errors + [f"snapshot stamp mismatch, restore refused: {problems}"],
+                retracted_ids=retracted_ids,
+            )
 
     before = immutable_shard.count(CountRequest())
     try:

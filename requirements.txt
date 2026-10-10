@@ -1,14 +1,17 @@
 # Python dependencies (pip install -r requirements.txt)
-fastapi>=0.141.1
-fastembed>=0.8.1
-httpx>=0.28.1
-pillow>=10.0.0
-python-multipart>=0.0.20
+# Pinned for reproducible installs (C4 hygiene). Versions match the uv.lock
+# resolution; qdrant-edge-py and qdrant-client stay on their invariant pins and
+# are never floated.
+fastapi==0.141.1
+fastembed==0.8.1
+httpx==0.28.1
+pillow==12.3.0
+python-multipart==0.0.32
 qdrant-edge-py==0.8.0
 qdrant-client==1.12.1
-pyyaml>=6.0.3
-uvicorn>=0.54.0
-websockets>=15.0
+pyyaml==6.0.3
+uvicorn==0.54.0
+websockets==15.0
 
 # Optional development dependency
-# pytest>=9.1.1
+# pytest==9.1.1

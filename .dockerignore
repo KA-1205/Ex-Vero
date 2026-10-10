@@ -1,0 +1,46 @@
+# Keep the gateway build context lean and reproducible. The gateway image only
+# needs cloud-gateway/* plus the two vendored modules from src/edge_node; nothing
+# below belongs in the image and shipping it only bloats layers (or leaks local
+# state into a published image).
+
+# Python bytecode / build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtualenvs and tooling caches
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# VCS and local runtime state
+.git/
+.gitignore
+shards/
+*.wal
+.qdrant/
+.ollama/
+
+# Secrets and local env overrides — never bake these into an image
+.env
+.env.*
+
+# Node / frontend (not part of any Python image)
+frontend/node_modules/
+frontend/dist/
+
+# Docs, datasets and demo output that no image needs
+docs/
+results/
+brag-output-*/
+config/seed/disaster_response.jsonl
+config/seed/gas_sensor_raw.txt
+
+# OS noise
+.DS_Store

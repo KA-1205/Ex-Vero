@@ -80,6 +80,11 @@ except ImportError:  # Docker image: value_cluster.py is COPY'd next to app.py
         cosine as _cosine,
     )
 
+try:
+    from edge_node import model_stamp
+except ImportError:  # Docker image: model_stamp.py is COPY'd next to app.py
+    import model_stamp
+
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
 # Creating a collection on a cold Qdrant Server legitimately takes tens of
@@ -102,6 +107,14 @@ EVENTS_COLLECTION = "fact_events"
 # scanning the whole event log (P0-4).
 META_COLLECTION = "gateway_meta"
 SEQ_POINT_ID = 0
+# A second meta point holds the fleet's embedding-model space stamp: slot ->
+# stamp (D2 / T5). The first ingest that carries stamps registers them; a later
+# ingest whose stamp for a known slot is incompatible is refused with 409, so a
+# device running a different model can never pollute the shared vector space.
+SPACE_STAMP_POINT_ID = 1
+# Cosine floor for comparing probe vectors; env-overridable, named default in
+# model_stamp (no bare literal in the guard logic).
+STAMP_COSINE = float(os.environ.get("GATEWAY_STAMP_COSINE", model_stamp.DEFAULT_STAMP_COSINE))
 # The named vector space is defined once in `vector_space` (P0-1). The hub never
 # invents a slot from `len(vector)`; it reads the slot map from there.
 SPARSE_VECTOR = vector_space.SPARSE_SLOT
@@ -226,6 +239,10 @@ client: Optional[QdrantClient] = None
 class IngestRequest(BaseModel):
     device_id: str
     envelopes: List[Dict[str, Any]]
+    # The reporting device's embedding-model space stamp (slot -> stamp), so the
+    # hub can refuse a batch whose vectors come from an incompatible model (D2 /
+    # T5). Optional for backward compatibility with pre-D2 clients.
+    space_stamps: Optional[Dict[str, Any]] = None
 
 
 def _all_events() -> List[Dict[str, Any]]:
@@ -398,6 +415,51 @@ def _init_sequencer() -> None:
         _seq = highest
 
 
+def _read_registered_space_stamps() -> Dict[str, Any]:
+    """The slot -> stamp map the hub has registered so far (empty if none)."""
+    _ensure_meta_collection()
+    recs = client.retrieve(
+        META_COLLECTION, ids=[SPACE_STAMP_POINT_ID], with_payload=True, with_vectors=False
+    )
+    if not recs or not recs[0].payload:
+        return {}
+    return recs[0].payload.get("space_stamps", {}) or {}
+
+
+def _register_or_verify_space_stamps(incoming: Dict[str, Any]) -> None:
+    """Register a device's model space stamp, or 409 on an incompatible one (D2).
+
+    First-seen slots are recorded in the meta point. For a slot already on
+    record, the incoming stamp must be compatible (same dim, probe agrees by
+    cosine); otherwise the batch is refused — its vectors live in a different
+    space and a search across them would be silent garbage.
+    """
+    if not incoming:
+        return
+    registered = _read_registered_space_stamps()
+    problems = model_stamp.diff_fleet(registered, incoming, min_cosine=STAMP_COSINE)
+    if problems:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "embedding-model stamp mismatch: this device's vectors were "
+                f"produced by a different model than the hub registered: {problems}"
+            ),
+        )
+    # Merge any newly-seen slots into the registered map.
+    new_slots = {s: st for s, st in incoming.items() if s not in registered}
+    if new_slots:
+        merged = dict(registered)
+        merged.update(new_slots)
+        client.upsert(
+            META_COLLECTION,
+            points=[models.PointStruct(
+                id=SPACE_STAMP_POINT_ID, vector=[0.0],
+                payload={"space_stamps": merged},
+            )],
+        )
+
+
 
 def _startup() -> None:
     global client, QDRANT_URL
@@ -496,6 +558,10 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
         return {"acked_ids": [], "count": 0}
 
     _ensure_facts_collection()
+
+    # Refuse a batch whose embedding model disagrees with the fleet's registered
+    # space (D2 / T5): first stamp registers, an incompatible one is a 409.
+    _register_or_verify_space_stamps(req.space_stamps or {})
 
     # Insert-if-absent (P0-3): a crash-retry must never change an existing
     # event's hub `seq`, and must never clobber a fact (e.g. re-create a
@@ -764,6 +830,7 @@ def _build_edge_snapshot(envelopes: List[Dict[str, Any]], work_dir: str) -> Opti
         dim=vector_space.DENSE_SLOTS[vector_space.DEFAULT_DENSE_SLOT],
         work_dir=work_dir,
         extra_vectors=vector_space.extra_dense_slots(),
+        space_stamps=_read_registered_space_stamps(),
     )
 
 

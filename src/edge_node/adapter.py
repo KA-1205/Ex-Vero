@@ -87,13 +87,27 @@ def _reject_wrong_modality(payload, modality: Modality) -> None:
 # diverge because the full payload feeds the hash.
 # ---------------------------------------------------------------------------
 class FakeEmbedder:
-    def __init__(self, name: str, dim: int, modality: Modality, version: str = "fake-v1"):
+    def __init__(
+        self,
+        name: str,
+        dim: int,
+        modality: Modality,
+        version: str = "fake-v1",
+        weights_id: str = "",
+    ):
         if dim <= 0:
             raise ValueError("dim must be positive")
         self.name = name
         self.dim = dim
         self.modality: Modality = modality
         self.version = version
+        # `weights_id` stands in for a model's actual weights: two fakes with the
+        # same dim but a different weights_id embed the SAME input to DIFFERENT
+        # vectors, exactly as two real checkpoints would. It is mixed into the
+        # hash as a salt. Default "" keeps the historical vectors byte-for-byte,
+        # so existing fixtures/snapshots are unaffected (D2 / T5).
+        self.weights_id = weights_id
+        self._salt = weights_id.encode("utf-8") if weights_id else b""
 
     def _payload_bytes(self, payload) -> bytes:
         if isinstance(payload, str):
@@ -107,7 +121,7 @@ class FakeEmbedder:
 
     def _embed_one(self, payload) -> List[float]:
         _reject_wrong_modality(payload, self.modality)
-        raw = self._payload_bytes(payload)
+        raw = self._salt + self._payload_bytes(payload)
         # Stretch a SHA-256 stream to `dim` floats in [-0.5, 0.5). Deterministic
         # per input; different inputs almost surely diverge.
         out: List[float] = []

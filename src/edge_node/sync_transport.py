@@ -75,6 +75,7 @@ class GatewayTransport:
         base_url: str,
         timeout: float = 10.0,
         device_secrets: Optional[Dict[str, str]] = None,
+        space_stamps: Optional[Dict[str, Any]] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -83,6 +84,10 @@ class GatewayTransport:
         # "{timestamp}.{raw_body}"; with none, requests go unsigned (the gateway
         # runs open when it has no secrets configured either).
         self.device_secrets = dict(device_secrets or {})
+        # The fleet's embedding-model space stamp (slot -> stamp), set once the
+        # models are loaded. Carried on every push so the hub can refuse a batch
+        # from an incompatible model (D2 / T5). None → omitted (pre-D2 behaviour).
+        self.space_stamps = space_stamps
 
     def _signed_headers(self, device_id: str, body: bytes) -> Dict[str, str]:
         secret = self.device_secrets.get(device_id)
@@ -106,7 +111,10 @@ class GatewayTransport:
     def push(self, device_id: str, envelopes: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Serialize the body ourselves so the bytes we sign are exactly the bytes
         # we send (the gateway verifies the HMAC over the raw request body).
-        body = json.dumps({"device_id": device_id, "envelopes": envelopes}).encode("utf-8")
+        payload: Dict[str, Any] = {"device_id": device_id, "envelopes": envelopes}
+        if self.space_stamps:
+            payload["space_stamps"] = self.space_stamps
+        body = json.dumps(payload).encode("utf-8")
         headers = self._signed_headers(device_id, body)
         r = httpx.post(
             f"{self.base_url}/ingest",

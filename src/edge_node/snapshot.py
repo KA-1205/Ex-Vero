@@ -26,6 +26,7 @@ network.
 """
 
 import os
+import json
 import tarfile
 import tempfile
 from typing import Any, Dict, List, Optional
@@ -45,6 +46,13 @@ from qdrant_edge import (
 )
 
 SPARSE_FIELD = "text_bm25"
+
+# The embedding-model space stamp travels inside the snapshot tar under this
+# root member (D2 / T5), so a pulling device can refuse a snapshot whose vectors
+# were produced by a model incompatible with its own before restoring it. The
+# pinned Edge engine ignores unknown root members on restore (verified), so this
+# sidecar does not disturb `update_from_snapshot`.
+STAMP_MEMBER = "space_stamp.json"
 
 
 def build_edge_config(dense_name: str, dim: int, extra_vectors: Optional[Dict[str, int]] = None) -> EdgeConfig:
@@ -104,12 +112,17 @@ def build_snapshot_tar(
     dim: int,
     work_dir: Optional[str] = None,
     extra_vectors: Optional[Dict[str, int]] = None,
+    space_stamps: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Pack the given hub facts into a real Edge snapshot tar and return its path.
 
     Returns ``None`` when there is nothing to ship, so the caller can treat an
     empty hub as a no-op pull. The tar is created under ``work_dir`` (a caller
     controlled temp dir) and the caller owns cleaning it up.
+
+    When ``space_stamps`` is given it is written into the tar as a sidecar member
+    (``space_stamp.json``) so the pulling device can verify the model space
+    before restoring (D2 / T5).
     """
     if not envelopes:
         return None
@@ -148,4 +161,26 @@ def build_snapshot_tar(
     with tarfile.open(tar_path, "w") as tar:
         for name in os.listdir(shard_dir):
             tar.add(os.path.join(shard_dir, name), arcname=name)
+        if space_stamps:
+            stamp_path = os.path.join(work_dir, STAMP_MEMBER)
+            with open(stamp_path, "w", encoding="utf-8") as fh:
+                json.dump(space_stamps, fh, sort_keys=True, separators=(",", ":"))
+            tar.add(stamp_path, arcname=STAMP_MEMBER)
     return tar_path
+
+
+def read_snapshot_stamp(tar_path: str) -> Optional[Dict[str, Any]]:
+    """Read the embedding-model stamp sidecar from a snapshot tar, or None if the
+    snapshot carries no stamp (a pre-D2 snapshot)."""
+    try:
+        with tarfile.open(tar_path, "r") as tar:
+            try:
+                member = tar.getmember(STAMP_MEMBER)
+            except KeyError:
+                return None
+            fh = tar.extractfile(member)
+            if fh is None:
+                return None
+            return json.loads(fh.read().decode("utf-8"))
+    except (tarfile.TarError, OSError):
+        return None
