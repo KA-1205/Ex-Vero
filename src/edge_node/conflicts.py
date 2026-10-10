@@ -22,6 +22,7 @@ from qdrant_edge import (
     Prefetch,
     Fusion,
 )
+from .value_cluster import contradicts
 
 POSSIBLE_CONFLICT = "POSSIBLE_CONFLICT"
 
@@ -49,15 +50,22 @@ def detect_conflicts(
     similarity_threshold: float,
     zone_field: str = "zone",
     limit: int = 10,
+    extra_shards: Optional[List[EdgeShard]] = None,
 ) -> List[Dict[str, Any]]:
-    """Hybrid-query the shard for semantically-similar prior reports and return
+    """Hybrid-query the shard(s) for semantically-similar prior reports and return
     POSSIBLE_CONFLICT candidates.
+
+    Candidates are searched over BOTH shards (B7 / P1-7): the mutable shard holds
+    this device's own captures, the immutable shard holds facts pulled from the
+    fleet — so a contradicting report another device made is caught after a pull.
 
     A candidate is flagged when ALL hold:
       - it is not the new point itself
       - same zone (hard guard)
       - similarity/fused score >= threshold
-      - a DIFFERENT corroboration_key (i.e. the exact-key path would miss it)
+      - the reports actually disagree: a DIFFERENT corroboration_key (the exact-key
+        path would miss it) OR values that fail the B5 contradiction guard
+        (different number or flipped negation).
     """
     dense_prefetch = Prefetch(limit=limit, query=Query.Nearest(query=dense_vector, using=dense_name))
     sparse_prefetch = Prefetch(limit=limit, query=Query.Nearest(query=sparse_vector, using="text_bm25"))
@@ -68,17 +76,24 @@ def detect_conflicts(
         with_payload=True,
         with_vector=False,
     )
-    try:
-        results = shard.query(req)
-    except Exception:
-        return []
+
+    results = []
+    for sh in [shard, *(extra_shards or [])]:
+        if sh is None:
+            continue
+        try:
+            results.extend(sh.query(req))
+        except Exception:
+            continue
 
     new_key = new_payload.get("corroboration_key")
     new_zone = new_payload.get(zone_field)
+    new_value = new_payload.get("value")
 
     candidates: List[Dict[str, Any]] = []
+    seen = set()
     for res in results:
-        if res.id == new_point_id:
+        if res.id == new_point_id or res.id in seen:
             continue
         payload = res.payload or {}
         if not _same_zone(new_zone, payload.get(zone_field)):
@@ -86,17 +101,22 @@ def detect_conflicts(
         if res.score < similarity_threshold:
             continue
         other_key = payload.get("corroboration_key")
-        # A genuine miss of the exact-key scheme: different key, same real fact.
-        if other_key == new_key:
+        other_value = payload.get("value")
+        # A genuine disagreement: either the exact-key scheme missed it (different
+        # key) or the values themselves contradict (B5 guard).
+        same_key = other_key == new_key
+        values_contradict = contradicts(new_value, other_value)
+        if same_key and not values_contradict:
             continue
+        seen.add(res.id)
         candidates.append({
             "status": POSSIBLE_CONFLICT,
             "new_point_id": new_point_id,
             "existing_point_id": res.id,
             "score": float(res.score),
             "zone": new_zone,
-            "new_value": new_payload.get("value"),
-            "existing_value": payload.get("value"),
+            "new_value": new_value,
+            "existing_value": other_value,
             "new_key": new_key,
             "existing_key": other_key,
         })

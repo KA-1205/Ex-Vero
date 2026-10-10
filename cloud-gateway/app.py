@@ -603,7 +603,48 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
     if event_points:
         client.upsert(EVENTS_COLLECTION, points=event_points)
         _persist_seq_highwater()  # one meta write per batch (P0-4)
+
+    # Stamp the current fold verdict onto the facts for each affected key (B7 /
+    # P1-7) so a pulling device's answer path can flag [DISPUTED] offline without
+    # re-reaching the hub.
+    affected_keys = {
+        (env.get("payload") or {}).get("corroboration_key")
+        for env in req.envelopes
+    }
+    _stamp_consensus_state(k for k in affected_keys if k)
     return {"acked_ids": acked, "count": len(acked)}
+
+
+def _stamp_consensus_state(keys) -> None:
+    """Write `consensus_state` + `confidence` into every fact of each key, from
+    the current trust-weighted fold, so the value travels with the fact on pull
+    (B7). LWW surfaces as UNCORROBORATED, consistent with /cloud/state (B3)."""
+    if client is None or not client.collection_exists(FACTS_COLLECTION):
+        return
+    now_ns = int(time.time() * 1e9)
+    for k in keys:
+        events = _events_for_key(k)
+        if not events:
+            continue
+        device_trust = derive_device_trust(
+            events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
+        )
+        folded = fold_consensus(
+            events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
+            device_trust=device_trust, now_ns=now_ns, half_life_ns=_half_life_ns(),
+            cross_modal_weight=CONSENSUS_CROSS_MODAL_WEIGHT,
+        )
+        status = folded.get("status")
+        display = "UNCORROBORATED" if status == "LWW" else status
+        flt = models.Filter(
+            must=[models.FieldCondition(
+                key="corroboration_key", match=models.MatchValue(value=k))]
+        )
+        client.set_payload(
+            FACTS_COLLECTION,
+            payload={"consensus_state": display, "confidence": folded.get("confidence", 0.0)},
+            points=flt,
+        )
 
 
 @app.get("/facts/{device_id}")

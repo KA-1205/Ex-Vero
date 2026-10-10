@@ -645,7 +645,10 @@ async def capture(device_id: str, raw_request: Request):
     # Compute BM25 sparse vector
     sparse_vector = bm25.embed_document(value)
 
-    # Semantic conflict detection
+    # Semantic conflict detection over BOTH shards (B7): the immutable shard
+    # holds facts pulled from the fleet, so a contradicting report another device
+    # made is caught here.
+    immutable_shard = shards['immutable']
     conflicts = detect_conflicts(
         shard=mutable_shard,
         dense_vector=dense_vector,
@@ -654,8 +657,14 @@ async def capture(device_id: str, raw_request: Request):
         new_point_id=point_id,
         new_payload=payload,
         similarity_threshold=CONFLICT_THRESHOLD,
+        extra_shards=[immutable_shard],
     )
     register_conflicts(device_id, conflicts)
+    # Persist the conflict flag on the point payload so it survives a restart
+    # (not only the in-memory register).
+    if conflicts:
+        payload["has_conflict"] = 1
+        payload["conflict_with"] = sorted({str(c["existing_point_id"]) for c in conflicts})
 
     point_vectors = {
         adapter.name: dense_vector,
