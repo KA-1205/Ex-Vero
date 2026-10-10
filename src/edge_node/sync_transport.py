@@ -16,6 +16,11 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
+import hashlib
+import hmac
+import json
+import time
+
 import httpx
 
 
@@ -65,9 +70,33 @@ class SyncTransport(Protocol):
 class GatewayTransport:
     """Real HTTP client to the Cloud Gateway (`cloud-gateway/`)."""
 
-    def __init__(self, base_url: str, timeout: float = 10.0):
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 10.0,
+        device_secrets: Optional[Dict[str, str]] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # Per-device shared secrets for request signing (B1 / P1-1). When a
+        # device has a secret the write is signed with an HMAC-SHA256 over
+        # "{timestamp}.{raw_body}"; with none, requests go unsigned (the gateway
+        # runs open when it has no secrets configured either).
+        self.device_secrets = dict(device_secrets or {})
+
+    def _signed_headers(self, device_id: str, body: bytes) -> Dict[str, str]:
+        secret = self.device_secrets.get(device_id)
+        if not secret:
+            return {}
+        timestamp = str(time.time())
+        msg = timestamp.encode("utf-8") + b"." + body
+        signature = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+        return {
+            "X-Device-Id": device_id,
+            "X-Timestamp": timestamp,
+            "X-Signature": signature,
+            "Content-Type": "application/json",
+        }
 
     def get_delta(self, device_id: str) -> int:
         r = httpx.get(f"{self.base_url}/delta/{device_id}", timeout=self.timeout)
@@ -75,9 +104,14 @@ class GatewayTransport:
         return int(r.json()["max_client_sequence"])
 
     def push(self, device_id: str, envelopes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # Serialize the body ourselves so the bytes we sign are exactly the bytes
+        # we send (the gateway verifies the HMAC over the raw request body).
+        body = json.dumps({"device_id": device_id, "envelopes": envelopes}).encode("utf-8")
+        headers = self._signed_headers(device_id, body)
         r = httpx.post(
             f"{self.base_url}/ingest",
-            json={"device_id": device_id, "envelopes": envelopes},
+            content=body,
+            headers=headers or {"Content-Type": "application/json"},
             timeout=self.timeout,
         )
         r.raise_for_status()  # a 5xx / connection error propagates -> caller keeps pending
@@ -87,14 +121,17 @@ class GatewayTransport:
         self, device_id: str, point_id: int, corroboration_key: Optional[str] = None,
         client_sequence: int = 0,
     ) -> Dict[str, Any]:
+        body = json.dumps({
+            "device_id": device_id,
+            "point_id": point_id,
+            "corroboration_key": corroboration_key,
+            "client_sequence": client_sequence,
+        }).encode("utf-8")
+        headers = self._signed_headers(device_id, body)
         r = httpx.post(
             f"{self.base_url}/retract",
-            json={
-                "device_id": device_id,
-                "point_id": point_id,
-                "corroboration_key": corroboration_key,
-                "client_sequence": client_sequence,
-            },
+            content=body,
+            headers=headers or {"Content-Type": "application/json"},
             timeout=self.timeout,
         )
         r.raise_for_status()

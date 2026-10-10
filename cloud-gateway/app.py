@@ -25,6 +25,8 @@ LWW verdicts via the pure `consensus_fold` module.
 """
 
 import hashlib
+import hmac
+import json
 import os
 import shutil
 import sys
@@ -34,7 +36,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel
@@ -84,6 +86,89 @@ SPARSE_VECTOR = vector_space.SPARSE_SLOT
 # Supermajority needed to call a multi-device fact CONFIRMED (config-overridable).
 CONSENSUS_THRESHOLD = float(os.environ.get("CONSENSUS_THRESHOLD", DEFAULT_THRESHOLD))
 CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
+
+
+# --- Device identity & HMAC authentication (B1 / P1-1) ---------------------
+# Each write request is signed by the reporting device: an HMAC-SHA256 over
+# `"{timestamp}.{raw_body}"` with that device's shared secret. Secrets live in
+# config/env (never in the repo): `GATEWAY_DEVICE_SECRETS` is a JSON object of
+# {device_id: secret}. Admin endpoints use a separate `GATEWAY_ADMIN_TOKEN`.
+#
+# When no device secrets are configured the gateway runs OPEN (single-process
+# dev/test use) — exactly the mode the local unit tests exercise. Configure at
+# least one secret and every write must be signed by a KNOWN device, so a
+# fabricated id or a tampered body is rejected (401) and never reaches the log.
+AUTH_TS_HEADER = "x-timestamp"
+AUTH_SIG_HEADER = "x-signature"
+AUTH_DEVICE_HEADER = "x-device-id"
+ADMIN_TOKEN_HEADER = "x-admin-token"
+
+
+def _device_secrets() -> Dict[str, str]:
+    """Parse the device-secret map from env each call (cheap, lets a launcher or
+    a test set it without re-importing). Malformed JSON = no secrets = open."""
+    raw = os.environ.get("GATEWAY_DEVICE_SECRETS", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): str(v) for k, v in parsed.items()}
+
+
+def _admin_token() -> Optional[str]:
+    tok = os.environ.get("GATEWAY_ADMIN_TOKEN", "").strip()
+    return tok or None
+
+
+def expected_signature(secret: str, timestamp: str, body: bytes) -> str:
+    """HMAC-SHA256 over `"{timestamp}.{body}"` — binds both the body and the
+    timestamp so neither can be altered without the device's secret."""
+    msg = timestamp.encode("utf-8") + b"." + body
+    return hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+
+async def require_device(request: "Request") -> Optional[str]:
+    """Authenticate the reporting device for a write endpoint.
+
+    Returns the authenticated device id, or None when auth is disabled (no
+    secrets configured). Raises 401 on a missing/unknown id or a bad signature.
+    Verified with `hmac.compare_digest` (constant-time).
+    """
+    secrets = _device_secrets()
+    if not secrets:
+        return None  # open mode: no secrets configured
+
+    device_id = request.headers.get(AUTH_DEVICE_HEADER)
+    timestamp = request.headers.get(AUTH_TS_HEADER)
+    signature = request.headers.get(AUTH_SIG_HEADER)
+    if not device_id or not timestamp or not signature:
+        raise HTTPException(status_code=401, detail="missing device signature")
+
+    secret = secrets.get(device_id)
+    if secret is None:
+        # Unknown device id — a fabricated reporter never enters the log.
+        raise HTTPException(status_code=401, detail="unknown device id")
+
+    body = await request.body()
+    expected = expected_signature(secret, timestamp, body)
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="bad device signature")
+    return device_id
+
+
+async def require_admin(request: "Request") -> None:
+    """Gate an admin endpoint behind the admin token (when one is configured)."""
+    token = _admin_token()
+    if token is None:
+        return  # open mode
+    presented = request.headers.get(ADMIN_TOKEN_HEADER) or ""
+    if not hmac.compare_digest(token, presented):
+        raise HTTPException(status_code=401, detail="admin authentication required")
+
 
 
 @asynccontextmanager
@@ -278,13 +363,17 @@ def delta(device_id: str) -> Dict[str, int]:
 
 
 @app.post("/ingest")
-def ingest(req: IngestRequest) -> Dict[str, Any]:
+def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_device)) -> Dict[str, Any]:
     """Upsert the delta batch into `facts` and append OBSERVED events.
 
     Idempotent: fact points key on the edge's deterministic id and events key on
     (device, point, client_sequence), so a crash-retry re-push writes no
     duplicates.
     """
+    # When auth is on, the authenticated device id is authoritative: a device
+    # cannot submit a batch under another id (B1).
+    if authed_device is not None and authed_device != req.device_id:
+        raise HTTPException(status_code=401, detail="device id does not match signature")
     if not req.envelopes:
         return {"acked_ids": [], "count": 0}
 
@@ -593,14 +682,19 @@ class RetractRequest(BaseModel):
 
 
 @app.post("/retract")
-def retract_event(req: RetractRequest) -> Dict[str, Any]:
+def retract_event(req: RetractRequest, authed_device: Optional[str] = Depends(require_device)) -> Dict[str, Any]:
     """Append a RETRACTED event and tombstone the fact if it folds to ABSENT.
 
     Retraction is end-to-end (P0-2): the event joins the append-only log so the
     pure fold withdraws the device's vote, and if no live device still asserts
     this point the fact is tombstoned (payload flag) so it drops out of `/facts`
     and `/snapshot` and is reported to pulling devices via `/retracted`.
+
+    A device may retract only its own observation (B1): with auth on, the
+    authenticated id must match the request's device id.
     """
+    if authed_device is not None and authed_device != req.device_id:
+        raise HTTPException(status_code=401, detail="device id does not match signature")
     event_id = _event_id(req.device_id, req.point_id, req.client_sequence)
     key = req.corroboration_key
     # Resolve the key from the point's own stored observation if not supplied.
@@ -687,7 +781,7 @@ class InjectConflictRequest(BaseModel):
 
 
 @app.post("/demo/inject-conflict")
-def inject_conflict(req: InjectConflictRequest) -> Dict[str, Any]:
+def inject_conflict(req: InjectConflictRequest, _admin: None = Depends(require_admin)) -> Dict[str, Any]:
     """Scripted conflict injection across multiple devices for demo/testing."""
     events_to_insert = []
     now_ns = int(time.time() * 1e9)
