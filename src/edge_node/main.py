@@ -721,7 +721,9 @@ async def query(device_id: str, request: QueryRequest):
 
     answer_fields = {}
     if request.answer and generators:
-        result = answer_question(request.text, hits, generators)
+        # Ollama generation is a blocking HTTP round-trip; keep it off the event
+        # loop so the answer path never stalls other requests (AGENTS.md).
+        result = await asyncio.to_thread(answer_question, request.text, hits, generators)
         answer_fields = {
             "answer": result.answer,
             "answer_path": result.answer_path,
@@ -830,7 +832,11 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
 
 @app.post("/devices/{device_id}/push")
 async def push(device_id: str):
-    pushed_count, errors = _do_push(device_id)
+    # The sync drain does real blocking I/O (the degraded link sleeps, the token
+    # bucket waits, the gateway HTTP round-trips). Run it off the event loop so a
+    # slow/degraded push never stalls concurrent local queries (AGENTS.md: handlers
+    # must not block the loop).
+    pushed_count, errors = await asyncio.to_thread(_do_push, device_id)
     if pushed_count > 0:
         log_activity(device_id, "push_result", f"pushed {pushed_count} points", point_id=None)
     if errors:
@@ -913,6 +919,12 @@ class PullResponse(BaseModel):
 
 @app.post("/devices/{device_id}/pull")
 async def pull(device_id: str):
+    # Pull flushes the outbox and restores a snapshot — all blocking I/O. Run it
+    # off the event loop so it never stalls concurrent local queries.
+    return await asyncio.to_thread(_do_pull, device_id)
+
+
+def _do_pull(device_id: str) -> "PullResponse":
     """Learn from the fleet via a real partial snapshot (Phase 4).
 
     Mirrors Qdrant's sync guide (backend.md §6.3):
