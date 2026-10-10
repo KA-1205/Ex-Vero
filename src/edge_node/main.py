@@ -867,20 +867,17 @@ def _do_push(device_id: str):
     if outbox:
         adapter_name = adapters[0].name
 
-        # Delta handshake: push only rows above the hub's high-water mark for this
-        # device, so a re-push after a crash moves nothing and never duplicates.
-        try:
-            hub_seq = sync_transport.get_delta(device_id)
-        except Exception as e:
-            # Transport is down; leave observations pending and report it.
-            return 0, [f"delta handshake failed: {e}"]
-
+        # Build the delta batch straight from the outbox view. We deliberately do
+        # NOT pre-filter by the hub's high-water client_sequence (P0-6d): a
+        # partial or out-of-order ack would advance that watermark past a point
+        # the hub never actually stored and strand every lower-sequence pending
+        # point forever. The hub upsert is idempotent by deterministic id, so
+        # re-sending a point it already holds is harmless, and the outbox view
+        # itself (synced == 0) keeps us from re-sending points already acked.
         envelopes = []
         ids_in_order = []
         for pid, rec in outbox:
             env = _envelope_from_record(rec, adapter_name)
-            if env["client_sequence"] <= hub_seq:
-                continue  # already on the hub — delta-only
             envelopes.append(env)
             ids_in_order.append(pid)
 
@@ -890,7 +887,12 @@ def _do_push(device_id: str):
             # device — a failed push is never silent data loss.
             try:
                 ack = sync_transport.push(device_id, envelopes)
-                acked = set(ack.get("acked_ids", ids_in_order))
+                # Default to NOTHING acked, and skip (mark synced) strictly by the
+                # set of ids the hub acknowledged — never by a max-sequence
+                # watermark. An ack that omits an id (or omits `acked_ids`
+                # entirely) leaves that point pending for the next push, so a
+                # partial ack can never strand a lower-sequence point.
+                acked = set(ack.get("acked_ids", []))
                 mark_ids = [pid for pid in ids_in_order if pid in acked]
                 mark_synced(mutable_shard, mark_ids)
 
