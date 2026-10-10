@@ -1406,7 +1406,9 @@ async def inject_conflict(req: InjectConflictRequest):
         shards = get_or_create_shards(dev_id)
         elog = get_or_create_event_log(dev_id)
         pid = generate_point_id(req.corroboration_key, f"{dev_id}_{val}_{time.time()}")
-        is_cam = dev_id.startswith("cam-")
+        # Modality comes from the device's registered kind (config/DEFAULT_FLEET),
+        # not an id-string prefix (F2): a vision device need not be named `cam-*`.
+        is_cam = FLEET_METADATA.get(dev_id, {}).get("kind") == "camera"
         adapter = next((a for a in adapters if a.modality == ("vision" if is_cam else "text")), adapters[0])
         # Generate dummy / representative embedding
         d_vec = [0.1] * adapter.dim
@@ -1987,7 +1989,9 @@ async def get_device_trend(device_id: str, key: Optional[str] = None):
             pts = res[0] if isinstance(res, tuple) else res
             for p in pts:
                 pl = p.payload or {}
-                if pl.get("modality") == "vision" or pl.get("thumbnail_url") or device_id.startswith("cam-"):
+                # Vision records are identified by their payload (modality set at
+                # capture, or a thumbnail), never by the device-id prefix (F2).
+                if pl.get("modality") == "vision" or pl.get("thumbnail_url"):
                     records.append(p)
         except Exception:
             pass

@@ -50,7 +50,7 @@ def _init_edge():
         full_config = yaml.safe_load(f)
     main.decision_engine = DecisionEngine(full_config.get("policy", {}))
     main.TRUST_DECAY = 0.0
-    main.CONFLICT_THRESHOLD = 0.01  # RRF scores sit near 0.01
+    main.CONFLICT_THRESHOLD = 0.75  # dense cosine (F3): paraphrases ~0.9, different hazards ~0.6
     main.bm25 = Bm25()
     main.sync_transport = StubTransport()
     clear_feed()
@@ -93,6 +93,45 @@ def test_contradicting_fleet_fact_is_flagged_and_persists(tmp_path):
         # The conflict flag is persisted on the point payload (survives restart).
         rec = shards["mutable"].retrieve([pid], with_payload=True, with_vector=False)
         assert rec and rec[0].payload.get("has_conflict") == 1
+    finally:
+        os.chdir(old)
+
+
+def test_f3_conflict_by_dense_cosine_flags_paraphrase_not_unrelated(tmp_path):
+    """F3 (P1-7 residual): candidate search is dense COSINE, thresholded on a real
+    cosine. A paraphrase of the same hazard (cosine ~0.9) is flagged; a different
+    hazard in the same zone (cosine ~0.6, below the 0.75 threshold) is not."""
+    old = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        _init_edge()
+        device_id = "dev_cos"
+        client = TestClient(main.app)
+
+        # Seed report under key A.
+        r1 = client.post(f"/devices/{device_id}/capture", json={
+            "device_id": device_id, "corroboration_key": "reportA", "zone": "C",
+            "value": "strong gas leak reported in the east stairwell"})
+        assert r1.status_code == 200
+        assert r1.json()["conflicts"] == []
+
+        # Same zone, DIFFERENT key, UNRELATED hazard: dense cosine ~0.63 < 0.75,
+        # so despite the different key it must NOT be flagged.
+        r2 = client.post(f"/devices/{device_id}/capture", json={
+            "device_id": device_id, "corroboration_key": "reportB", "zone": "C",
+            "value": "water flooding reported in the west basement garage"})
+        assert r2.status_code == 200
+        assert r2.json()["conflicts"] == [], "dissimilar hazard flagged by cosine threshold"
+
+        # Same zone, DIFFERENT key, a PARAPHRASE of reportA: dense cosine ~0.9 >= 0.75
+        # -> flagged as a possible same-event conflict the exact-key scheme missed.
+        r3 = client.post(f"/devices/{device_id}/capture", json={
+            "device_id": device_id, "corroboration_key": "reportD", "zone": "C",
+            "value": "gas smell and possible leak near the east stairs"})
+        assert r3.status_code == 200
+        conflicts = r3.json()["conflicts"]
+        assert any(c["existing_key"] == "reportA" for c in conflicts), \
+            "paraphrase of reportA not flagged by cosine"
     finally:
         os.chdir(old)
 

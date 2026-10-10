@@ -47,6 +47,10 @@ from consensus_fold import (
     DEFAULT_DEVICE_TRUST,
     DEFAULT_HALF_LIFE_S,
     DEFAULT_THRESHOLD,
+    DEFAULT_TRUST_ALPHA,
+    DEFAULT_TRUST_BETA,
+    DEFAULT_TRUST_CEILING,
+    DEFAULT_TRUST_FLOOR,
     derive_device_trust,
     fold_consensus,
 )
@@ -131,6 +135,31 @@ CLUSTER_SIM_THRESHOLD = float(os.environ.get("CONSENSUS_CLUSTER_SIM", DEFAULT_CL
 CONSENSUS_CROSS_MODAL_WEIGHT = float(
     os.environ.get("CONSENSUS_CROSS_MODAL_WEIGHT", DEFAULT_CROSS_MODAL_WEIGHT)
 )
+# Trust smoothing (B2 / P1-2, wired by F1). A Beta(alpha, beta) prior stops one
+# event from swinging a device's trust to 0/1, and the result is clamped to
+# [floor, ceiling]. All config-overridable; identity defaults (0,0,0,1) reproduce
+# the raw agreement rate when unset.
+CONSENSUS_TRUST_ALPHA = float(os.environ.get("CONSENSUS_TRUST_ALPHA", DEFAULT_TRUST_ALPHA))
+CONSENSUS_TRUST_BETA = float(os.environ.get("CONSENSUS_TRUST_BETA", DEFAULT_TRUST_BETA))
+CONSENSUS_TRUST_FLOOR = float(os.environ.get("CONSENSUS_TRUST_FLOOR", DEFAULT_TRUST_FLOOR))
+CONSENSUS_TRUST_CEILING = float(os.environ.get("CONSENSUS_TRUST_CEILING", DEFAULT_TRUST_CEILING))
+
+
+def _derive_trust(events: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Hub-derived trust with the configured decay and Beta prior/clamp (F1).
+
+    Single call site for every trust computation so the smoothing config can
+    never be silently dropped at one endpoint and applied at another.
+    """
+    return derive_device_trust(
+        events,
+        threshold=CONSENSUS_THRESHOLD,
+        decay=CONSENSUS_DECAY,
+        alpha=CONSENSUS_TRUST_ALPHA,
+        beta=CONSENSUS_TRUST_BETA,
+        trust_floor=CONSENSUS_TRUST_FLOOR,
+        trust_ceiling=CONSENSUS_TRUST_CEILING,
+    )
 
 
 def _half_life_ns() -> Optional[float]:
@@ -586,9 +615,7 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
     # (B2 / P1-2): a device cannot inflate its own weight by sending a high
     # `device_trust_at_report`. We stamp the reporter's current derived trust at
     # report time; the fold recomputes trust from the whole log regardless.
-    _trust_now = derive_device_trust(
-        _all_events(), threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
-    )
+    _trust_now = _derive_trust(_all_events())
     device_trust_at_report = _trust_now.get(req.device_id, DEFAULT_DEVICE_TRUST)
 
     now_ns = int(time.time() * 1e9)
@@ -692,9 +719,7 @@ def _stamp_consensus_state(keys) -> None:
         events = _events_for_key(k)
         if not events:
             continue
-        device_trust = derive_device_trust(
-            events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
-        )
+        device_trust = _derive_trust(events)
         folded = fold_consensus(
             events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
             device_trust=device_trust, now_ns=now_ns, half_life_ns=_half_life_ns(),
@@ -920,9 +945,7 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
     # Trust is derived here from the log (never stored, never client-supplied),
     # then fed back as the per-device weight so an outvoted device actually
     # counts for less — trust drives the fold, it is not display-only (B2).
-    device_trust = derive_device_trust(
-        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
-    )
+    device_trust = _derive_trust(events)
     result = fold_consensus(
         events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
         device_trust=device_trust, now_ns=int(time.time() * 1e9), half_life_ns=_half_life_ns(),
@@ -1084,9 +1107,7 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
 
     # Hub-derived trust, computed once from the whole log and used as the fold
     # weight for every key (B2): unforgeable and not display-only.
-    device_trust = derive_device_trust(
-        all_events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
-    )
+    device_trust = _derive_trust(all_events)
 
     by_key: Dict[str, List[Dict[str, Any]]] = {}
     for ev in all_events:

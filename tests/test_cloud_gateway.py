@@ -84,6 +84,23 @@ def test_cross_device_consensus_reconciles_conflicts(gateway_client):
     r3 = gateway_client.post("/ingest", json={"device_id": "dev-03", "envelopes": [p3]})
     assert r3.status_code == 200
 
+    # Device 4 corroborates collapse. Three agreeing devices clear the confidence
+    # threshold, so this key folds to CONFIRMED and therefore adjudicates trust
+    # (only CONFIRMED keys count toward agreement).
+    p4 = {
+        "id": 104,
+        "vector": [0.1] * 384,
+        "payload": {
+            "value": "structural collapse near exit B",
+            "corroboration_key": key,
+            "reporter_device_id": "dev-04",
+            "client_timestamp_ns": 4000,
+        },
+        "client_sequence": 1,
+    }
+    r4 = gateway_client.post("/ingest", json={"device_id": "dev-04", "envelopes": [p4]})
+    assert r4.status_code == 200
+
     # Query /cloud/state
     resp = gateway_client.get("/cloud/state")
     assert resp.status_code == 200
@@ -92,7 +109,7 @@ def test_cross_device_consensus_reconciles_conflicts(gateway_client):
     assert "facts" in data
     assert "device_trust" in data
 
-    # Must contain exactly 1 reconciled fact for this corroboration key, NOT 3 raw rows
+    # Must contain exactly 1 reconciled fact for this corroboration key, NOT 4 raw rows
     facts_for_key = [f for f in data["facts"] if f["corroboration_key"] == key]
     assert len(facts_for_key) == 1, f"Expected 1 reconciled fact, got {len(facts_for_key)}"
 
@@ -100,9 +117,10 @@ def test_cross_device_consensus_reconciles_conflicts(gateway_client):
     assert fact["value"] == "structural collapse near exit B"
     assert fact["state"] in ("CONFIRMED", "DISPUTED")
     assert fact["confidence"] > 0.5
-    assert set(fact["corroborating_devices"]) == {"dev-01", "dev-02"}
+    assert set(fact["corroborating_devices"]) == {"dev-01", "dev-02", "dev-04"}
 
-    # Device trust: dev-01 and dev-02 agreed with the winner, dev-03 disagreed
+    # Device trust: dev-01, dev-02 and dev-04 agreed with the winner, dev-03
+    # disagreed on a CONFIRMED key, so its trust lands lower.
     trust = data["device_trust"]
     assert "dev-01" in trust
     assert "dev-02" in trust
@@ -393,6 +411,55 @@ def test_restart_resumes_seq_from_meta_point_without_reissuing(gateway_client):
     assert gateway_client.post("/ingest", json={"device_id": device, "envelopes": [env]}).status_code == 200
     new_seq = _events_for_point(777001)[0].payload["seq"]
     assert new_seq > high_before, "restart re-issued an old seq"
+
+
+# --- F1: trust smoothing (Beta prior + clamp) is wired from gateway config ----
+
+def _trust_events_three_vs_one():
+    """Four devices on one key: A, B and D agree on 'x', C dissents 'y'. Three
+    agreeing devices clear the confidence threshold, so the key folds to CONFIRMED
+    and adjudicates agreement (only CONFIRMED keys count toward trust). The 3-vs-1
+    winner is 'x', so C's live report disagrees with the resolved value and earns
+    zero raw agreement credit — the sparse history the Beta prior should smooth."""
+    return [
+        {"corroboration_key": "k", "device_id": "A", "value": "x",
+         "event_type": "OBSERVED", "seq": 1, "device_trust_at_report": 0.7},
+        {"corroboration_key": "k", "device_id": "B", "value": "x",
+         "event_type": "OBSERVED", "seq": 2, "device_trust_at_report": 0.7},
+        {"corroboration_key": "k", "device_id": "D", "value": "x",
+         "event_type": "OBSERVED", "seq": 3, "device_trust_at_report": 0.7},
+        {"corroboration_key": "k", "device_id": "C", "value": "y",
+         "event_type": "OBSERVED", "seq": 4, "device_trust_at_report": 0.7},
+    ]
+
+
+def test_f1_trust_smoothing_wired_from_config(monkeypatch):
+    """F1: the gateway must pass its CONSENSUS_TRUST_* config into
+    derive_device_trust, not run at identity defaults. Exercises the single
+    `_derive_trust` helper every endpoint uses."""
+    events = _trust_events_three_vs_one()
+
+    # Identity defaults: the dissenter's raw agreement rate is 0.0.
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_ALPHA", 0.0)
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_BETA", 0.0)
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_FLOOR", 0.0)
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_CEILING", 1.0)
+    raw = gateway_app._derive_trust(events)
+    assert raw["C"] == 0.0
+    assert raw["A"] == 1.0
+
+    # A Beta(5,5) prior pulls the sparse history toward the prior mean, proving
+    # the config actually reaches derive_device_trust.
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_ALPHA", 5.0)
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_BETA", 5.0)
+    smoothed = gateway_app._derive_trust(events)
+    assert smoothed["C"] == pytest.approx(5.0 / 11.0, abs=1e-3)
+    assert 0.0 < smoothed["C"] < raw["A"]
+
+    # The clamp floor is honored.
+    monkeypatch.setattr(gateway_app, "CONSENSUS_TRUST_FLOOR", 0.6)
+    clamped = gateway_app._derive_trust(events)
+    assert clamped["C"] >= 0.6
 
 
 

@@ -450,3 +450,46 @@ def test_network_mode_endpoint_roundtrip_and_rejects_bad_mode():
             assert bad.status_code == 400
         finally:
             os.chdir(old)
+
+
+def test_f2_trend_selects_vision_by_payload_not_device_name():
+    """F2 (P1-6 residual): /trend must identify vision frames by the point's
+    payload (modality set at capture / a thumbnail), never by a 'cam-' device-id
+    prefix. A TEXT point on a device whose id starts with 'cam-' must NOT be
+    pulled into the camera trend."""
+    from qdrant_edge import Point, UpdateOperation
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init(StubTransport())
+            client = TestClient(main.app)
+            device_id = "cam-77"  # id starts with 'cam-' but the point below is text
+            shards = main.get_or_create_shards(device_id)
+            text_adapter = next(a for a in main.adapters if a.modality == "text")
+            text = "a quiet text note, no image here"
+            pid = 424242
+            pt = Point(
+                id=pid,
+                vector={text_adapter.name: text_adapter.embed(text),
+                        "text_bm25": main.bm25.embed_document(text)},
+                payload={
+                    "value": "a quiet text note",
+                    "corroboration_key": "k",
+                    "modality": "text",  # NOT vision; no thumbnail_url
+                    "client_timestamp_ns": 1,
+                    "_sync_meta": {"synced": 1, "syncable": 1},
+                },
+            )
+            shards["mutable"].update(UpdateOperation.upsert_points(points=[pt]))
+            shards["mutable"].optimize()
+
+            resp = client.get(f"/devices/{device_id}/trend")
+            assert resp.status_code == 200, resp.text
+            frame_ids = [f["point_id"] for f in resp.json()["frames"]]
+            # Before F2 the 'cam-' prefix forced this text point into the trend;
+            # after F2 it is correctly excluded (payload modality is 'text').
+            assert pid not in frame_ids
+        finally:
+            os.chdir(old)

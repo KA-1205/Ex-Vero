@@ -19,8 +19,6 @@ from qdrant_edge import (
     EdgeShard,
     Query,
     QueryRequest as EdgeQueryRequest,
-    Prefetch,
-    Fusion,
 )
 from .value_cluster import contradicts
 
@@ -62,17 +60,18 @@ def detect_conflicts(
     A candidate is flagged when ALL hold:
       - it is not the new point itself
       - same zone (hard guard)
-      - similarity/fused score >= threshold
+      - dense cosine similarity >= threshold (F3: a cosine score, not an RRF rank
+        score — the threshold in config is a real cosine, e.g. ~0.75)
       - the reports actually disagree: a DIFFERENT corroboration_key (the exact-key
         path would miss it) OR values that fail the B5 contradiction guard
         (different number or flipped negation).
+
+    `sparse_vector` is accepted for call-site compatibility but unused: the
+    contradiction check is a dense-cosine semantic match (F3 / P1-7).
     """
-    dense_prefetch = Prefetch(limit=limit, query=Query.Nearest(query=dense_vector, using=dense_name))
-    sparse_prefetch = Prefetch(limit=limit, query=Query.Nearest(query=sparse_vector, using="text_bm25"))
     req = EdgeQueryRequest(
         limit=limit,
-        prefetches=[dense_prefetch, sparse_prefetch],
-        query=Fusion.Rrf(k=60),
+        query=Query.Nearest(query=dense_vector, using=dense_name),
         with_payload=True,
         with_vector=False,
     )

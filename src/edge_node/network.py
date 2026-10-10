@@ -60,6 +60,15 @@ class TokenBucket:
     ``consume(n)`` blocks (a genuine sleep) until ``n`` byte-tokens have
     accrued, so pushing a large payload on a capped link actually takes the
     time the cap implies. Thread-safe for the single sync worker.
+
+    Capacity note (F4 / A6b): ``capacity`` defaults to ``bytes_per_sec`` (a 1s
+    burst). Rather than require ``capacity >= largest request`` — which would
+    force every caller to know the max payload up front — ``consume`` lets the
+    token count go **negative** and sleeps off the deficit at ``rate``. This
+    makes a single request larger than the bucket's capacity (e.g. a ~8.7 KB
+    envelope on an 8000 B/s cap) drain in ``nbytes / rate`` instead of looping
+    forever waiting for tokens that can never exceed ``capacity``. The byte-rate
+    cap stays exact for ANY request size; capacity only bounds the burst.
     """
 
     def __init__(self, bytes_per_sec: float, capacity: Optional[float] = None):

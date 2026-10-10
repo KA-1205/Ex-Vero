@@ -51,10 +51,13 @@ policy:
   trust_decay: 0.3
 
 conflict:
-  # Fused (RRF) score above which two same-zone reports with different keys
-  # are flagged as POSSIBLE_CONFLICT for human review. RRF scores are small
-  # (~1/(k+rank) per leg), so this threshold lives near 0.01, not 0.5.
-  similarity_threshold: 0.01
+  # Dense COSINE similarity above which two same-zone reports are treated as the
+  # same real-world event for conflict review (F3 / P1-7). This is a true cosine
+  # in [0,1] (unit-norm dense vectors), not an RRF rank score: paraphrases of the
+  # same hazard measure ~0.9, while different hazards in the same zone sit ~0.6,
+  # so ~0.75 separates them. A candidate is only flagged if it also disagrees
+  # (different corroboration_key, or a value the contradiction guard rejects).
+  similarity_threshold: 0.75
 
 consensus:
   # The trust-weighted fold lives in the Cloud Gateway (cloud-gateway/), which
@@ -64,6 +67,16 @@ consensus:
   confidence_threshold: 0.66
   # Recency decay applied by hub-seq distance when weighting reports (0 = off).
   trust_decay: 0.0
+  # Trust smoothing (B2/P1-2, wired by F1). The gateway reads these as
+  # CONSENSUS_TRUST_ALPHA / _BETA / _FLOOR / _CEILING. A Beta(alpha,beta) prior
+  # keeps one event from pinning a device's trust to 0/1; the result is clamped
+  # to [floor, ceiling]. The identity defaults below reproduce the raw agreement
+  # rate (behaviour unchanged); raise alpha/beta (e.g. 1/1) and tighten the clamp
+  # to smooth sparse histories.
+  trust_alpha: 0.0
+  trust_beta: 0.0
+  trust_floor: 0.0
+  trust_ceiling: 1.0
 
 hub:
   # The edge node talks to the Cloud Gateway (cloud-gateway/), which owns the
