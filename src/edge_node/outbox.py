@@ -14,6 +14,8 @@ Two Phase-0 facts shape this module (AGENTS.md §3.1):
 """
 
 from typing import List, Tuple, Dict, Any
+import hashlib
+
 from qdrant_edge import (
     EdgeShard,
     Point,
@@ -32,6 +34,15 @@ from qdrant_edge import (
 SYNCED_KEY = "_sync_meta.synced"            # 0 = pending, 1 = acked by hub
 SYNCABLE_KEY = "_sync_meta.syncable"        # 1 = verdict permits sync
 SEQUENCE_KEY = "_sync_meta.client_sequence"  # per-device monotonic ordering
+
+# A retraction travels through the SAME outbox as observations (A2 / P0-2), but
+# the fact it withdraws is deleted locally the moment it is retracted, so the
+# pending retraction cannot be a flag on that (now gone) point. It is a tiny
+# vector-less marker point instead — invisible to search (no vectors) and to the
+# observation outbox (no `_sync_meta`) — carrying its own persistent
+# `client_sequence` so it pushes in order with observations.
+RETRACT_SYNCED_KEY = "_retract.synced"      # 0 = pending, 1 = acked by hub
+RETRACT_ENTRY_TYPE = "RETRACTED"
 
 # Push order for the priority buckets; lower drains first.
 _PRIORITY_ORDER = {"URGENT": 0, "ROUTINE": 1, "HELD": 2}
@@ -60,6 +71,7 @@ def ensure_indexes(shard: EdgeShard) -> None:
         "_sync_meta.syncable",
         "_sync_meta.client_sequence",
         "client_timestamp_ns",
+        RETRACT_SYNCED_KEY,
     ):
         try:
             shard.update(
@@ -128,3 +140,84 @@ def mark_synced(shard: EdgeShard, point_ids: List[int]) -> None:
     )
     shard.update(op)
     shard.optimize()
+
+
+def retraction_marker_id(target_point_id: int) -> int:
+    """Deterministic, collision-resistant id for a retraction marker so a repeated
+    retract of the same point is idempotent (one marker, not many)."""
+    raw = f"retract_marker:{target_point_id}".encode()
+    return int.from_bytes(hashlib.md5(raw).digest()[:8], "little", signed=False)
+
+
+def queue_retraction(
+    shard: EdgeShard,
+    target_point_id: int,
+    corroboration_key: str,
+    client_sequence: int,
+) -> int:
+    """Persist a pending retraction as a vector-less marker point in the mutable
+    shard (the outbox is a view over this shard, never a second store). Returns
+    the marker id. Idempotent on `target_point_id`."""
+    marker_id = retraction_marker_id(target_point_id)
+    marker = Point(
+        id=marker_id,
+        vector={},  # no vectors: invisible to dense/BM25 search
+        payload={
+            "_retract": {
+                "entry_type": RETRACT_ENTRY_TYPE,
+                "target_point_id": target_point_id,
+                "corroboration_key": corroboration_key,
+                "client_sequence": client_sequence,
+                "synced": 0,
+            }
+        },
+    )
+    shard.update(UpdateOperation.upsert_points(points=[marker]))
+    shard.optimize()
+    return marker_id
+
+
+def get_pending_retractions(shard: EdgeShard, limit: int = 100) -> List[Point]:
+    """Pending (unsynced) retraction markers, ordered by their own
+    `client_sequence` so they push in the same order they were made."""
+    req = ScrollRequest(
+        limit=limit,
+        filter=Filter(must=[FieldCondition(key=RETRACT_SYNCED_KEY, match=MatchValue(value=0))]),
+        with_payload=True,
+        with_vector=False,
+    )
+    res = shard.scroll(req)
+    records = res[0] if isinstance(res, tuple) else res
+
+    def seq_of(rec) -> int:
+        return (rec.payload or {}).get("_retract", {}).get("client_sequence", 0)
+
+    return sorted(records, key=seq_of)
+
+
+def mark_retraction_synced(shard: EdgeShard, marker_ids: List[int]) -> None:
+    """Flip a drained retraction marker's `_retract.synced` to 1 (merging the
+    nested object), so a re-push never re-sends it."""
+    if not marker_ids:
+        return
+    op = UpdateOperation.set_payload_by_filter(
+        filter=Filter(must=[HasIdCondition(point_ids=set(marker_ids))]),
+        payload={"synced": 1},
+        key="_retract",
+    )
+    shard.update(op)
+    shard.optimize()
+
+
+def delete_points(shard: EdgeShard, point_ids: List[int]) -> None:
+    """Delete points (facts or retraction markers) by id. Used by retract (local
+    withdrawal) and by pull cleanup of hub-tombstoned ids."""
+    if not point_ids:
+        return
+    shard.update(
+        UpdateOperation.delete_points_by_filter(
+            filter=Filter(must=[HasIdCondition(point_ids=set(point_ids))])
+        )
+    )
+    shard.optimize()
+

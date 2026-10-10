@@ -29,6 +29,8 @@ class StubTransport:
         self.max_seq: Dict[str, int] = {}
         # append-only event mirror the gateway would keep in fact_events
         self.events: List[Dict[str, Any]] = []
+        # point ids the hub has tombstoned (folded to ABSENT after a retract)
+        self.tombstoned: set = set()
         # failure controls
         self.fail = False        # fail every push while True
         self.fail_next = False   # fail exactly one push, then clear
@@ -60,16 +62,37 @@ class StubTransport:
         return {"acked_ids": acked, "count": len(acked)}
 
     def retract(
-        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None,
+        client_sequence: int = 0,
     ) -> Dict[str, Any]:
+        if self.fail or self.fail_next:
+            self.fail_next = False
+            raise TransportFailure("stub transport forced failure")
         self.events.append({
             "device_id": device_id,
             "point_id": point_id,
             "event_type": "RETRACTED",
             "corroboration_key": corroboration_key,
-            "client_sequence": self.max_seq.get(device_id, 0),
+            "client_sequence": client_sequence,
         })
+        # If no device still asserts this point, the hub folds it to ABSENT and
+        # tombstones it: drop it from every device's collection so it stops
+        # shipping, and record it for get_retracted().
+        if not self._point_live(point_id):
+            for dev in self.store.values():
+                dev.pop(point_id, None)
+            self.tombstoned.add(point_id)
         return {"retracted": True, "point_id": point_id}
+
+    def _point_live(self, point_id: int) -> bool:
+        latest_by_dev: Dict[str, str] = {}
+        for ev in self.events:
+            if ev["point_id"] == point_id:
+                latest_by_dev[ev["device_id"]] = ev["event_type"]
+        return any(t == "OBSERVED" for t in latest_by_dev.values())
+
+    def get_retracted(self, device_id: str) -> List[int]:
+        return sorted(self.tombstoned)
 
     def get_cloud_state(self) -> Dict[str, Any]:
         return {"facts": [], "device_trust": {}}

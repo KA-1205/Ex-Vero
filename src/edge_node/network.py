@@ -244,10 +244,22 @@ class NetworkTransport:
         _apply(_byte_len(manifest))
         return self.inner.pull_snapshot(device_id, manifest)
 
-    def retract(self, device_id: str, point_id: int, corroboration_key: Optional[str] = None) -> Dict[str, Any]:
-        request = {"device_id": device_id, "point_id": point_id, "corroboration_key": corroboration_key}
+    def retract(
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None,
+        client_sequence: int = 0,
+    ) -> Dict[str, Any]:
+        request = {
+            "device_id": device_id, "point_id": point_id,
+            "corroboration_key": corroboration_key, "client_sequence": client_sequence,
+        }
         _apply(_byte_len(request))
-        return self.inner.retract(device_id, point_id, corroboration_key)
+        return self.inner.retract(
+            device_id, point_id, corroboration_key, client_sequence=client_sequence
+        )
+
+    def get_retracted(self, device_id: str) -> List[int]:
+        _apply(_byte_len(device_id))
+        return self.inner.get_retracted(device_id)
 
     def get_cloud_state(self) -> Dict[str, Any]:
         _apply(0)

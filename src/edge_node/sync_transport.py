@@ -42,9 +42,15 @@ class SyncTransport(Protocol):
         ...
 
     def retract(
-        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None,
+        client_sequence: int = 0,
     ) -> Dict[str, Any]:
         """Notify the hub of a retracted point."""
+        ...
+
+    def get_retracted(self, device_id: str) -> List[int]:
+        """Point ids the hub has tombstoned (folded to ABSENT); the device deletes
+        them locally on pull."""
         ...
 
     def get_cloud_state(self) -> Dict[str, Any]:
@@ -78,7 +84,8 @@ class GatewayTransport:
         return r.json()
 
     def retract(
-        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None
+        self, device_id: str, point_id: int, corroboration_key: Optional[str] = None,
+        client_sequence: int = 0,
     ) -> Dict[str, Any]:
         r = httpx.post(
             f"{self.base_url}/retract",
@@ -86,11 +93,17 @@ class GatewayTransport:
                 "device_id": device_id,
                 "point_id": point_id,
                 "corroboration_key": corroboration_key,
+                "client_sequence": client_sequence,
             },
             timeout=self.timeout,
         )
         r.raise_for_status()
         return r.json()
+
+    def get_retracted(self, device_id: str) -> List[int]:
+        r = httpx.get(f"{self.base_url}/retracted/{device_id}", timeout=self.timeout)
+        r.raise_for_status()
+        return list(r.json().get("retracted_ids", []))
 
     def get_cloud_state(self) -> Dict[str, Any]:
         r = httpx.get(f"{self.base_url}/cloud/state", timeout=self.timeout)

@@ -34,7 +34,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel
@@ -345,6 +345,8 @@ def facts(device_id: str) -> Dict[str, Any]:
             with_payload=True, with_vectors=True,
         )
         for p in points:
+            if (p.payload or {}).get("_tombstoned") == 1:
+                continue  # retracted fact (P0-2): excluded from pull
             env = _envelope_from_point(p)
             env["client_sequence"] = (p.payload or {}).get("_sync_meta", {}).get(
                 "client_sequence", 0
@@ -408,6 +410,8 @@ def _all_fact_envelopes() -> List[Dict[str, Any]]:
             with_payload=True, with_vectors=True,
         )
         for p in points:
+            if (p.payload or {}).get("_tombstoned") == 1:
+                continue  # retracted fact (P0-2): excluded from the snapshot
             envelopes.append(_envelope_from_point(p))
         if offset is None:
             break
@@ -482,6 +486,34 @@ def _events_for_key(corroboration_key: str) -> List[Dict[str, Any]]:
     return events
 
 
+def _point_is_live(point_id: int) -> bool:
+    """True while at least one device's latest event for this point is OBSERVED.
+
+    A point is dead (and so may be tombstoned) once every device that reported it
+    has retracted it. Ordering is by hub `seq`, consistent with the fold.
+    """
+    if not client.collection_exists(EVENTS_COLLECTION):
+        return False
+    flt = models.Filter(
+        must=[models.FieldCondition(key="point_id", match=models.MatchValue(value=point_id))]
+    )
+    events: List[Dict[str, Any]] = []
+    offset = None
+    while True:
+        pts, offset = client.scroll(
+            EVENTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+            with_payload=True, with_vectors=False,
+        )
+        events.extend(p.payload for p in pts)
+        if offset is None:
+            break
+    latest_by_dev: Dict[str, str] = {}
+    for e in sorted(events, key=lambda e: e.get("seq", 0)):
+        latest_by_dev[e.get("device_id")] = e.get("event_type")
+    return any(t == "OBSERVED" for t in latest_by_dev.values())
+
+
+
 @app.get("/consensus/{corroboration_key}")
 def consensus(corroboration_key: str) -> Dict[str, Any]:
     """Fold all live events for a fact into one trust-weighted verdict (Phase 5).
@@ -509,11 +541,17 @@ class RetractRequest(BaseModel):
 
 @app.post("/retract")
 def retract_event(req: RetractRequest) -> Dict[str, Any]:
-    """Append a RETRACTED event to the hub's fact_events log."""
+    """Append a RETRACTED event and tombstone the fact if it folds to ABSENT.
+
+    Retraction is end-to-end (P0-2): the event joins the append-only log so the
+    pure fold withdraws the device's vote, and if no live device still asserts
+    this point the fact is tombstoned (payload flag) so it drops out of `/facts`
+    and `/snapshot` and is reported to pulling devices via `/retracted`.
+    """
     seq = _next_seq()
     event_id = _event_id(req.device_id, req.point_id, req.client_sequence)
     key = req.corroboration_key
-    # If not supplied, try to find corroboration_key from existing events for this point
+    # Resolve the key from the point's own stored observation if not supplied.
     if not key and client.collection_exists(EVENTS_COLLECTION):
         flt = models.Filter(
             must=[
@@ -524,6 +562,10 @@ def retract_event(req: RetractRequest) -> Dict[str, Any]:
         points, _ = client.scroll(EVENTS_COLLECTION, scroll_filter=flt, limit=1, with_payload=True)
         if points:
             key = points[0].payload.get("corroboration_key")
+
+    if not key:
+        # No supplied key and no stored observation to resolve it from.
+        raise HTTPException(status_code=404, detail="no observation for (device, point) to retract")
 
     event_point = models.PointStruct(
         id=event_id,
@@ -541,7 +583,39 @@ def retract_event(req: RetractRequest) -> Dict[str, Any]:
         },
     )
     client.upsert(EVENTS_COLLECTION, points=[event_point])
-    return {"retracted": True, "seq": seq, "point_id": req.point_id}
+
+    # Tombstone the fact if nothing live references the point any more.
+    tombstoned = False
+    if not _point_is_live(req.point_id) and client.collection_exists(FACTS_COLLECTION):
+        client.set_payload(
+            FACTS_COLLECTION, payload={"_tombstoned": 1}, points=[req.point_id]
+        )
+        tombstoned = True
+    return {"retracted": True, "seq": seq, "point_id": req.point_id, "tombstoned": tombstoned}
+
+
+@app.get("/retracted/{device_id}")
+def retracted(device_id: str) -> Dict[str, Any]:
+    """Point ids the hub has tombstoned (folded to ABSENT). A pulling device
+    deletes any of these it still holds — the snapshot only *adds* points, so
+    this is how a retraction propagates to a device that already learned the
+    fact."""
+    ids: List[int] = []
+    if client.collection_exists(FACTS_COLLECTION):
+        flt = models.Filter(
+            must=[models.FieldCondition(key="_tombstoned", match=models.MatchValue(value=1))]
+        )
+        offset = None
+        while True:
+            pts, offset = client.scroll(
+                FACTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+                with_payload=False, with_vectors=False,
+            )
+            ids.extend(p.id for p in pts)
+            if offset is None:
+                break
+    return {"retracted_ids": sorted(ids)}
+
 
 
 class InjectConflictRequest(BaseModel):

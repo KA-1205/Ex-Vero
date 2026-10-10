@@ -45,7 +45,18 @@ def _utcnow() -> str:
 from .adapter import Adapter, ClipTextAdapter
 from .registry import load_adapters, build_generators
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
-from .outbox import add_sync_meta, get_outbox, mark_synced, ensure_indexes, SYNCABLE_KEY, SYNCED_KEY
+from .outbox import (
+    add_sync_meta,
+    get_outbox,
+    mark_synced,
+    ensure_indexes,
+    SYNCABLE_KEY,
+    SYNCED_KEY,
+    queue_retraction,
+    get_pending_retractions,
+    mark_retraction_synced,
+    delete_points,
+)
 from .sync_transport import GatewayTransport
 from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
@@ -832,6 +843,7 @@ def _do_push(device_id: str):
 
     Shared by the push endpoint and the pull flush-first step. Marks synced ONLY
     on ack (invariant 1): any failure leaves the point pending and on device.
+    Queued retractions drain here too, in client_sequence order with observations.
     """
     shards = get_or_create_shards(device_id)
     mutable_shard = shards['mutable']
@@ -840,58 +852,63 @@ def _do_push(device_id: str):
         # No transport wired: fail loudly rather than silently "succeeding".
         return 0, ["no sync transport configured"]
 
+    pushed_count = 0
+    errors: List[str] = []
+
     # The outbox is a filtered VIEW over the mutable shard
     # (synced == 0 AND syncable == 1), URGENT before ROUTINE — not a second store.
     outbox = get_outbox(mutable_shard, limit=1000)
-    if not outbox:
-        return 0, []
+    if outbox:
+        adapter_name = adapters[0].name
 
-    adapter_name = adapters[0].name
+        # Delta handshake: push only rows above the hub's high-water mark for this
+        # device, so a re-push after a crash moves nothing and never duplicates.
+        try:
+            hub_seq = sync_transport.get_delta(device_id)
+        except Exception as e:
+            # Transport is down; leave observations pending and report it.
+            return 0, [f"delta handshake failed: {e}"]
 
-    # Delta handshake: push only rows above the hub's high-water mark for this
-    # device, so a re-push after a crash moves nothing and never duplicates.
-    try:
-        hub_seq = sync_transport.get_delta(device_id)
-    except Exception as e:
-        return 0, [f"delta handshake failed: {e}"]
+        envelopes = []
+        ids_in_order = []
+        for pid, rec in outbox:
+            env = _envelope_from_record(rec, adapter_name)
+            if env["client_sequence"] <= hub_seq:
+                continue  # already on the hub — delta-only
+            envelopes.append(env)
+            ids_in_order.append(pid)
 
-    envelopes = []
-    ids_in_order = []
-    for pid, rec in outbox:
-        env = _envelope_from_record(rec, adapter_name)
-        if env["client_sequence"] <= hub_seq:
-            continue  # already on the hub — delta-only
-        envelopes.append(env)
-        ids_in_order.append(pid)
+        if envelopes:
+            # Push to the gateway. Mark synced ONLY on ack (invariant 1): on any
+            # failure we leave synced == 0, so the point stays pending and on the
+            # device — a failed push is never silent data loss.
+            try:
+                ack = sync_transport.push(device_id, envelopes)
+                acked = set(ack.get("acked_ids", ids_in_order))
+                mark_ids = [pid for pid in ids_in_order if pid in acked]
+                mark_synced(mutable_shard, mark_ids)
 
-    if not envelopes:
-        return 0, []
+                # Append a local OBSERVED event per pushed point (consensus trust
+                # view), in push order so URGENT precedes ROUTINE.
+                event_log = get_or_create_event_log(device_id)
+                now = _utcnow()
+                for pid in mark_ids:
+                    event_log.append(pid, OBSERVED, device_ts=now)
+                pushed_count = len(mark_ids)
+            except Exception as e:
+                return 0, [f"push failed: {e}"]
 
-    # Push to the gateway. Mark synced ONLY on ack (invariant 1): on any failure
-    # we leave synced == 0, so the point stays pending and on the device — a
-    # failed push is never silent data loss.
-    try:
-        ack = sync_transport.push(device_id, envelopes)
-    except Exception as e:
-        return 0, [f"push failed: {e}"]
+    # Drain any queued retractions (their own client_sequence keeps hub order).
+    _, retract_errors = _drain_retractions(device_id)
+    errors.extend(retract_errors)
+    return pushed_count, errors
 
-    acked = set(ack.get("acked_ids", ids_in_order))
-    mark_ids = [pid for pid in ids_in_order if pid in acked]
-    mark_synced(mutable_shard, mark_ids)
-
-    # Append a local OBSERVED event per pushed point (consensus trust view),
-    # in push order so URGENT precedes ROUTINE.
-    event_log = get_or_create_event_log(device_id)
-    now = _utcnow()
-    for pid in mark_ids:
-        event_log.append(pid, OBSERVED, device_ts=now)
-
-    return len(mark_ids), []
 
 
 class PullResponse(BaseModel):
     pulled_count: int
     errors: List[str] = []
+    retracted_ids: List[int] = []
 
 
 @app.post("/devices/{device_id}/pull")
@@ -924,6 +941,23 @@ async def pull(device_id: str):
     # the fleet); the pending points simply stay pending.
     _, flush_errors = _do_push(device_id)
 
+    # 1b. Apply the hub's tombstones (P0-2): delete any fact the hub has retracted
+    # from BOTH shards and drop its retraction marker. The snapshot only *adds*
+    # points, so a retraction can only propagate to a device that already learned
+    # the fact through this explicit delete — and it must run even when the hub is
+    # now empty (snapshot 204), so we do it before the snapshot step.
+    retracted_ids: List[int] = []
+    retract_errors: List[str] = []
+    try:
+        retracted_ids = [int(x) for x in sync_transport.get_retracted(device_id)]
+    except Exception as e:  # noqa: BLE001 — surfaced, not swallowed
+        retract_errors.append(f"retracted fetch failed: {e}")
+    if retracted_ids:
+        delete_points(mutable_shard, retracted_ids)
+        delete_points(immutable_shard, retracted_ids)
+
+    flush_errors = flush_errors + retract_errors
+
     # The sync boundary: points synced at/before now are safely on the hub and
     # will come back in the snapshot, so they are the ones we may dedupe.
     sync_timestamp = int(time.time() * 1_000_000_000)
@@ -933,17 +967,17 @@ async def pull(device_id: str):
     try:
         snapshot_path = sync_transport.pull_snapshot(device_id, manifest)
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=flush_errors + [f"pull failed: {e}"])
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"pull failed: {e}"], retracted_ids=retracted_ids)
 
     if snapshot_path is None:
-        return PullResponse(pulled_count=0, errors=flush_errors)
+        return PullResponse(pulled_count=0, errors=flush_errors, retracted_ids=retracted_ids)
 
     before = immutable_shard.count(CountRequest())
     try:
         immutable_shard.update_from_snapshot(snapshot_path)
         immutable_shard.optimize()
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=flush_errors + [f"snapshot restore failed: {e}"])
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"snapshot restore failed: {e}"], retracted_ids=retracted_ids)
     finally:
         # The snapshot file is a throwaway staging artifact.
         try:
@@ -971,7 +1005,7 @@ async def pull(device_id: str):
     if flush_errors:
         log_activity(device_id, "error", f"pull flush errors: {flush_errors}", point_id=None)
 
-    return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors)
+    return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors, retracted_ids=retracted_ids)
 
 
 def _count_value(count_result) -> int:
@@ -986,45 +1020,100 @@ class RetractResponse(BaseModel):
 
 @app.post("/devices/{device_id}/retract/{point_id}")
 async def retract(device_id: str, point_id: int):
-    """Append a RETRACTED event to the fact_events log (Step 6)."""
-    point_payload = None
-    if device_id in device_shards:
-        for shard_name in ("mutable", "immutable"):
-            records = device_shards[device_id][shard_name].retrieve([point_id], with_payload=True, with_vector=False)
-            if records:
-                point_payload = records[0].payload or {}
+    """Withdraw a fact end-to-end (P0-2).
+
+    Resolves the point's corroboration_key from the stored observation (404 if
+    the device never held it), deletes it from BOTH local shards, queues a
+    persistent retraction in the outbox (its own client_sequence, pushed in order
+    with observations), and attempts to notify the hub immediately. An offline /
+    failed notify leaves the retraction queued — never a silent `except: pass`.
+    """
+    if device_id not in device_shards:
+        raise HTTPException(status_code=404, detail="unknown device")
+
+    shards = device_shards[device_id]
+    mutable_shard = shards["mutable"]
+    immutable_shard = shards["immutable"]
+
+    corroboration_key = None
+    found = False
+    for shard in (mutable_shard, immutable_shard):
+        recs = shard.retrieve([point_id], with_payload=True, with_vector=False)
+        if recs and recs[0].payload is not None:
+            found = True
+            corroboration_key = recs[0].payload.get("corroboration_key")
+            if corroboration_key:
                 break
-    event_log = get_or_create_event_log(device_id)
+    if not found or not corroboration_key:
+        # Nothing to resolve the key from — refuse rather than ghost-retract.
+        raise HTTPException(status_code=404, detail="no local observation for this point")
+
     now = _utcnow()
+    event_log = get_or_create_event_log(device_id)
     event_log.append(point_id, RETRACTED, device_ts=now)
     log_activity(device_id, "retraction", f"retracted point {point_id}", point_id)
 
-    corroboration_key = None
-    if device_id in device_shards:
-        for shard in (device_shards[device_id]['mutable'], device_shards[device_id]['immutable']):
-            recs = shard.retrieve([point_id], with_payload=True, with_vector=False)
-            if recs and recs[0].payload:
-                corroboration_key = recs[0].payload.get("corroboration_key")
-                break
+    # Withdraw locally: a retracted fact must stop appearing in search/answers.
+    delete_points(mutable_shard, [point_id])
+    delete_points(immutable_shard, [point_id])
 
-    if corroboration_key and sync_transport:
-        try:
-            sync_transport.retract(device_id, corroboration_key, point_id)
-        except Exception:
-            pass
+    # Queue the retraction with its own persistent client_sequence so it drains
+    # in order with observations.
+    shards["client_seq"] += 1
+    rseq = shards["client_seq"]
+    queue_retraction(mutable_shard, point_id, corroboration_key, rseq)
 
-    if corroboration_key:
-        _broadcast_consensus_event({
-            "corroboration_key": corroboration_key,
-            "state": "RETRACTED",
-            "confidence": 0.0,
-            "resolved_value": None,
-            "candidates": [],
-            "explanation": f"Fact retracted by {device_id}",
-            "timestamp": now,
-        })
+    # Try to drain the retraction queue now; failures leave it queued (offline).
+    _, retract_errors = _drain_retractions(device_id)
+    if retract_errors:
+        log_activity(device_id, "error", f"retract push deferred: {retract_errors}", point_id)
+
+    _broadcast_consensus_event({
+        "corroboration_key": corroboration_key,
+        "state": "RETRACTED",
+        "confidence": 0.0,
+        "resolved_value": None,
+        "candidates": [],
+        "explanation": f"Fact retracted by {device_id}",
+        "timestamp": now,
+    })
 
     return RetractResponse(retracted=True, point_id=point_id)
+
+
+def _drain_retractions(device_id: str):
+    """Push pending retraction markers to the hub in client_sequence order.
+
+    Marks a marker synced ONLY on ack (invariant 1): a transport failure leaves
+    it pending so a later push (when back online) completes the retraction.
+    Returns (drained_count, errors).
+    """
+    if sync_transport is None:
+        return 0, ["no sync transport configured"]
+    shards = device_shards.get(device_id)
+    if not shards:
+        return 0, []
+    mutable_shard = shards["mutable"]
+    pending = get_pending_retractions(mutable_shard, limit=1000)
+    drained = 0
+    errors: List[str] = []
+    for marker in pending:
+        info = (marker.payload or {}).get("_retract", {})
+        try:
+            sync_transport.retract(
+                device_id=device_id,
+                point_id=info.get("target_point_id"),
+                corroboration_key=info.get("corroboration_key"),
+                client_sequence=info.get("client_sequence", 0),
+            )
+        except Exception as e:  # noqa: BLE001 — surfaced, not swallowed
+            errors.append(f"retract push failed: {e}")
+            break  # stop on first failure; preserve order for the retry
+        mark_retraction_synced(mutable_shard, [marker.id])
+        delete_points(mutable_shard, [marker.id])  # drained; drop the marker
+        drained += 1
+    return drained, errors
+
 
 
 @app.get("/devices/{device_id}/events/{point_id}")
