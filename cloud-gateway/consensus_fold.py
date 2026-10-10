@@ -307,9 +307,11 @@ def derive_device_trust(
     value, across the keys that can actually adjudicate agreement:
 
       * a lone (LWW, single live device) key never grants free self-trust;
-      * an exact tie credits no device (so no one gains trust from the fold's
-        alphabetical tie-break);
-      * a RESOLVED decision is authoritative ground truth.
+      * only a CONFIRMED key adjudicates agreement — a DISPUTED key (which
+        includes an exact tie, so no one gains trust from the fold's
+        alphabetical tie-break) credits and penalises no device;
+      * a RESOLVED decision is authoritative ground truth, regardless of the
+        fold's own status.
 
     A Beta(alpha, beta) prior smooths sparse histories and the result is clamped
     to [trust_floor, trust_ceiling] (all config, identity by default).
@@ -340,10 +342,11 @@ def derive_device_trust(
             if len(live) < 2:
                 continue
             resolved = fold_consensus(key_events, threshold=threshold, decay=decay)
-            vals = resolved.get("values", [])
-            # An exact tie between the top two values is unadjudicated: credit no
-            # device, so the fold's alphabetical tie-break never hands out trust.
-            if len(vals) >= 2 and vals[0]["support"] == vals[1]["support"]:
+            # Only a CONFIRMED key adjudicates agreement (B2 / P1-2). A DISPUTED
+            # key — confidence below threshold, which also covers an unadjudicated
+            # exact tie and a bare plurality the fleet has not corroborated — tells
+            # us nothing about who is right, so it credits and penalises no device.
+            if resolved.get("status") != "CONFIRMED":
                 continue
             resolved_value = resolved["value"]
 

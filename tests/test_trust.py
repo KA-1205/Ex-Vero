@@ -40,17 +40,21 @@ def _ev(seq, device, value, key, trust=0.7):
 
 
 def test_outvoted_device_has_lower_trust_and_lower_weight():
-    # dev_c is outvoted by dev_a + dev_b across three keys.
+    # dev_c is outvoted by dev_a + dev_b + dev_d across three keys. Three agreeing
+    # devices clear the confidence threshold, so each key folds to CONFIRMED and
+    # therefore adjudicates agreement (only CONFIRMED keys count toward trust).
     events = []
     seq = 0
     for i, key in enumerate(("k1", "k2", "k3")):
         seq += 1; events.append(_ev(seq, "dev_a", "real", key))
         seq += 1; events.append(_ev(seq, "dev_b", "real", key))
+        seq += 1; events.append(_ev(seq, "dev_d", "real", key))
         seq += 1; events.append(_ev(seq, "dev_c", "bogus", key))
 
     trust = derive_device_trust(events, threshold=THRESHOLD)
     assert trust["dev_c"] < trust["dev_a"]
     assert trust["dev_c"] < trust["dev_b"]
+    assert trust["dev_c"] < trust["dev_d"]
 
     # Feeding that trust back as the fold weight, dev_c's lone "bogus" value gets
     # near-zero support — its weight really did drop, it is not display-only.
@@ -62,21 +66,39 @@ def test_outvoted_device_has_lower_trust_and_lower_weight():
     assert folded["value"] == "real"
 
 
+def test_disputed_key_grants_no_trust():
+    # A 2-vs-1 key folds to DISPUTED (confidence below threshold): the fleet has
+    # not corroborated a verdict, so it tells us nothing about who is right and
+    # must credit/penalise no device (B2 / P1-2 "exclude DISPUTED/LWW").
+    events = [
+        _ev(1, "dev_a", "real", "k1"),
+        _ev(2, "dev_b", "real", "k1"),
+        _ev(3, "dev_c", "bogus", "k1"),
+    ]
+    # Precondition: this scenario really is DISPUTED, not CONFIRMED.
+    assert fold_consensus(events, threshold=THRESHOLD)["status"] == "DISPUTED"
+    trust = derive_device_trust(events, threshold=THRESHOLD)
+    assert trust == {}
+
+
 def test_trust_is_independent_of_device_and_value_spelling():
     base = [
         _ev(1, "dev_a", "x", "k1"),
         _ev(2, "dev_b", "x", "k1"),
-        _ev(3, "dev_c", "y", "k1"),
+        _ev(3, "dev_e", "x", "k1"),
+        _ev(4, "dev_c", "y", "k1"),
     ]
     # Rename devices and re-spell both values, keeping the agreement STRUCTURE
-    # (two devices agree, one dissents) identical.
+    # (three devices agree, one dissents → CONFIRMED) identical.
     relabeled = [
         _ev(1, "zzz", "alpha", "k1"),
         _ev(2, "mmm", "alpha", "k1"),
-        _ev(3, "aaa", "omega", "k1"),
+        _ev(3, "qqq", "alpha", "k1"),
+        _ev(4, "aaa", "omega", "k1"),
     ]
     t1 = derive_device_trust(base, threshold=THRESHOLD)
     t2 = derive_device_trust(relabeled, threshold=THRESHOLD)
+    assert t1  # non-empty: a CONFIRMED key really did adjudicate agreement
     assert sorted(t1.values()) == sorted(t2.values())
 
 

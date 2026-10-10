@@ -159,18 +159,23 @@ def test_observe_retract_reobserve_stays_absent_until_newer_observe():
 
 def test_derive_device_trust_penalizes_the_disagreeing_device():
     # dev_c disagrees with the corroborated majority across two keys; its derived
-    # trust (agreement rate) must land below the agreeing devices'.
+    # trust (agreement rate) must land below the agreeing devices'. Three agreeing
+    # devices per key clear the threshold so each key folds to CONFIRMED and
+    # therefore adjudicates agreement (only CONFIRMED keys count toward trust).
     events = [
         _ev(1, "dev_a", "gas leak zone c", key="k1"),
         _ev(2, "dev_b", "gas leak zone c", key="k1"),
-        _ev(3, "dev_c", "no leak zone c", key="k1"),
-        _ev(4, "dev_a", "fire on 3rd st", key="k2"),
-        _ev(5, "dev_b", "fire on 3rd st", key="k2"),
-        _ev(6, "dev_c", "quiet on 3rd st", key="k2"),
+        _ev(3, "dev_d", "gas leak zone c", key="k1"),
+        _ev(4, "dev_c", "no leak zone c", key="k1"),
+        _ev(5, "dev_a", "fire on 3rd st", key="k2"),
+        _ev(6, "dev_b", "fire on 3rd st", key="k2"),
+        _ev(7, "dev_d", "fire on 3rd st", key="k2"),
+        _ev(8, "dev_c", "quiet on 3rd st", key="k2"),
     ]
     trust = derive_device_trust(events, threshold=THRESHOLD)
     assert trust["dev_a"] == 1.0
     assert trust["dev_b"] == 1.0
+    assert trust["dev_d"] == 1.0
     assert trust["dev_c"] < trust["dev_a"], trust
 
 
