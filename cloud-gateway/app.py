@@ -73,6 +73,11 @@ ALLOW_MEMORY_FALLBACK = os.environ.get(
 ).strip().lower() in ("1", "true", "yes")
 FACTS_COLLECTION = "facts"
 EVENTS_COLLECTION = "fact_events"
+# A dedicated meta collection holds the sequencer high-water mark in a single
+# point, so a restart resumes the seq counter by reading ONE point instead of
+# scanning the whole event log (P0-4).
+META_COLLECTION = "gateway_meta"
+SEQ_POINT_ID = 0
 # The named vector space is defined once in `vector_space` (P0-1). The hub never
 # invents a slot from `len(vector)`; it reads the slot map from there.
 SPARSE_VECTOR = vector_space.SPARSE_SLOT
@@ -126,6 +131,20 @@ def _ensure_events_collection() -> None:
         client.create_payload_index(
             EVENTS_COLLECTION, "corroboration_key", models.PayloadSchemaType.KEYWORD
         )
+        # P0-4: point_id is filtered for liveness/tombstone checks and the /delta
+        # path; index it so those are not full scans on a real server.
+        client.create_payload_index(
+            EVENTS_COLLECTION, "point_id", models.PayloadSchemaType.INTEGER
+        )
+
+
+def _ensure_meta_collection() -> None:
+    if not client.collection_exists(META_COLLECTION):
+        client.create_collection(
+            collection_name=META_COLLECTION,
+            vectors_config=models.VectorParams(size=1, distance=models.Distance.COSINE),
+        )
+
 
 
 def _ensure_facts_collection() -> None:
@@ -153,22 +172,28 @@ def _next_seq() -> int:
         return _seq
 
 
+def _persist_seq_highwater() -> None:
+    """Write the current high-water seq to the meta point (once per batch, not
+    per event). A restart reads this one point instead of scanning the log."""
+    with _seq_lock:
+        value = _seq
+    client.upsert(
+        META_COLLECTION,
+        points=[models.PointStruct(id=SEQ_POINT_ID, vector=[0.0], payload={"seq_highwater": value})],
+    )
+
+
 def _init_sequencer() -> None:
-    """Resume the seq counter from the highest seq already in fact_events, so a
-    gateway restart never re-issues an old sequence number."""
+    """Resume the seq counter from the meta point's high-water mark — a single
+    point read, never a full scan of fact_events (P0-4). A gateway restart thus
+    never re-issues an old sequence number."""
     global _seq
-    highest = 0
-    offset = None
-    while True:
-        points, offset = client.scroll(
-            EVENTS_COLLECTION, limit=1000, offset=offset, with_payload=True, with_vectors=False
-        )
-        for p in points:
-            highest = max(highest, int(p.payload.get("seq", 0)))
-        if offset is None:
-            break
+    _ensure_meta_collection()
+    recs = client.retrieve(META_COLLECTION, ids=[SEQ_POINT_ID], with_payload=True, with_vectors=False)
+    highest = int(recs[0].payload.get("seq_highwater", 0)) if recs else 0
     with _seq_lock:
         _seq = highest
+
 
 
 def _startup() -> None:
@@ -232,22 +257,24 @@ def delta(device_id: str) -> Dict[str, int]:
 
     Returns -1 when the hub holds nothing, so the edge pushes everything with
     client_sequence > -1 (i.e. all of it) on the first sync.
+
+    P0-4: a single `order_by(client_sequence DESC) limit 1` filtered query — not
+    a full scroll of the device's events — so this stays O(1) as the log grows.
+    `client_sequence` is Integer-indexed, which `order_by` requires.
     """
-    highest = -1
-    offset = None
+    if not client.collection_exists(EVENTS_COLLECTION):
+        return {"max_client_sequence": -1}
     flt = models.Filter(
         must=[models.FieldCondition(key="device_id", match=models.MatchValue(value=device_id))]
     )
-    while True:
-        points, offset = client.scroll(
-            EVENTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
-            with_payload=True, with_vectors=False,
-        )
-        for p in points:
-            highest = max(highest, int(p.payload.get("client_sequence", -1)))
-        if offset is None:
-            break
-    return {"max_client_sequence": highest}
+    points, _ = client.scroll(
+        EVENTS_COLLECTION, scroll_filter=flt, limit=1,
+        order_by=models.OrderBy(key="client_sequence", direction=models.Direction.DESC),
+        with_payload=True, with_vectors=False,
+    )
+    if not points:
+        return {"max_client_sequence": -1}
+    return {"max_client_sequence": int(points[0].payload.get("client_sequence", -1))}
 
 
 @app.post("/ingest")
@@ -342,6 +369,7 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
         client.upsert(FACTS_COLLECTION, points=fact_points)
     if event_points:
         client.upsert(EVENTS_COLLECTION, points=event_points)
+        _persist_seq_highwater()  # one meta write per batch (P0-4)
     return {"acked_ids": acked, "count": len(acked)}
 
 
@@ -616,6 +644,7 @@ def retract_event(req: RetractRequest) -> Dict[str, Any]:
             },
         )
         client.upsert(EVENTS_COLLECTION, points=[event_point])
+        _persist_seq_highwater()  # P0-4
 
 
     # Tombstone the fact if nothing live references the point any more.
@@ -685,6 +714,7 @@ def inject_conflict(req: InjectConflictRequest) -> Dict[str, Any]:
         )
     if events_to_insert:
         client.upsert(EVENTS_COLLECTION, points=events_to_insert)
+        _persist_seq_highwater()  # P0-4
 
     # Return updated consensus for the key
     return {

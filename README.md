@@ -228,6 +228,8 @@ Recall and resolver margins are deliberately narrower than the original hardcode
 
 `vercel.json` defines two services: `frontend` at `/` and `cloud-gateway` at `/gateway/*`. Everything else stays local.
 
+> **Gateway deployment model — single instance, not serverless.** The gateway is the fleet's **single sequencer**: it assigns every `fact_events` row a monotonic hub `seq` from one in-process counter (resumed on restart from a dedicated meta point, so a restart never re-issues an old `seq`). Two instances running at once would each hand out their own `seq` stream and corrupt the global order the consensus fold depends on. **Deploy it as a single long-running container** (the `gateway` service in `docker/docker-compose.yml`) — not as an auto-scaling serverless function. If you must run it serverless, cap it to one concurrent instance, or move the sequencer to a database sequence (e.g. a Qdrant/DB-backed counter) first. The Vercel wiring below is for the demo UI only; a production hub should run as a container next to its Qdrant Server.
+
 **The edge node is not deployed, on purpose.** Its facts live in an on-disk Qdrant Edge shard and it serves the decision feed over WebSockets. A serverless function has no persistent filesystem and no WebSocket support, so a deployed node would come up empty on every cold start. Run it in Docker.
 
 | Piece | Where | Talks to |

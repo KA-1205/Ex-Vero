@@ -310,3 +310,89 @@ def test_ingest_is_insert_if_absent_a_retry_keeps_the_event_seq(gateway_client):
     assert evs2[0].payload["seq"] == seq1, "retry changed the event's hub seq"
 
 
+def _ingest_n(gateway_client, device, n, key="zone_n.count"):
+    for i in range(1, n + 1):
+        env = {
+            "id": 500000 + i,
+            "vector": [0.01 * i] * 384,
+            "sparse": None,
+            "payload": {
+                "value": f"observation {i}",
+                "model": "text",
+                "modality": "text",
+                "corroboration_key": key,
+                "reporter_device_id": device,
+                "client_timestamp_ns": i,
+            },
+            "client_sequence": i,
+        }
+        r = gateway_client.post("/ingest", json={"device_id": device, "envelopes": [env]})
+        assert r.status_code == 200, r.text
+
+
+def test_delta_returns_max_without_scanning_all_events(gateway_client):
+    """A4 (P0-4): /delta returns the device's max client_sequence via a single
+    order_by(DESC) limit-1 query — it must not scroll the whole event log.
+
+    We spy on client.scroll during the /delta call and assert it never pulls back
+    more than one event row, even though the device has many.
+    """
+    device = "dev-delta"
+    n = 6
+    _ingest_n(gateway_client, device, n)
+
+    real_scroll = gateway_app.client.scroll
+    max_rows = {"n": 0}
+
+    def spy_scroll(collection_name, *a, **kw):
+        res = real_scroll(collection_name, *a, **kw)
+        if collection_name == gateway_app.EVENTS_COLLECTION:
+            pts = res[0] if isinstance(res, tuple) else res
+            max_rows["n"] = max(max_rows["n"], len(pts))
+        return res
+
+    gateway_app.client.scroll = spy_scroll
+    try:
+        resp = gateway_client.get(f"/delta/{device}")
+    finally:
+        gateway_app.client.scroll = real_scroll
+
+    assert resp.status_code == 200
+    assert resp.json()["max_client_sequence"] == n
+    assert max_rows["n"] <= 1, f"/delta scanned {max_rows['n']} event rows (expected <= 1)"
+
+
+def test_restart_resumes_seq_from_meta_point_without_reissuing(gateway_client):
+    """A4 (P0-4): the sequencer resumes from the meta point on restart (one point
+    read, no log scan) and never re-issues an old seq."""
+    device = "dev-restart"
+    _ingest_n(gateway_client, device, 3, key="zone_r.count")
+    high_before = gateway_app._seq
+    assert high_before >= 3
+
+    # Simulate a restart: drop the in-memory counter and re-init from storage.
+    gateway_app._seq = 0
+    gateway_app._init_sequencer()
+    assert gateway_app._seq == high_before, "restart did not resume the high-water seq"
+
+    # A fresh ingest must get a seq strictly greater than any already issued.
+    env = {
+        "id": 777001,
+        "vector": [0.3] * 384,
+        "sparse": None,
+        "payload": {
+            "value": "post restart",
+            "model": "text",
+            "modality": "text",
+            "corroboration_key": "zone_r.count",
+            "reporter_device_id": device,
+            "client_timestamp_ns": 99,
+        },
+        "client_sequence": 99,
+    }
+    assert gateway_client.post("/ingest", json={"device_id": device, "envelopes": [env]}).status_code == 200
+    new_seq = _events_for_point(777001)[0].payload["seq"]
+    assert new_seq > high_before, "restart re-issued an old seq"
+
+
+
