@@ -1839,17 +1839,16 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
     from datetime import datetime, timezone
     facts = []
     for k, entries in sorted(facts_by_key.items()):
-        vals: Dict[str, Dict[str, Any]] = {}
+        # Offline fallback: the edge CANNOT compute real consensus (that is the
+        # hub's trust-weighted fold). We refuse to invent trust weights, a
+        # confidence number, or a CONFIRMED verdict here (B3 / P1-3). We surface
+        # the distinct local values and their reporting devices, mark the fact
+        # UNCORROBORATED, and flag the whole response `degraded`.
+        devices_by_val: Dict[str, set] = {}
         for dev_id, v, ts, t_url, m_val in entries:
-            w = 0.42 if dev_id in _rogue_devices else (0.92 if "cam" in dev_id else 0.88)
-            vals.setdefault(v, {"weight": 0.0, "devices": set()})
-            vals[v]["weight"] += w
-            vals[v]["devices"].add(dev_id)
+            devices_by_val.setdefault(v, set()).add(dev_id)
 
-        tot_w = sum(info["weight"] for info in vals.values()) or 1.0
-        best_val = max(vals, key=lambda v: vals[v]["weight"])
-        confidence = round(vals[best_val]["weight"] / tot_w, 4)
-        st = "CONFIRMED" if confidence >= 0.66 else "DISPUTED"
+        best_val = max(devices_by_val, key=lambda v: len(devices_by_val[v]))
 
         latest_ts = max((e[2] for e in entries), default=0)
         if latest_ts > 0:
@@ -1858,7 +1857,7 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
             upd = datetime.now(timezone.utc).isoformat()
 
         thumb = next((e[3] for e in entries if e[3]), None)
-        fact_mod = "vision" if (any(e[4] == "vision" for e in entries) or any(d.startswith("cam-") for d in vals[best_val]["devices"])) else "text"
+        fact_mod = "vision" if any(e[4] == "vision" for e in entries) else "text"
 
         if modality:
             if modality == "vision" and fact_mod != "vision" and not thumb:
@@ -1868,24 +1867,17 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
 
         facts.append({
             "corroboration_key": k,
-            "state": st,
+            "state": "UNCORROBORATED",
             "value": best_val,
-            "confidence": confidence,
-            "corroborating_devices": sorted(list(vals[best_val]["devices"])),
+            "confidence": None,
+            "corroborating_devices": sorted(devices_by_val[best_val]),
             "updated_at": upd,
             "thumbnail_url": thumb,
             "modality": fact_mod,
         })
 
-    device_trust: Dict[str, float] = {}
-    for d in DEFAULT_FLEET:
-        d_id = d["id"]
-        device_trust[d_id] = 0.42 if d_id in _rogue_devices else (0.92 if "cam" in d_id else 0.88)
-    for dev_id in device_shards:
-        if dev_id not in device_trust:
-            device_trust[dev_id] = 0.42 if dev_id in _rogue_devices else 0.88
-
-    return {"facts": facts, "device_trust": device_trust}
+    # No invented trust offline — the real number is hub-derived (B2).
+    return {"facts": facts, "device_trust": {}, "degraded": True}
 
 
 # --- GET /devices/{id}/trend ---

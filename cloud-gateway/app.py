@@ -875,7 +875,12 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
         if folded.get("status") == "ABSENT" or not folded.get("value"):
             continue
 
-        st = "CONFIRMED" if folded.get("confidence", 0.0) >= CONSENSUS_THRESHOLD else "DISPUTED"
+        # The dashboard state follows the fold's own status unchanged (B3 / P1-3)
+        # — we never re-derive CONFIRMED/DISPUTED from the confidence here. A
+        # single uncorroborated report (LWW) gets its own display state and is
+        # NEVER shown as CONFIRMED.
+        fold_status = folded.get("status")
+        st = "UNCORROBORATED" if fold_status == "LWW" else fold_status
 
         winner_val = folded.get("value")
         corrob: List[str] = []

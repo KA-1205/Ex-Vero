@@ -103,14 +103,14 @@ export interface ConsensusEvent {
   confidence: number; claims: DeviceClaim[]; resolution_summary: string
 }
 export interface CloudFact {
-  id: string; corroboration_key: string; zone?: string; summary: string; status: 'CONFIRMED' | 'DISPUTED'
+  id: string; corroboration_key: string; zone?: string; summary: string; status: 'CONFIRMED' | 'DISPUTED' | 'UNCORROBORATED'
   confidence: number; corroborating_devices: string[]; last_updated: string
 }
 export interface ApiCloudFact {
-  corroboration_key: string; state: 'CONFIRMED' | 'DISPUTED'; value: string; confidence: number
+  corroboration_key: string; state: 'CONFIRMED' | 'DISPUTED' | 'UNCORROBORATED'; value: string; confidence: number | null
   corroborating_devices: string[]; updated_at: string
 }
-export interface CloudState { facts: ApiCloudFact[]; device_trust: Record<string, number> }
+export interface CloudState { facts: ApiCloudFact[]; device_trust: Record<string, number>; degraded?: boolean }
 export interface NetworkModeState { mode: NetworkMode }
 export interface ResolverBenchmark { resolver_accuracy: number; lww_accuracy: number; scenarios: number; trajectory: { seq: number; event: string; resolver: number; lww: number }[] }
 export interface RecallBenchmark { dense_recall_at_5: number; hybrid_recall_at_5: number; labeled_queries: number }
