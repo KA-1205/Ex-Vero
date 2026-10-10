@@ -1367,7 +1367,7 @@ from typing import Set
 
 # --- Active WebSocket connections for live feeds ---
 _ws_device_events: Dict[str, Set[WebSocket]] = {}
-_ws_consensus_events: Set[WebSocket] = {}
+_ws_consensus_events: Set[WebSocket] = set()
 _ws_lock = __import__('threading').Lock()
 
 
