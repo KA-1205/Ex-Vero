@@ -77,15 +77,20 @@ class TokenBucket:
     def consume(self, nbytes: float) -> None:
         if self.rate <= 0:
             return  # cap disabled
-        while True:
-            with self._lock:
-                self._refill()
-                if self._tokens >= nbytes:
-                    self._tokens -= nbytes
-                    return
-                # How long until enough tokens have accrued.
-                deficit = nbytes - self._tokens
-                wait = deficit / self.rate
+        # Drain the available tokens and, if that leaves a deficit, wait exactly
+        # long enough for the remainder to accrue at the fill rate. Letting the
+        # token count go negative keeps the byte-rate cap real for ANY request
+        # size — a single envelope larger than the bucket's capacity (e.g. a
+        # ~8.7 KB image on a bucket whose capacity equals the per-second rate)
+        # still drains in `nbytes / rate` instead of looping forever waiting for
+        # tokens that can never exceed `capacity`.
+        with self._lock:
+            self._refill()
+            self._tokens -= nbytes
+            wait = 0.0
+            if self._tokens < 0:
+                wait = -self._tokens / self.rate
+        if wait > 0:
             time.sleep(wait)
 
 

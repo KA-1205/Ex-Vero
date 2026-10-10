@@ -348,6 +348,92 @@ def test_token_bucket_is_a_real_byte_cap():
     assert 0.4 <= waited <= 1.5, f"byte cap wait not proportional (waited={waited:.3f}s)"
 
 
+# --- 5c. A6b: a request larger than the bucket capacity must still drain ---
+
+def test_token_bucket_drains_a_request_larger_than_capacity():
+    """Regression for the capacity==rate deadlock (network.py:67).
+
+    When a single serialized envelope is larger than the bucket's capacity
+    (the default capacity equals the per-second byte rate, so an ~8.7 KB image
+    on a ~64 kbps / 8000 B/s link qualifies), the old `consume` looped forever:
+    `_tokens` is capped at `capacity`, so it could never reach `nbytes`. The push
+    worker — and with it every queued sync — would hang. The cap must stay real
+    but a large request must drain in `nbytes / rate`, never deadlock.
+    """
+    import threading
+
+    bucket = network.TokenBucket(bytes_per_sec=8000, capacity=8000)
+    oversized = 8700  # one ~8.7 KB envelope, larger than the 8000-byte capacity
+
+    done = threading.Event()
+
+    def _drain():
+        bucket.consume(oversized)
+        done.set()
+
+    t = threading.Thread(target=_drain, daemon=True)
+    t0 = time.perf_counter()
+    t.start()
+    finished = done.wait(timeout=5.0)
+    elapsed = time.perf_counter() - t0
+
+    assert finished, (
+        "consume() of a request larger than the bucket capacity never returned "
+        "— the token bucket deadlocks on an oversized payload"
+    )
+    # The bucket starts full (8000 free tokens); only the 700-byte overflow waits
+    # at 8000 B/s (~0.09 s). Comfortably inside the bound either way.
+    assert elapsed < 3.0, f"oversized drain took too long ({elapsed:.3f}s)"
+
+
+def test_degraded_push_of_oversized_envelope_completes_with_real_byte_rate():
+    """A degraded push of a single large envelope must finish under a REAL
+    (non-zero) byte-rate cap — on the old bucket this hung the sync worker."""
+    import threading
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            stub = StubTransport()
+            _init(stub)
+            client = TestClient(main.app)
+            device_id = "dev_bigpush"
+
+            # A long value so the serialized envelope comfortably exceeds the
+            # (deliberately small) bucket capacity below.
+            big_value = "structural collapse with trapped occupants. " * 60
+            cap = _capture_urgent(client, device_id, "big", big_value)
+            pid = int(cap["id"])
+
+            client.post("/network/mode", json={"mode": "degraded"})
+            # Real non-zero byte rate; capacity defaults to the rate, so the single
+            # envelope is larger than the bucket can ever hold.
+            network.configure(latency_min_ms=0, latency_max_ms=0,
+                              failure_rate=0.0, byte_rate_bytes_per_sec=2000.0)
+
+            result = {}
+
+            def _push():
+                result["resp"] = client.post(f"/devices/{device_id}/push").json()
+
+            worker = threading.Thread(target=_push, daemon=True)
+            t0 = time.perf_counter()
+            worker.start()
+            worker.join(timeout=15.0)
+            elapsed = time.perf_counter() - t0
+
+            assert not worker.is_alive(), (
+                "degraded push of an oversized envelope never returned "
+                "— the byte-rate cap deadlocked"
+            )
+            assert result["resp"]["pushed_count"] == 1
+            assert stub.server_has(device_id, pid)
+            assert elapsed < 15.0
+        finally:
+            os.chdir(old)
+
+
 def test_network_mode_endpoint_roundtrip_and_rejects_bad_mode():
     with tempfile.TemporaryDirectory() as tmpdir:
         old = os.getcwd()
