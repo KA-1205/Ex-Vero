@@ -40,8 +40,10 @@ services:
 
   gateway:
     build:
-      context: ../cloud-gateway
-      dockerfile: Dockerfile
+      # Repo root so the Dockerfile can COPY the shared snapshot builder from
+      # src/edge_node (one builder, no drift with the edge).
+      context: ..
+      dockerfile: cloud-gateway/Dockerfile
     environment:
       # The gateway reaches Qdrant Server over the compose network by service name.
       QDRANT_URL: "http://qdrant:6333"

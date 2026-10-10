@@ -27,10 +27,9 @@ LWW verdicts via the pure `consensus_fold` module.
 import hashlib
 import os
 import shutil
-import tarfile
+import sys
 import tempfile
 import threading
-import time
 import time
 from typing import Any, Dict, List, Optional
 
@@ -42,6 +41,20 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
 from consensus_fold import DEFAULT_DEVICE_TRUST, DEFAULT_THRESHOLD, derive_device_trust, fold_consensus
+import vector_space
+
+# The snapshot builder is shared with the edge (one builder, no drift): the hub
+# packs the same real Edge shard the device restores. Importing it at module load
+# also pulls in `qdrant_edge`, so a missing Edge engine fails the gateway fast
+# rather than at the first /snapshot call. `../src` is on path in tests and in a
+# repo-root run; the Dockerfile vendors the module next to app.py for the image.
+_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+if os.path.isdir(_SRC_DIR):
+    sys.path.insert(0, _SRC_DIR)
+try:
+    from edge_node.snapshot import build_snapshot_tar
+except ImportError:  # Docker image: snapshot.py is COPY'd next to app.py
+    from snapshot import build_snapshot_tar
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
@@ -60,8 +73,9 @@ ALLOW_MEMORY_FALLBACK = os.environ.get(
 ).strip().lower() in ("1", "true", "yes")
 FACTS_COLLECTION = "facts"
 EVENTS_COLLECTION = "fact_events"
-DENSE_VECTOR = "dense"
-SPARSE_VECTOR = "text_bm25"
+# The named vector space is defined once in `vector_space` (P0-1). The hub never
+# invents a slot from `len(vector)`; it reads the slot map from there.
+SPARSE_VECTOR = vector_space.SPARSE_SLOT
 # Supermajority needed to call a multi-device fact CONFIRMED (config-overridable).
 CONSENSUS_THRESHOLD = float(os.environ.get("CONSENSUS_THRESHOLD", DEFAULT_THRESHOLD))
 CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
@@ -114,16 +128,14 @@ def _ensure_events_collection() -> None:
         )
 
 
-def _ensure_facts_collection(dense_size: int) -> None:
+def _ensure_facts_collection() -> None:
     if not client.collection_exists(FACTS_COLLECTION):
+        # One source of truth for the named vectors (P0-1): build the collection
+        # from the slot->dim map, never from an incoming vector's length.
         vectors_cfg = {
-            "text": models.VectorParams(size=384, distance=models.Distance.COSINE),
-            "image": models.VectorParams(size=512, distance=models.Distance.COSINE),
+            name: models.VectorParams(size=dim, distance=models.Distance.COSINE)
+            for name, dim in vector_space.DENSE_SLOTS.items()
         }
-        if DENSE_VECTOR not in vectors_cfg:
-            vectors_cfg[DENSE_VECTOR] = models.VectorParams(
-                size=dense_size, distance=models.Distance.COSINE
-            )
         client.create_collection(
             collection_name=FACTS_COLLECTION,
             vectors_config=vectors_cfg,
@@ -160,7 +172,11 @@ def _init_sequencer() -> None:
 
 
 def _startup() -> None:
-    global client
+    global client, QDRANT_URL
+    # Re-read QDRANT_URL at startup so a test (or launcher) that sets the env var
+    # after import — e.g. QDRANT_URL=":memory:" in the TestClient fixture — is
+    # honored instead of the value captured when the module was first imported.
+    QDRANT_URL = os.environ.get("QDRANT_URL", QDRANT_URL)
     if QDRANT_URL == ":memory:":
         client = QdrantClient(location=":memory:")
         _ensure_events_collection()
@@ -245,8 +261,7 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
     if not req.envelopes:
         return {"acked_ids": [], "count": 0}
 
-    dense_size = len(req.envelopes[0]["vector"]) if req.envelopes[0].get("vector") else 384
-    _ensure_facts_collection(dense_size)
+    _ensure_facts_collection()
 
     fact_points: List[models.PointStruct] = []
     event_points: List[models.PointStruct] = []
@@ -254,17 +269,18 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
 
     for env in req.envelopes:
         payload = env.get("payload") or {}
-        model_name = payload.get("model", "text")
         vectors: Dict[str, Any] = {}
         if env.get("vector") is not None:
-            v = env["vector"]
-            # Map into the collection's named vector slot
-            if len(v) == 512:
-                vectors["image"] = v
-            elif len(v) == 384:
-                vectors["text"] = v
-            else:
-                vectors[DENSE_VECTOR] = v
+            # Place the dense vector in its named slot from the single source of
+            # truth, never by guessing from len(vector).
+            slot = vector_space.slot_for_envelope(env)
+            if slot is None:
+                raise ValueError(
+                    f"cannot place dense vector of length "
+                    f"{len(env['vector'])} into any known slot "
+                    f"{sorted(vector_space.DENSE_SLOTS)}"
+                )
+            vectors[slot] = env["vector"]
 
         if env.get("sparse"):
             vectors[SPARSE_VECTOR] = models.SparseVector(
@@ -276,7 +292,6 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
 
         seq = _next_seq()  # hub-assigned ordering; device wall-clock stays metadata
         event_id = _event_id(req.device_id, env["id"], env["client_sequence"])
-        payload = env.get("payload") or {}
         # Phase 5: carry everything the consensus fold needs. `seq` is the only
         # ordering key; `client_timestamp_ns` rides along as metadata only.
         event_points.append(
@@ -330,23 +345,11 @@ def facts(device_id: str) -> Dict[str, Any]:
             with_payload=True, with_vectors=True,
         )
         for p in points:
-            vecs = p.vector or {}
-            dense = vecs.get(DENSE_VECTOR) if isinstance(vecs, dict) else None
-            sparse = None
-            if isinstance(vecs, dict) and SPARSE_VECTOR in vecs:
-                sv = vecs[SPARSE_VECTOR]
-                sparse = {"indices": list(sv.indices), "values": list(sv.values)}
-            envelopes.append(
-                {
-                    "id": p.id,
-                    "vector": dense,
-                    "sparse": sparse,
-                    "payload": p.payload,
-                    "client_sequence": (p.payload or {}).get("_sync_meta", {}).get(
-                        "client_sequence", 0
-                    ),
-                }
+            env = _envelope_from_point(p)
+            env["client_sequence"] = (p.payload or {}).get("_sync_meta", {}).get(
+                "client_sequence", 0
             )
+            envelopes.append(env)
         if offset is None:
             break
     return {"envelopes": envelopes}
@@ -357,6 +360,39 @@ class SnapshotRequest(BaseModel):
     # the real partial-snapshot handshake; the current hub ships the full fact
     # set (restore is idempotent by point id) rather than diffing segments.
     manifest: Dict[str, Any] = {}
+
+
+def _envelope_from_point(p) -> Dict[str, Any]:
+    """Turn a stored `facts` point into a pull envelope carrying **every** named
+    vector it holds (P0-1).
+
+    The point was written into a named slot (`text`/`image`) decided from the
+    single source of truth, so we read each named slot back rather than guessing
+    one key. `vectors` maps slot -> dense list; `vector` is the primary dense
+    (the point's own `payload.model` slot) kept for backward-compatible readers;
+    `sparse` is the BM25 leg.
+    """
+    vecs = p.vector or {}
+    dense_vectors: Dict[str, List[float]] = {}
+    sparse = None
+    if isinstance(vecs, dict):
+        for name, val in vecs.items():
+            if name == SPARSE_VECTOR:
+                sparse = {"indices": list(val.indices), "values": list(val.values)}
+            elif name in vector_space.DENSE_SLOTS and val is not None:
+                dense_vectors[name] = list(val)
+    model = (p.payload or {}).get("model")
+    if isinstance(model, str) and model in dense_vectors:
+        primary = dense_vectors[model]
+    else:
+        primary = next(iter(dense_vectors.values()), None)
+    return {
+        "id": p.id,
+        "vector": primary,
+        "vectors": dense_vectors,
+        "sparse": sparse,
+        "payload": p.payload,
+    }
 
 
 def _all_fact_envelopes() -> List[Dict[str, Any]]:
@@ -372,13 +408,7 @@ def _all_fact_envelopes() -> List[Dict[str, Any]]:
             with_payload=True, with_vectors=True,
         )
         for p in points:
-            vecs = p.vector or {}
-            dense = vecs.get(DENSE_VECTOR) if isinstance(vecs, dict) else None
-            sparse = None
-            if isinstance(vecs, dict) and SPARSE_VECTOR in vecs:
-                sv = vecs[SPARSE_VECTOR]
-                sparse = {"indices": list(sv.indices), "values": list(sv.values)}
-            envelopes.append({"id": p.id, "vector": dense, "sparse": sparse, "payload": p.payload})
+            envelopes.append(_envelope_from_point(p))
         if offset is None:
             break
     return envelopes
@@ -387,47 +417,23 @@ def _all_fact_envelopes() -> List[Dict[str, Any]]:
 def _build_edge_snapshot(envelopes: List[Dict[str, Any]], work_dir: str) -> Optional[str]:
     """Pack the hub's facts into a real Qdrant Edge snapshot tar.
 
-    The device restores this with `update_from_snapshot` — the only sanctioned
-    way to populate its immutable shard. The dense vector is named after the
-    edge adapter (stamped as `payload.model` on every point) so the shapes match
-    on restore; the segment is optimized so its version rises above the empty
-    destination's and the restore actually takes.
+    Delegates to the **shared** `build_snapshot_tar` (one builder, used by the
+    edge tests too) so the hub and device never drift on shard shape. The config
+    carries every named dense slot from the single source of truth, so a mixed
+    text/image fact set round-trips and `update_from_snapshot` — which the device
+    runs against an immutable shard that has both slots — never rejects a shape
+    mismatch. Each envelope carries its named `vectors`, so a missing slot is
+    filled by the builder rather than crashing on a `None` dense vector.
     """
-    import qdrant_edge as qe
-
     if not envelopes:
         return None
-    sample = envelopes[0]
-    dense_name = (sample.get("payload") or {}).get("model", "text_dense")
-    dim = len(sample["vector"])
-
-    shard_dir = os.path.join(work_dir, "hub_shard")
-    os.makedirs(shard_dir, exist_ok=True)
-    cfg = qe.EdgeConfig(
-        vectors={dense_name: qe.EdgeVectorParams(size=dim, distance=qe.Distance.Cosine)},
-        sparse_vectors={SPARSE_VECTOR: qe.EdgeSparseVectorParams(modifier=qe.Modifier.Idf)},
+    return build_snapshot_tar(
+        envelopes,
+        dense_name=vector_space.DEFAULT_DENSE_SLOT,
+        dim=vector_space.DENSE_SLOTS[vector_space.DEFAULT_DENSE_SLOT],
+        work_dir=work_dir,
+        extra_vectors=vector_space.extra_dense_slots(),
     )
-    shard = qe.EdgeShard.create(shard_dir, cfg)
-    try:
-        points = []
-        for env in envelopes:
-            vector: Dict[str, Any] = {dense_name: env["vector"]}
-            if env.get("sparse") is not None:
-                vector[SPARSE_VECTOR] = qe.SparseVector(
-                    indices=env["sparse"]["indices"], values=env["sparse"]["values"]
-                )
-            points.append(qe.Point(id=env["id"], vector=vector, payload=env.get("payload")))
-        shard.update(qe.UpdateOperation.upsert_points(points=points))
-        shard.optimize()
-        shard.flush()
-    finally:
-        shard.close()
-
-    tar_path = os.path.join(work_dir, "snapshot.tar")
-    with tarfile.open(tar_path, "w") as tar:
-        for name in os.listdir(shard_dir):
-            tar.add(os.path.join(shard_dir, name), arcname=name)
-    return tar_path
 
 
 @app.post("/snapshot/{device_id}")

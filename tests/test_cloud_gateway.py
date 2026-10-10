@@ -7,11 +7,15 @@ Criterion:
 
 import os
 import sys
+import tempfile
+
 import pytest
 from fastapi.testclient import TestClient
 
 # Ensure cloud-gateway is on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cloud-gateway"))
+# ...and src, so the edge Edge engine + shared snapshot builder are importable.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import app as gateway_app
 
@@ -133,3 +137,125 @@ def test_conflict_injection_and_retraction(gateway_client):
     assert d_facts[0]["value"] == "methane 120ppm"
     assert d_facts[0]["state"] == "CONFIRMED"
     assert d_facts[0]["confidence"] >= 0.66
+
+
+def test_snapshot_roundtrips_mixed_text_and_image_points(gateway_client):
+    """A1 (P0-1): a text fact and an image fact pushed through the REAL `/ingest`
+    survive a `/snapshot` round-trip into a genuine Edge shard, and dense text,
+    BM25, and image search each find their point.
+
+    This fails on the pre-fix gateway: `/ingest` slotted the dense vector into a
+    `text`/`image` slot but `/facts`+`_all_fact_envelopes` read it back from a
+    hardcoded `dense` slot (so the vector came back `None`), and the snapshot
+    builder did `len(sample["vector"])` on that `None` (TypeError) and packed a
+    single-slot shard the device's two-slot immutable shard rejects.
+    """
+    from qdrant_edge import (
+        Bm25,
+        Distance,
+        EdgeConfig,
+        EdgeShard,
+        EdgeSparseVectorParams,
+        EdgeVectorParams,
+        Modifier,
+        Prefetch,
+        Query,
+        QueryRequest,
+    )
+
+    device = "dev-mix"
+    bm25 = Bm25()
+    text_value = "structural collapse near exit B blocking the stairwell"
+    text_sparse = bm25.embed_document(text_value)
+    text_id, image_id = 7001, 7002
+    text_vec = [0.5] * 384
+    image_vec = [0.3] * 512
+
+    text_env = {
+        "id": text_id,
+        "vector": text_vec,
+        "sparse": {"indices": list(text_sparse.indices), "values": list(text_sparse.values)},
+        "payload": {
+            "value": text_value,
+            "model": "text",
+            "modality": "text",
+            "corroboration_key": "zone_b.structural_status",
+            "reporter_device_id": device,
+            "client_timestamp_ns": 1000,
+        },
+        "client_sequence": 1,
+    }
+    image_env = {
+        "id": image_id,
+        "vector": image_vec,
+        "sparse": None,
+        "payload": {
+            "value": "[photo] smoke in corridor",
+            "model": "image",
+            "modality": "vision",
+            "corroboration_key": "zone_b.visual",
+            "reporter_device_id": device,
+            "client_timestamp_ns": 2000,
+        },
+        "client_sequence": 2,
+    }
+
+    r = gateway_client.post(
+        "/ingest", json={"device_id": device, "envelopes": [text_env, image_env]}
+    )
+    assert r.status_code == 200, r.text
+    assert set(r.json()["acked_ids"]) == {text_id, image_id}
+
+    # /facts must return every named vector per point (no None dense vector).
+    facts_resp = gateway_client.get(f"/facts/{device}")
+    assert facts_resp.status_code == 200
+    returned = {e["id"]: e for e in facts_resp.json()["envelopes"]}
+    assert set(returned) == {text_id, image_id}
+    assert returned[text_id]["vectors"].get("text") is not None
+    assert returned[image_id]["vectors"].get("image") is not None
+    assert returned[text_id]["sparse"] is not None
+
+    # /snapshot must materialize a real Edge tar (no TypeError on a None vector).
+    snap = gateway_client.post(f"/snapshot/{device}", json={"manifest": {}})
+    assert snap.status_code == 200, snap.text
+    assert snap.content, "snapshot body was empty"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tar_path = os.path.join(tmp, "snapshot.tar")
+        with open(tar_path, "wb") as fh:
+            fh.write(snap.content)
+
+        # The device's immutable shard carries BOTH named dense slots + BM25.
+        shard_dir = os.path.join(tmp, "edge_shard")
+        os.makedirs(shard_dir, exist_ok=True)
+        config = EdgeConfig(
+            vectors={
+                "text": EdgeVectorParams(size=384, distance=Distance.Cosine),
+                "image": EdgeVectorParams(size=512, distance=Distance.Cosine),
+            },
+            sparse_vectors={"text_bm25": EdgeSparseVectorParams(modifier=Modifier.Idf)},
+        )
+        shard = EdgeShard.create(shard_dir, config)
+        try:
+            shard.update_from_snapshot(tar_path)
+            shard.optimize()
+
+            def _ids(using, query):
+                req = QueryRequest(
+                    limit=10,
+                    query=Query.Nearest(query=query, using=using),
+                    with_payload=False,
+                    with_vector=False,
+                )
+                return [p.id for p in shard.query(req)]
+
+            # Dense text search finds the text point.
+            assert text_id in _ids("text", text_vec)
+            # Image search finds the image point.
+            assert image_id in _ids("image", image_vec)
+            # BM25 search finds the text point from the restored sparse leg.
+            bm25_ids = _ids("text_bm25", bm25.embed_query("collapse stairwell"))
+            assert text_id in bm25_ids
+        finally:
+            shard.close()
+
