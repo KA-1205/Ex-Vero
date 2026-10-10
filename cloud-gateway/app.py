@@ -192,6 +192,24 @@ class IngestRequest(BaseModel):
     envelopes: List[Dict[str, Any]]
 
 
+def _all_events() -> List[Dict[str, Any]]:
+    """Scroll the whole append-only event log (every key, every device)."""
+    all_events: List[Dict[str, Any]] = []
+    if client is None or not client.collection_exists(EVENTS_COLLECTION):
+        return all_events
+    offset = None
+    while True:
+        pts, offset = client.scroll(
+            EVENTS_COLLECTION, limit=1000, offset=offset, with_payload=True, with_vectors=False
+        )
+        for p in pts:
+            if p.payload:
+                all_events.append(p.payload)
+        if offset is None:
+            break
+    return all_events
+
+
 def _event_id(device_id: str, point_id: int, client_sequence: int) -> str:
     """Deterministic event id so a re-pushed (device, point, seq) is idempotent."""
     raw = f"{device_id}:{point_id}:{client_sequence}".encode()
@@ -398,6 +416,15 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
     event_points: List[models.PointStruct] = []
     acked: List[int] = []
 
+    # Trust is HUB-DERIVED from the log, never read from the client payload
+    # (B2 / P1-2): a device cannot inflate its own weight by sending a high
+    # `device_trust_at_report`. We stamp the reporter's current derived trust at
+    # report time; the fold recomputes trust from the whole log regardless.
+    _trust_now = derive_device_trust(
+        _all_events(), threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
+    )
+    device_trust_at_report = _trust_now.get(req.device_id, DEFAULT_DEVICE_TRUST)
+
     now_ns = int(time.time() * 1e9)
     for env in req.envelopes:
         payload = env.get("payload") or {}
@@ -447,9 +474,7 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
                     "value": payload.get("value"),
                     "client_timestamp_ns": payload.get("client_timestamp_ns"),
                     "received_at_ns": now_ns,
-                    "device_trust_at_report": payload.get(
-                        "device_trust_at_report", DEFAULT_DEVICE_TRUST
-                    ),
+                    "device_trust_at_report": device_trust_at_report,
                 },
             )
         )
@@ -665,11 +690,16 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
     the single sequencer and the verdict is reproducible.
     """
     events = _events_for_key(corroboration_key)
-    result = fold_consensus(events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY)
-    # Trust is derived here (never stored), so the dashboard can watch it move.
-    result["device_trust"] = derive_device_trust(
+    # Trust is derived here from the log (never stored, never client-supplied),
+    # then fed back as the per-device weight so an outvoted device actually
+    # counts for less — trust drives the fold, it is not display-only (B2).
+    device_trust = derive_device_trust(
         events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
     )
+    result = fold_consensus(
+        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY, device_trust=device_trust
+    )
+    result["device_trust"] = device_trust
     return result
 
 
@@ -821,18 +851,13 @@ def inject_conflict(req: InjectConflictRequest, _admin: None = Depends(require_a
 @app.get("/cloud/state")
 def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
     """Merged trusted fleet state across all corroboration keys (API.md §8)."""
-    all_events: List[Dict[str, Any]] = []
-    if client.collection_exists(EVENTS_COLLECTION):
-        offset = None
-        while True:
-            pts, offset = client.scroll(
-                EVENTS_COLLECTION, limit=1000, offset=offset, with_payload=True, with_vectors=False
-            )
-            for p in pts:
-                if p.payload:
-                    all_events.append(p.payload)
-            if offset is None:
-                break
+    all_events = _all_events()
+
+    # Hub-derived trust, computed once from the whole log and used as the fold
+    # weight for every key (B2): unforgeable and not display-only.
+    device_trust = derive_device_trust(
+        all_events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
+    )
 
     by_key: Dict[str, List[Dict[str, Any]]] = {}
     for ev in all_events:
@@ -844,7 +869,9 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
     from datetime import datetime, timezone
     for k in sorted(by_key):
         evts = by_key[k]
-        folded = fold_consensus(evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY)
+        folded = fold_consensus(
+            evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY, device_trust=device_trust
+        )
         if folded.get("status") == "ABSENT" or not folded.get("value"):
             continue
 
@@ -883,8 +910,5 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
             "thumbnail_url": thumb,
         })
 
-    device_trust = derive_device_trust(
-        all_events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
-    )
     return {"facts": facts, "device_trust": device_trust}
 

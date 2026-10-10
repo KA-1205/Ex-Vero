@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional
 
 OBSERVED = "OBSERVED"
 RETRACTED = "RETRACTED"
+RESOLVED = "RESOLVED"
 
 # A supermajority is required to call a multi-device fact CONFIRMED; below it we
 # refuse to silently pick and surface the disagreement as DISPUTED. Overridable
@@ -46,6 +47,15 @@ DEFAULT_THRESHOLD = 0.66
 # An uncorroborated single report is trusted only moderately by default, so
 # corroboration visibly raises confidence.
 DEFAULT_DEVICE_TRUST = 0.7
+
+# Trust smoothing (B2 / P1-2). A Beta(alpha, beta) prior keeps a device with few
+# observations from swinging to 0.0/1.0 on a single (dis)agreement; the clamp
+# keeps derived trust inside a sane band. Defaults are identity (alpha=beta=0,
+# band [0,1]) so trust is unchanged until a deployment configures smoothing.
+DEFAULT_TRUST_ALPHA = 0.0
+DEFAULT_TRUST_BETA = 0.0
+DEFAULT_TRUST_FLOOR = 0.0
+DEFAULT_TRUST_CEILING = 1.0
 
 
 def _round(x: float) -> float:
@@ -98,6 +108,7 @@ def fold_consensus(
     *,
     threshold: float = DEFAULT_THRESHOLD,
     decay: float = 0.0,
+    device_trust: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """Resolve all events for a single `corroboration_key` into one verdict.
 
@@ -119,6 +130,12 @@ def fold_consensus(
       * CONFIRMED — multiple devices and confidence ≥ threshold;
       * DISPUTED  — multiple devices but confidence < threshold; both values
                     surfaced, none silently chosen.
+
+    `device_trust`, when supplied, is the hub-derived per-device trust used as
+    each reporter's weight (B2 / P1-2) — unforgeable, since the hub computes it
+    from the log rather than reading a client-supplied value. When omitted, the
+    per-event `device_trust_at_report` is used (keeps the pure fold self-contained
+    for the unit tests).
     """
     key = events[0]["corroboration_key"] if events else None
 
@@ -144,7 +161,10 @@ def fold_consensus(
     import math
 
     def weight(e: Dict[str, Any]) -> float:
-        trust = float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
+        if device_trust is not None:
+            trust = float(device_trust.get(e["device_id"], DEFAULT_DEVICE_TRUST))
+        else:
+            trust = float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
         recency = math.exp(-decay * (newest_seq - e["seq"]))
         return trust * recency
 
@@ -221,14 +241,43 @@ def fold_consensus(
     }
 
 
+def _resolved_ground_truth(key_events: List[Dict[str, Any]]) -> Optional[Any]:
+    """The winning value of the latest RESOLVED event for a key, if any (D7 hook).
+
+    A human/admin RESOLVED decision is authoritative ground truth: agreement is
+    scored against it regardless of the fold's own status. Ordered by hub `seq`.
+    """
+    resolved = [e for e in key_events if e.get("event_type") == RESOLVED]
+    if not resolved:
+        return None
+    winner = max(resolved, key=lambda e: e.get("seq", 0))
+    return winner.get("value")
+
+
 def derive_device_trust(
-    events: List[Dict[str, Any]], *, threshold: float = DEFAULT_THRESHOLD, decay: float = 0.0
+    events: List[Dict[str, Any]],
+    *,
+    threshold: float = DEFAULT_THRESHOLD,
+    decay: float = 0.0,
+    alpha: float = DEFAULT_TRUST_ALPHA,
+    beta: float = DEFAULT_TRUST_BETA,
+    trust_floor: float = DEFAULT_TRUST_FLOOR,
+    trust_ceiling: float = DEFAULT_TRUST_CEILING,
 ) -> Dict[str, float]:
     """Per-device trust = recency-decayed agreement rate, recomputed from the log
-    (never stored — §7.3). A device's trust is the share of its live reports that
-    matched the fold's resolved value, across every corroboration_key it touched.
+    (never stored, never client-supplied — §7.3 / P1-2). Unforgeable: it is a
+    function of the event log alone.
 
-    This is the number the dashboard shows moving ("Device C: 0.90 → 0.42").
+    A device's trust is the share of its live reports that matched the resolved
+    value, across the keys that can actually adjudicate agreement:
+
+      * a lone (LWW, single live device) key never grants free self-trust;
+      * an exact tie credits no device (so no one gains trust from the fold's
+        alphabetical tie-break);
+      * a RESOLVED decision is authoritative ground truth.
+
+    A Beta(alpha, beta) prior smooths sparse histories and the result is clamped
+    to [trust_floor, trust_ceiling] (all config, identity by default).
     """
     import math
 
@@ -239,8 +288,6 @@ def derive_device_trust(
     # device -> [agree_weight_sum, total_weight_sum]
     tally: Dict[str, List[float]] = {}
     for key_events in by_key.values():
-        resolved = fold_consensus(key_events, threshold=threshold, decay=decay)
-        resolved_value = resolved["value"]
         live = {
             d: e
             for d, e in _latest_by_device(key_events).items()
@@ -248,6 +295,23 @@ def derive_device_trust(
         }
         if not live:
             continue
+
+        ground_truth = _resolved_ground_truth(key_events)
+        if ground_truth is not None:
+            resolved_value = ground_truth
+        else:
+            # A single live device agrees only with itself — not evidence of
+            # trustworthiness, so it earns no agreement credit.
+            if len(live) < 2:
+                continue
+            resolved = fold_consensus(key_events, threshold=threshold, decay=decay)
+            vals = resolved.get("values", [])
+            # An exact tie between the top two values is unadjudicated: credit no
+            # device, so the fold's alphabetical tie-break never hands out trust.
+            if len(vals) >= 2 and vals[0]["support"] == vals[1]["support"]:
+                continue
+            resolved_value = resolved["value"]
+
         newest_seq = max(e["seq"] for e in live.values())
         for device, e in live.items():
             w = math.exp(-decay * (newest_seq - e["seq"]))
@@ -256,4 +320,13 @@ def derive_device_trust(
             if e["value"] == resolved_value:
                 acc[0] += w
 
-    return {d: _round(agree / total) for d, (agree, total) in tally.items() if total}
+    out: Dict[str, float] = {}
+    for d, (agree, total) in tally.items():
+        denom = total + alpha + beta
+        if denom <= 0:
+            continue
+        trust = (agree + alpha) / denom
+        trust = max(trust_floor, min(trust_ceiling, trust))
+        out[d] = _round(trust)
+    return out
+
