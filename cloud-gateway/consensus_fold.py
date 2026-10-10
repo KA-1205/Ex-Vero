@@ -57,6 +57,13 @@ DEFAULT_TRUST_BETA = 0.0
 DEFAULT_TRUST_FLOOR = 0.0
 DEFAULT_TRUST_CEILING = 1.0
 
+# Time-based staleness (B4 / P1-4). A report's weight halves every half-life of
+# real elapsed time (by `received_at_ns`, the hub clock), so two stale reports
+# lose to one fresh correction. The half-life is a per-vertical tunable
+# (config `consensus.half_life_s`); the default is a non-zero 6 hours. The fold
+# stays pure — `now` is injected by the caller, never read inside here.
+DEFAULT_HALF_LIFE_S = 6 * 3600.0
+
 
 def _round(x: float) -> float:
     """Fixed precision so summation-order jitter can never make two equal folds
@@ -109,6 +116,8 @@ def fold_consensus(
     threshold: float = DEFAULT_THRESHOLD,
     decay: float = 0.0,
     device_trust: Optional[Dict[str, float]] = None,
+    now_ns: Optional[int] = None,
+    half_life_ns: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Resolve all events for a single `corroboration_key` into one verdict.
 
@@ -157,16 +166,26 @@ def fold_consensus(
     newest_seq = max(e["seq"] for e in live.values())
 
     # Weight each live report by its reporter's trust, decayed by how stale the
-    # report is relative to the newest (recency). decay=0 → weight == trust.
+    # report is. With a time half-life (B4) staleness is real elapsed time via
+    # the injected `now_ns` and each event's `received_at_ns`; otherwise it falls
+    # back to the hub-seq-distance decay. decay=0 and no half-life → weight==trust.
     import math
+
+    def _recency(e: Dict[str, Any]) -> float:
+        if now_ns is not None and half_life_ns:
+            received = e.get("received_at_ns")
+            if received is None:
+                return 1.0
+            age = max(0.0, float(now_ns) - float(received))
+            return 0.5 ** (age / float(half_life_ns))
+        return math.exp(-decay * (newest_seq - e["seq"]))
 
     def weight(e: Dict[str, Any]) -> float:
         if device_trust is not None:
             trust = float(device_trust.get(e["device_id"], DEFAULT_DEVICE_TRUST))
         else:
             trust = float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
-        recency = math.exp(-decay * (newest_seq - e["seq"]))
-        return trust * recency
+        return trust * _recency(e)
 
     # Group live devices by the value they report. Iterate devices in a fixed
     # (sorted) order so the accumulation is order-independent.

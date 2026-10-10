@@ -42,7 +42,13 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
-from consensus_fold import DEFAULT_DEVICE_TRUST, DEFAULT_THRESHOLD, derive_device_trust, fold_consensus
+from consensus_fold import (
+    DEFAULT_DEVICE_TRUST,
+    DEFAULT_HALF_LIFE_S,
+    DEFAULT_THRESHOLD,
+    derive_device_trust,
+    fold_consensus,
+)
 import vector_space
 
 # The snapshot builder is shared with the edge (one builder, no drift): the hub
@@ -86,6 +92,13 @@ SPARSE_VECTOR = vector_space.SPARSE_SLOT
 # Supermajority needed to call a multi-device fact CONFIRMED (config-overridable).
 CONSENSUS_THRESHOLD = float(os.environ.get("CONSENSUS_THRESHOLD", DEFAULT_THRESHOLD))
 CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
+# Per-vertical staleness half-life in seconds (B4 / P1-4); the fold halves a
+# report's weight every half-life of real elapsed time. Non-zero by default.
+CONSENSUS_HALF_LIFE_S = float(os.environ.get("CONSENSUS_HALF_LIFE_S", DEFAULT_HALF_LIFE_S))
+
+
+def _half_life_ns() -> Optional[float]:
+    return CONSENSUS_HALF_LIFE_S * 1e9 if CONSENSUS_HALF_LIFE_S > 0 else None
 
 
 # --- Device identity & HMAC authentication (B1 / P1-1) ---------------------
@@ -697,7 +710,8 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
         events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY
     )
     result = fold_consensus(
-        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY, device_trust=device_trust
+        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
+        device_trust=device_trust, now_ns=int(time.time() * 1e9), half_life_ns=_half_life_ns(),
     )
     result["device_trust"] = device_trust
     return result
@@ -867,10 +881,12 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
 
     facts = []
     from datetime import datetime, timezone
+    now_ns = int(time.time() * 1e9)
     for k in sorted(by_key):
         evts = by_key[k]
         folded = fold_consensus(
-            evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY, device_trust=device_trust
+            evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
+            device_trust=device_trust, now_ns=now_ns, half_life_ns=_half_life_ns(),
         )
         if folded.get("status") == "ABSENT" or not folded.get("value"):
             continue
