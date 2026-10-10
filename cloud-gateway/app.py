@@ -43,6 +43,7 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
 from consensus_fold import (
+    DEFAULT_CROSS_MODAL_WEIGHT,
     DEFAULT_DEVICE_TRUST,
     DEFAULT_HALF_LIFE_S,
     DEFAULT_THRESHOLD,
@@ -113,6 +114,10 @@ CONSENSUS_HALF_LIFE_S = float(os.environ.get("CONSENSUS_HALF_LIFE_S", DEFAULT_HA
 # Cosine at/above which two non-contradicting values share a semantic cluster
 # (B5 / P1-5). Config-overridable; the contradiction guard always runs first.
 CLUSTER_SIM_THRESHOLD = float(os.environ.get("CONSENSUS_CLUSTER_SIM", DEFAULT_CLUSTER_SIM))
+# Independent cross-modal corroboration vote weight (B6 / P1-6).
+CONSENSUS_CROSS_MODAL_WEIGHT = float(
+    os.environ.get("CONSENSUS_CROSS_MODAL_WEIGHT", DEFAULT_CROSS_MODAL_WEIGHT)
+)
 
 
 def _half_life_ns() -> Optional[float]:
@@ -584,6 +589,8 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
                     "corroboration_key": payload.get("corroboration_key"),
                     "value": payload.get("value"),
                     "value_cluster": value_cluster,
+                    "modality": payload.get("modality", "text"),
+                    "thumbnail_url": payload.get("thumbnail_url"),
                     "client_timestamp_ns": payload.get("client_timestamp_ns"),
                     "received_at_ns": now_ns,
                     "device_trust_at_report": device_trust_at_report,
@@ -811,6 +818,7 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
     result = fold_consensus(
         events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
         device_trust=device_trust, now_ns=int(time.time() * 1e9), half_life_ns=_half_life_ns(),
+        cross_modal_weight=CONSENSUS_CROSS_MODAL_WEIGHT,
     )
     result["device_trust"] = device_trust
     return result
@@ -986,6 +994,7 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
         folded = fold_consensus(
             evts, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
             device_trust=device_trust, now_ns=now_ns, half_life_ns=_half_life_ns(),
+            cross_modal_weight=CONSENSUS_CROSS_MODAL_WEIGHT,
         )
         if folded.get("status") == "ABSENT" or not folded.get("value"):
             continue
@@ -1011,7 +1020,7 @@ def cloud_state(modality: Optional[str] = None) -> Dict[str, Any]:
         else:
             updated_at = datetime.now(timezone.utc).isoformat()
 
-        item_mod = latest_evt.get("modality", "vision" if any(d.startswith("cam-") for d in corrob) else "text")
+        item_mod = latest_evt.get("modality", "text")
         thumb = latest_evt.get("thumbnail_url")
         if modality:
             if modality == "vision" and item_mod != "vision" and not thumb:

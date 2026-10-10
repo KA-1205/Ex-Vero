@@ -64,6 +64,11 @@ DEFAULT_TRUST_CEILING = 1.0
 # stays pure — `now` is injected by the caller, never read inside here.
 DEFAULT_HALF_LIFE_S = 6 * 3600.0
 
+# Cross-modal corroboration (B6 / P1-6). When the winning value is backed by two
+# or more modalities, one extra independent supporting leg of this weight joins
+# the noisy-OR — a vote, not a flat bump. Config `consensus.cross_modal_weight`.
+DEFAULT_CROSS_MODAL_WEIGHT = 0.3
+
 
 def _round(x: float) -> float:
     """Fixed precision so summation-order jitter can never make two equal folds
@@ -118,6 +123,7 @@ def fold_consensus(
     device_trust: Optional[Dict[str, float]] = None,
     now_ns: Optional[int] = None,
     half_life_ns: Optional[float] = None,
+    cross_modal_weight: float = DEFAULT_CROSS_MODAL_WEIGHT,
 ) -> Dict[str, Any]:
     """Resolve all events for a single `corroboration_key` into one verdict.
 
@@ -221,33 +227,34 @@ def fold_consensus(
     winner = values[0]
     winner_weights = [weight(live[d]) for d in winner["devices"]]
 
-    # Confidence = how strongly the winner is corroborated (noisy-OR over its
-    # backers) discounted by how contested it is (share of total support).
-    agree_conf = _noisy_or(winner_weights)
-    agreement_ratio = winner["support"] / total if total else 0.0
-    confidence = _round(agree_conf * agreement_ratio)
-
-    # Cross-modal vote calculation (Task C2)
-    # Cosine / multi-modal agreement between text and vision becomes an extra weighted vote,
-    # capped so one modality cannot outvote the fleet.
-    modal_votes: Dict[str, Dict[str, Any]] = {
-        "text": {"devices": [], "weight": 0.0},
-        "vision": {"devices": [], "weight": 0.0},
-    }
+    # Group the winner's backers by their reported modality (B6 / P1-6). Modality
+    # comes from the event payload ONLY — never a `cam-` device-id sniff. The same
+    # claim seen across modalities shares a value_cluster (B5), so those reports
+    # already landed in this one winning group.
+    modal_votes: Dict[str, Dict[str, Any]] = {}
     for dev_id in sorted(winner["devices"]):
         ev = live[dev_id]
-        mod = "vision" if (ev.get("modality") == "vision" or str(dev_id).startswith("cam-")) else "text"
-        modal_votes[mod]["devices"].append(dev_id)
-        modal_votes[mod]["weight"] = _round(modal_votes[mod]["weight"] + weight(ev))
+        mod = ev.get("modality") or "text"
+        mv = modal_votes.setdefault(mod, {"devices": [], "weight": 0.0})
+        mv["devices"].append(dev_id)
+        mv["weight"] = _round(mv["weight"] + weight(ev))
 
-    for m in modal_votes:
-        modal_votes[m]["weight"] = _round(min(0.5, modal_votes[m]["weight"]))
+    # Cross-modal corroboration is an INDEPENDENT vote inside the noisy-OR, not a
+    # flat additive bump: when the winner is backed by two or more modalities we
+    # add one extra supporting leg of `cross_modal_weight`. Because it rides the
+    # noisy-OR it raises confidence proportionally and can never exceed 1.0, and
+    # it only fires with genuine cross-modal agreement — a single modality on its
+    # own gets no bonus and cannot outvote the fleet.
+    cross_modal = len(modal_votes) >= 2
+    conf_weights = list(winner_weights)
+    if cross_modal:
+        conf_weights.append(cross_modal_weight)
 
-    has_cam = len(modal_votes["vision"]["devices"]) > 0
-    has_text = len(modal_votes["text"]["devices"]) > 0
-    if has_cam and has_text:
-        # Cross-modal corroboration boost (verifiable confidence delta)
-        confidence = _round(min(0.98, confidence + 0.15))
+    # Confidence = how strongly the winner is corroborated (noisy-OR over its
+    # backers, plus any cross-modal leg) discounted by how contested it is.
+    agree_conf = _noisy_or(conf_weights)
+    agreement_ratio = winner["support"] / total if total else 0.0
+    confidence = _round(agree_conf * agreement_ratio)
 
     if len(live) == 1:
         status = "LWW"
@@ -264,6 +271,7 @@ def fold_consensus(
         "confidence": confidence,
         "threshold": threshold,
         "live_device_count": len(live),
+        "cross_modal": cross_modal,
         "modal_votes": modal_votes,
     }
 
