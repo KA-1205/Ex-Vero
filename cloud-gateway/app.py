@@ -248,6 +248,52 @@ async def require_admin(request: "Request") -> None:
         raise HTTPException(status_code=401, detail="admin authentication required")
 
 
+# --- Demo surface gate (A5 / P0-5) -----------------------------------------
+# `/demo/*` exists for Conflict Theater, not the sync protocol. Off by default
+# (404) so a production hub cannot be made to inject scripted history; enabling
+# ENABLE_DEMO_ENDPOINTS=1 exposes it, and an admin token (when configured) is
+# still required. Demo events are confined to reserved `demo-*` device ids and
+# `demo:` keys with a dedicated client_sequence counter, so they never alter a
+# real device's `/delta`.
+DEMO_DEVICE_PREFIX = "demo-"
+DEMO_KEY_PREFIX = "demo:"
+_demo_client_seq = 0
+_demo_seq_lock = threading.Lock()
+
+
+def _demo_endpoints_enabled() -> bool:
+    return os.environ.get("ENABLE_DEMO_ENDPOINTS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def require_demo(request: "Request") -> None:
+    """Dependency for demo endpoints: 404 when disabled, admin token when set."""
+    if not _demo_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="demo endpoints are disabled")
+    await require_admin(request)
+
+
+def _demo_device_id(device_id: str) -> str:
+    return device_id if device_id.startswith(DEMO_DEVICE_PREFIX) else DEMO_DEVICE_PREFIX + device_id
+
+
+def _demo_key(corroboration_key: str) -> str:
+    return corroboration_key if corroboration_key.startswith(DEMO_KEY_PREFIX) else DEMO_KEY_PREFIX + corroboration_key
+
+
+def _next_demo_client_seq() -> int:
+    global _demo_client_seq
+    with _demo_seq_lock:
+        _demo_client_seq += 1
+        return _demo_client_seq
+
+
+def _demo_point_id(corroboration_key: str, value: str, device_id: str) -> int:
+    """Deterministic md5 point id for a demo event (never `hash()`, whose salt is
+    randomized per process and would make a demo non-reproducible)."""
+    raw = f"{corroboration_key}:{value}:{device_id}".encode()
+    return int.from_bytes(hashlib.md5(raw).digest()[:8], "little", signed=False)
+
+
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -1063,28 +1109,40 @@ class InjectConflictRequest(BaseModel):
 
 
 @app.post("/demo/inject-conflict")
-def inject_conflict(req: InjectConflictRequest, _admin: None = Depends(require_admin)) -> Dict[str, Any]:
-    """Scripted conflict injection across multiple devices for demo/testing."""
+def inject_conflict(req: InjectConflictRequest, _demo: None = Depends(require_demo)) -> Dict[str, Any]:
+    """Scripted conflict injection across multiple devices for demo/testing.
+
+    Gated (A5 / P0-5) and confined to the reserved `demo-` namespaces: device ids
+    are prefixed, the key is namespaced, ids are deterministic md5 (never
+    `hash()`), and the client_sequence comes from a dedicated demo counter. A
+    demo therefore never advances a real device's `/delta` or pollutes a real
+    corroboration key.
+    """
+    demo_key = _demo_key(req.corroboration_key)
     events_to_insert = []
     now_ns = int(time.time() * 1e9)
     for dev_id, val in req.assignments.items():
+        demo_dev = _demo_device_id(dev_id)
         seq = _next_seq()
-        pid = abs(hash(f"{req.corroboration_key}:{val}:{dev_id}")) % 1000000 + 1
-        eid = _event_id(dev_id, pid, seq)
+        pid = _demo_point_id(demo_key, val, demo_dev)
+        client_sequence = _next_demo_client_seq()
+        eid = _event_id(demo_dev, pid, client_sequence)
         events_to_insert.append(
             models.PointStruct(
                 id=eid,
                 vector=[0.0],
                 payload={
-                    "device_id": dev_id,
+                    "device_id": demo_dev,
                     "point_id": pid,
                     "event_type": "OBSERVED",
                     "seq": seq,
-                    "client_sequence": seq,
-                    "corroboration_key": req.corroboration_key,
+                    "client_sequence": client_sequence,
+                    "corroboration_key": demo_key,
                     "value": val,
+                    "modality": "text",
                     "client_timestamp_ns": now_ns,
                     "device_trust_at_report": DEFAULT_DEVICE_TRUST,
+                    "_demo": 1,
                 },
             )
         )
@@ -1092,12 +1150,44 @@ def inject_conflict(req: InjectConflictRequest, _admin: None = Depends(require_a
         client.upsert(EVENTS_COLLECTION, points=events_to_insert)
         _persist_seq_highwater()  # P0-4
 
-    # Return updated consensus for the key
+    # Return updated consensus for the demo key
     return {
         "injected": True,
-        "corroboration_key": req.corroboration_key,
-        "consensus": consensus(req.corroboration_key),
+        "corroboration_key": demo_key,
+        "consensus": consensus(demo_key),
     }
+
+
+@app.post("/admin/reset-demo")
+def reset_demo(_demo: None = Depends(require_demo)) -> Dict[str, Any]:
+    """Delete ONLY demo-* data from the hub (A5 / P0-5).
+
+    Demo events are tagged `_demo: 1` and live under `demo-*` device ids and
+    `demo:` keys, so this removes exactly those and never a real-device event.
+    """
+    deleted = {"facts": 0, "events": 0}
+    flt = models.Filter(
+        must=[models.FieldCondition(key="_demo", match=models.MatchValue(value=1))]
+    )
+    for coll, label in ((FACTS_COLLECTION, "facts"), (EVENTS_COLLECTION, "events")):
+        if not client.collection_exists(coll):
+            continue
+        ids: List[Any] = []
+        offset = None
+        while True:
+            pts, offset = client.scroll(
+                coll, scroll_filter=flt, limit=1000, offset=offset,
+                with_payload=False, with_vectors=False,
+            )
+            ids.extend(p.id for p in pts)
+            if offset is None:
+                break
+        if ids:
+            client.delete(
+                coll, points_selector=models.PointIdsList(points=ids)
+            )
+            deleted[label] = len(ids)
+    return {"reset": True, "deleted": deleted}
 
 
 @app.get("/cloud/state")

@@ -128,6 +128,9 @@ def test_fabricated_ids_do_not_count_toward_consensus(authed_client):
 def test_admin_endpoint_requires_token(monkeypatch):
     os.environ["QDRANT_URL"] = ":memory:"
     os.environ["GATEWAY_ADMIN_TOKEN"] = "admin-sekret"
+    # A5: the demo surface is off unless explicitly enabled; enable it here so
+    # this test exercises the admin-token layer, not the demo gate.
+    os.environ["ENABLE_DEMO_ENDPOINTS"] = "1"
     try:
         with TestClient(gateway_app.app) as client:
             payload = {"corroboration_key": "k", "assignments": {"dev-01": "x", "dev-02": "x"}}
@@ -141,3 +144,4 @@ def test_admin_endpoint_requires_token(monkeypatch):
             assert ok.status_code == 200
     finally:
         os.environ.pop("GATEWAY_ADMIN_TOKEN", None)
+        os.environ.pop("ENABLE_DEMO_ENDPOINTS", None)

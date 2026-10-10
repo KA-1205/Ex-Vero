@@ -1,6 +1,7 @@
 import os
 import io
 import hashlib
+import hmac
 import secrets
 import threading
 import time
@@ -108,6 +109,55 @@ _bench_seeded: set = set()
 # instead of the repo's ./shards (D1 Verify-first).
 SHARD_BASE_PATH = os.environ.get("EDGE_SHARD_DIR", "./shards")
 _rogue_devices: Set[str] = set()
+
+# --- Demo / rogue surface gate (A5 / P0-5) ---------------------------------
+# The `/demo/*` endpoints and `/devices/{id}/rogue` exist for the Conflict
+# Theater demo, not for the sync protocol. Off by default, so a production edge
+# cannot be driven into injecting scripted conflicts or flagging devices rogue
+# by an unauthenticated caller. Enable with ENABLE_DEMO_ENDPOINTS=1; when
+# EDGE_ADMIN_TOKEN is also set, the caller must present it in X-Admin-Token.
+# Demo writes are confined to reserved `demo-*` device shards and `demo:` keys
+# (its own client_sequence counter), so they can never touch a real device's
+# data or `/delta`.
+DEMO_DEVICE_PREFIX = "demo-"
+DEMO_KEY_PREFIX = "demo:"
+_demo_client_seq: int = 0
+_demo_seq_lock = threading.Lock()
+
+
+def _demo_endpoints_enabled() -> bool:
+    return os.environ.get("ENABLE_DEMO_ENDPOINTS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _require_demo(request: Request) -> None:
+    """Dependency for demo/rogue endpoints: 404 when the surface is disabled,
+    401 when an admin token is configured but missing/wrong."""
+    if not _demo_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="demo endpoints are disabled")
+    token = os.environ.get("EDGE_ADMIN_TOKEN", "").strip()
+    if token:
+        presented = request.headers.get("x-admin-token") or ""
+        if not hmac.compare_digest(token, presented):
+            raise HTTPException(status_code=401, detail="admin authentication required")
+
+
+def _demo_device_id(device_id: str) -> str:
+    """Confine a demo device to the reserved `demo-` namespace."""
+    return device_id if device_id.startswith(DEMO_DEVICE_PREFIX) else DEMO_DEVICE_PREFIX + device_id
+
+
+def _demo_key(corroboration_key: str) -> str:
+    """Confine a demo corroboration key to the reserved `demo:` namespace."""
+    return corroboration_key if corroboration_key.startswith(DEMO_KEY_PREFIX) else DEMO_KEY_PREFIX + corroboration_key
+
+
+def _next_demo_client_seq() -> int:
+    """Demo's own monotonic sequence counter, never a real device's."""
+    global _demo_client_seq
+    with _demo_seq_lock:
+        _demo_client_seq += 1
+        return _demo_client_seq
+
 
 # Embedding-model stamp guard (D2 / T5). A shard carries the space stamp of the
 # model that produced its vectors; loading it under a different model is refused
@@ -1372,15 +1422,23 @@ class RogueRequest(BaseModel):
 
 
 @app.post("/devices/{device_id}/rogue")
-async def set_device_rogue(device_id: str, req: RogueRequest = RogueRequest()):
-    """Flag or unflag a device as rogue/compromised (demo beat)."""
+async def set_device_rogue(device_id: str, request: Request, req: RogueRequest = RogueRequest()):
+    """Flag or unflag a device as rogue/compromised (demo beat).
+
+    Gated (A5 / P0-5): 404 unless ENABLE_DEMO_ENDPOINTS is set, and 401 without
+    the configured admin token. A production node is not flaggable by default.
+    """
+    _require_demo(request)
+    # Confine the flag to the reserved demo namespace (A5): a demo can never make
+    # a REAL device's future captures corrupt.
+    demo_dev = _demo_device_id(device_id)
     if req.rogue:
-        _rogue_devices.add(device_id)
+        _rogue_devices.add(demo_dev)
     else:
-        _rogue_devices.discard(device_id)
-    activity = log_activity(device_id, "mode_change", f"device rogue mode set to {req.rogue}", None)
-    _broadcast_device_event(device_id, "activity", activity)
-    return {"id": device_id, "rogue": req.rogue}
+        _rogue_devices.discard(demo_dev)
+    activity = log_activity(demo_dev, "mode_change", f"device rogue mode set to {req.rogue}", None)
+    _broadcast_device_event(demo_dev, "activity", activity)
+    return {"id": demo_dev, "rogue": req.rogue}
 
 
 class InjectConflictRequest(BaseModel):
@@ -1389,43 +1447,61 @@ class InjectConflictRequest(BaseModel):
 
 
 @app.post("/demo/inject-conflict")
-async def inject_conflict(req: InjectConflictRequest):
-    """Inject conflicting observations across devices for Conflict Theater."""
-    import time
+async def inject_conflict(request: Request, req: InjectConflictRequest):
+    """Inject conflicting observations across devices for Conflict Theater.
+
+    Gated (A5 / P0-5) and confined to the reserved `demo-` namespaces: every
+    device id is prefixed and every key namespaced, ids are deterministic md5
+    (never Python's randomized `hash()`), and each vector is a REAL embedding of
+    the supplied value (never a constant fill). Demo writes therefore cannot
+    alter a real device's shards or its `/delta`.
+    """
+    _require_demo(request)
     now = _utcnow()
+    demo_key = _demo_key(req.corroboration_key)
     candidates = []
 
-    # Forward to cloud gateway if available
+    # A demo has no image bytes to embed, so it always uses the text adapter and
+    # never fabricates a vision vector.
+    adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+
+    # Forward to the cloud gateway if wired (best-effort: demo only).
     if sync_transport:
         try:
-            sync_transport.inject_conflict(req.model_dump())
-        except Exception:
-            pass
+            sync_transport.inject_conflict(
+                {"corroboration_key": demo_key, "assignments": req.assignments}
+            )
+        except Exception as exc:  # noqa: BLE001 — a demo forward must never 500
+            print(f"demo inject forward failed: {exc}")
 
     for dev_id, val in req.assignments.items():
-        shards = get_or_create_shards(dev_id)
-        elog = get_or_create_event_log(dev_id)
-        pid = generate_point_id(req.corroboration_key, f"{dev_id}_{val}_{time.time()}")
-        # Modality comes from the device's registered kind (config/DEFAULT_FLEET),
-        # not an id-string prefix (F2): a vision device need not be named `cam-*`.
-        is_cam = FLEET_METADATA.get(dev_id, {}).get("kind") == "camera"
-        adapter = next((a for a in adapters if a.modality == ("vision" if is_cam else "text")), adapters[0])
-        # Generate dummy / representative embedding
-        d_vec = [0.1] * adapter.dim
+        demo_dev = _demo_device_id(dev_id)
+        shards = get_or_create_shards(demo_dev)
+        elog = get_or_create_event_log(demo_dev)
+        # Deterministic md5 point id (never `hash()`), no wall-clock input.
+        pid = generate_point_id(demo_key, f"{demo_dev}:{val}")
+        d_vec = adapter.embed(val)  # real embedding, not a dummy fill
         s_vec = bm25.embed_document(val)
         pl = {
             "value": val,
-            "corroboration_key": req.corroboration_key,
-            "modality": "vision" if is_cam else "text",
-            "thumbnail_url": f"/thumbnails/thumb_{pid}.jpg" if is_cam else None,
+            "corroboration_key": demo_key,
+            "modality": "text",
+            "thumbnail_url": None,
             "client_timestamp_ns": int(time.time() * 1_000_000_000),
-            "_sync_meta": {"synced": 1, "syncable": 1, "verdict": "QUEUE_HIGH", "sync_priority": "URGENT"},
+            "_demo": 1,
+            "_sync_meta": {
+                "synced": 1,
+                "syncable": 1,
+                "verdict": "QUEUE_HIGH",
+                "sync_priority": "URGENT",
+                "client_sequence": _next_demo_client_seq(),
+            },
         }
         pt = Point(id=pid, vector={adapter.name: d_vec, "text_bm25": s_vec}, payload=pl)
         shards['mutable'].update(UpdateOperation.upsert_points(points=[pt]))
         elog.append(pid, OBSERVED, device_ts=now)
-        weight = 0.42 if dev_id in _rogue_devices else (0.92 if "cam" in dev_id else 0.88)
-        candidates.append({"value": val, "devices": [dev_id], "weight": weight})
+        weight = 0.42 if demo_dev in _rogue_devices else 0.88
+        candidates.append({"value": val, "devices": [demo_dev], "weight": weight})
 
     unique_vals = set(req.assignments.values())
     outcome_state = "CONFIRMED" if len(unique_vals) <= 1 else "DISPUTED"
@@ -1433,16 +1509,50 @@ async def inject_conflict(req: InjectConflictRequest):
     res_val = list(req.assignments.values())[0] if outcome_state == "CONFIRMED" else None
 
     consensus_frame = {
-        "corroboration_key": req.corroboration_key,
+        "corroboration_key": demo_key,
         "state": outcome_state,
         "confidence": conf,
         "resolved_value": res_val,
         "candidates": candidates,
-        "explanation": f"Injected conflict across {len(req.assignments)} devices for {req.corroboration_key}",
+        "explanation": f"Injected conflict across {len(req.assignments)} devices for {demo_key}",
         "timestamp": now,
     }
     _broadcast_consensus_event(consensus_frame)
-    return {"injected": True, "corroboration_key": req.corroboration_key, "consensus": consensus_frame}
+    return {"injected": True, "corroboration_key": demo_key, "consensus": consensus_frame}
+
+
+def _delete_all_points(shard) -> int:
+    """Delete every point in a shard (used by demo reset on confined `demo-*`
+    shards only)."""
+    from qdrant_edge import ScrollRequest
+    res = shard.scroll(ScrollRequest(limit=100000, with_payload=False, with_vector=False))
+    records = res[0] if isinstance(res, tuple) else res
+    ids = [r.id for r in records]
+    if ids:
+        delete_points(shard, ids)
+    return len(ids)
+
+
+@app.post("/admin/reset-demo")
+async def reset_demo(request: Request):
+    """Delete ONLY `demo-*` data (A5 / P0-5): drop every demo device's shard
+    points and event log, leaving every real device untouched."""
+    _require_demo(request)
+    demo_ids = [d for d in list(device_shards) if d.startswith(DEMO_DEVICE_PREFIX)]
+    deleted = 0
+    for dev_id in demo_ids:
+        shards = device_shards.pop(dev_id, None)
+        if shards:
+            deleted += _delete_all_points(shards['mutable'])
+            deleted += _delete_all_points(shards['immutable'])
+        elog = event_logs.pop(dev_id, None)
+        if elog is not None:
+            deleted += _delete_all_points(elog.shard)
+    # Demo-flagged points that live on a non-prefixed shard (none today, but
+    # keeps the guarantee if demo naming changes) are not touched here; the
+    # reserved namespace is the isolation boundary.
+    _rogue_devices.difference_update(demo_ids)
+    return {"reset": True, "demo_devices": demo_ids, "deleted_points": deleted}
 
 
 @app.get("/devices/{device_id}/conflicts")

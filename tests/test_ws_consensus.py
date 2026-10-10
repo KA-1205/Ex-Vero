@@ -54,7 +54,9 @@ def _init():
     clear_feed()
 
 
-def test_consensus_events_socket_connects_and_receives_a_broadcast():
+def test_consensus_events_socket_connects_and_receives_a_broadcast(monkeypatch):
+    # A5: the demo surface (which drives this broadcast) is off by default.
+    monkeypatch.setenv("ENABLE_DEMO_ENDPOINTS", "1")
     with tempfile.TemporaryDirectory() as tmpdir:
         old = os.getcwd()
         os.chdir(tmpdir)
@@ -80,7 +82,8 @@ def test_consensus_events_socket_connects_and_receives_a_broadcast():
                 assert resp.status_code == 200
 
                 event = ws.receive_json()
-                assert event["corroboration_key"] == "sector-4-gas"
+                # A5: demo keys are namespaced with the reserved `demo:` prefix.
+                assert event["corroboration_key"] == "demo:sector-4-gas"
                 assert event["state"] == "DISPUTED"
         finally:
             os.chdir(old)

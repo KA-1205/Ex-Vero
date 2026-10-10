@@ -129,9 +129,15 @@ def test_cross_device_consensus_reconciles_conflicts(gateway_client):
     assert trust["dev-02"] > trust["dev-03"]
 
 
-def test_conflict_injection_and_retraction(gateway_client):
-    """Tests scripted conflict injection and retractions via gateway endpoints."""
+def test_conflict_injection_and_retraction(gateway_client, monkeypatch):
+    """Tests scripted conflict injection and retractions via gateway endpoints.
+
+    A5: `/demo/*` is off by default. With it enabled, the injection is confined
+    to the reserved `demo:` key namespace, so this reads the prefixed key.
+    """
+    monkeypatch.setenv("ENABLE_DEMO_ENDPOINTS", "1")
     key = "zone_d.gas_leak"
+    demo_key = "demo:" + key
     inj_resp = gateway_client.post(
         "/demo/inject-conflict",
         json={
@@ -146,11 +152,12 @@ def test_conflict_injection_and_retraction(gateway_client):
     )
     assert inj_resp.status_code == 200
     assert inj_resp.json()["injected"] is True
+    assert inj_resp.json()["corroboration_key"] == demo_key
 
     state_resp = gateway_client.get("/cloud/state")
     assert state_resp.status_code == 200
     facts = state_resp.json()["facts"]
-    d_facts = [f for f in facts if f["corroboration_key"] == key]
+    d_facts = [f for f in facts if f["corroboration_key"] == demo_key]
     assert len(d_facts) == 1
     assert d_facts[0]["value"] == "methane 120ppm"
     assert d_facts[0]["state"] == "CONFIRMED"
