@@ -259,3 +259,54 @@ def test_snapshot_roundtrips_mixed_text_and_image_points(gateway_client):
         finally:
             shard.close()
 
+
+def _events_for_point(point_id):
+    """Scroll the gateway's fact_events for one point's events."""
+    flt = gateway_app.models.Filter(
+        must=[gateway_app.models.FieldCondition(
+            key="point_id", match=gateway_app.models.MatchValue(value=point_id))]
+    )
+    pts, _ = gateway_app.client.scroll(
+        gateway_app.EVENTS_COLLECTION, scroll_filter=flt, limit=100,
+        with_payload=True, with_vectors=False,
+    )
+    return pts
+
+
+def test_ingest_is_insert_if_absent_a_retry_keeps_the_event_seq(gateway_client):
+    """A3 (P0-3): re-pushing the same envelope (a crash-retry) must NOT change the
+    event's hub `seq`. Pre-fix, /ingest called _next_seq() unconditionally and
+    overwrote the event with a higher seq; a reordered delta could then flip a
+    verdict. Insert-if-absent keeps the original seq.
+    """
+    device = "dev-retry"
+    pid = 90210
+    env = {
+        "id": pid,
+        "vector": [0.2] * 384,
+        "sparse": None,
+        "payload": {
+            "value": "gas leak in zone k",
+            "model": "text",
+            "modality": "text",
+            "corroboration_key": "zone_k.gas",
+            "reporter_device_id": device,
+            "client_timestamp_ns": 1000,
+        },
+        "client_sequence": 1,
+    }
+
+    r1 = gateway_client.post("/ingest", json={"device_id": device, "envelopes": [env]})
+    assert r1.status_code == 200, r1.text
+    evs1 = _events_for_point(pid)
+    assert len(evs1) == 1
+    seq1 = evs1[0].payload["seq"]
+
+    # Retry the identical push.
+    r2 = gateway_client.post("/ingest", json={"device_id": device, "envelopes": [env]})
+    assert r2.status_code == 200, r2.text
+    evs2 = _events_for_point(pid)
+    assert len(evs2) == 1, "retry duplicated the event"
+    assert evs2[0].payload["seq"] == seq1, "retry changed the event's hub seq"
+
+

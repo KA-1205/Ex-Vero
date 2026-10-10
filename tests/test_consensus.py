@@ -34,10 +34,11 @@ from consensus_fold import (  # noqa: E402
 THRESHOLD = 0.66
 
 
-def _ev(seq, device, value, event_type=OBSERVED, key="zone_c_gas", trust=0.7, ts=None):
+def _ev(seq, device, value, event_type=OBSERVED, key="zone_c_gas", trust=0.7, ts=None, cs=None):
     """Build one event. `seq` is the hub-assigned order; `ts` (wall-clock) is
-    metadata the fold must ignore."""
-    return {
+    metadata the fold must ignore. `cs` is the device's persistent
+    client_sequence (P0-3 within-device ordering) when given."""
+    ev = {
         "corroboration_key": key,
         "device_id": device,
         "value": value,
@@ -46,6 +47,9 @@ def _ev(seq, device, value, event_type=OBSERVED, key="zone_c_gas", trust=0.7, ts
         "client_timestamp_ns": seq * 1_000_000_000 if ts is None else ts,
         "device_trust_at_report": trust,
     }
+    if cs is not None:
+        ev["client_sequence"] = cs
+    return ev
 
 
 def test_two_devices_disagree_yields_disputed_with_both_values():
@@ -168,6 +172,48 @@ def test_derive_device_trust_penalizes_the_disagreeing_device():
     assert trust["dev_a"] == 1.0
     assert trust["dev_b"] == 1.0
     assert trust["dev_c"] < trust["dev_a"], trust
+
+
+def test_delayed_older_observe_after_retract_stays_retracted():
+    """P0-3: within a device, client_sequence orders events — not the hub seq a
+    delayed/retried message happens to get. An OBSERVED retried with a LOW
+    client_sequence but a HIGH hub seq (it reached the hub late) must NOT revive a
+    fact the device retracted at a HIGHER client_sequence.
+
+    This fails on seq-only ordering (the late observe's seq=99 would win) and
+    passes once the fold orders within a device by client_sequence.
+    """
+    e_obs = _ev(1, "dev_a", "gas leak zone c", cs=1)
+    e_ret = _ev(2, "dev_a", None, event_type=RETRACTED, cs=2)
+    e_late_obs = _ev(99, "dev_a", "gas leak zone c", cs=1)  # retry of e_obs, arrives late
+
+    out = fold_consensus([e_obs, e_ret, e_late_obs], threshold=THRESHOLD)
+    assert out["status"] == "ABSENT", out
+    assert out["value"] is None
+
+    # A genuinely newer observe (higher client_sequence) revives it.
+    e_reobs = _ev(100, "dev_a", "gas leak zone c", cs=3)
+    revived = fold_consensus([e_obs, e_ret, e_late_obs, e_reobs], threshold=THRESHOLD)
+    assert revived["status"] == "LWW"
+    assert revived["value"] == "gas leak zone c"
+
+
+def test_retried_and_shuffled_batch_gives_identical_output():
+    """A retried batch (duplicate + delayed events, any order) folds identically —
+    delayed/retried events never flip the verdict (P0-3 done-when)."""
+    events = [
+        _ev(1, "dev_a", "gas leak zone c", cs=1),
+        _ev(2, "dev_b", "gas leak zone c", cs=1),
+        _ev(3, "dev_a", None, event_type=RETRACTED, cs=2),
+        _ev(50, "dev_a", "gas leak zone c", cs=1),  # delayed retry of dev_a's observe
+    ]
+    canonical = json.dumps(fold_consensus(events, threshold=THRESHOLD), sort_keys=True)
+
+    rng = random.Random(99)
+    for _ in range(20):
+        batch = events + events  # retried (duplicated) batch
+        rng.shuffle(batch)
+        assert json.dumps(fold_consensus(batch, threshold=THRESHOLD), sort_keys=True) == canonical
 
 
 @pytest.mark.integration

@@ -263,37 +263,60 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
 
     _ensure_facts_collection()
 
+    # Insert-if-absent (P0-3): a crash-retry must never change an existing
+    # event's hub `seq`, and must never clobber a fact (e.g. re-create a
+    # tombstoned one). So we skip ids the hub already holds and only assign a new
+    # seq / write a point for genuinely new ones. Acks still cover every id.
+    env_ids = [env["id"] for env in req.envelopes]
+    existing_facts = {r.id for r in client.retrieve(
+        FACTS_COLLECTION, ids=env_ids, with_payload=False, with_vectors=False
+    )}
+    event_ids = [
+        _event_id(req.device_id, env["id"], env["client_sequence"]) for env in req.envelopes
+    ]
+    existing_events = {str(r.id) for r in client.retrieve(
+        EVENTS_COLLECTION, ids=event_ids, with_payload=False, with_vectors=False
+    )}
+
     fact_points: List[models.PointStruct] = []
     event_points: List[models.PointStruct] = []
     acked: List[int] = []
 
+    now_ns = int(time.time() * 1e9)
     for env in req.envelopes:
         payload = env.get("payload") or {}
-        vectors: Dict[str, Any] = {}
-        if env.get("vector") is not None:
-            # Place the dense vector in its named slot from the single source of
-            # truth, never by guessing from len(vector).
-            slot = vector_space.slot_for_envelope(env)
-            if slot is None:
-                raise ValueError(
-                    f"cannot place dense vector of length "
-                    f"{len(env['vector'])} into any known slot "
-                    f"{sorted(vector_space.DENSE_SLOTS)}"
-                )
-            vectors[slot] = env["vector"]
+        acked.append(env["id"])
 
-        if env.get("sparse"):
-            vectors[SPARSE_VECTOR] = models.SparseVector(
-                indices=env["sparse"]["indices"], values=env["sparse"]["values"]
+        if env["id"] not in existing_facts:
+            vectors: Dict[str, Any] = {}
+            if env.get("vector") is not None:
+                # Place the dense vector in its named slot from the single source
+                # of truth, never by guessing from len(vector).
+                slot = vector_space.slot_for_envelope(env)
+                if slot is None:
+                    raise ValueError(
+                        f"cannot place dense vector of length "
+                        f"{len(env['vector'])} into any known slot "
+                        f"{sorted(vector_space.DENSE_SLOTS)}"
+                    )
+                vectors[slot] = env["vector"]
+
+            if env.get("sparse"):
+                vectors[SPARSE_VECTOR] = models.SparseVector(
+                    indices=env["sparse"]["indices"], values=env["sparse"]["values"]
+                )
+            fact_points.append(
+                models.PointStruct(id=env["id"], vector=vectors, payload=payload)
             )
-        fact_points.append(
-            models.PointStruct(id=env["id"], vector=vectors, payload=payload)
-        )
+
+        event_id = _event_id(req.device_id, env["id"], env["client_sequence"])
+        if str(event_id) in existing_events:
+            continue  # already logged — keep its original seq (insert-if-absent)
 
         seq = _next_seq()  # hub-assigned ordering; device wall-clock stays metadata
-        event_id = _event_id(req.device_id, env["id"], env["client_sequence"])
-        # Phase 5: carry everything the consensus fold needs. `seq` is the only
-        # ordering key; `client_timestamp_ns` rides along as metadata only.
+        # Phase 5: carry everything the consensus fold needs. Within one device
+        # `client_sequence` orders events; `seq` orders across devices and is the
+        # tie-break. `received_at_ns` is the hub clock (used for P1-4 staleness).
         event_points.append(
             models.PointStruct(
                 id=event_id,
@@ -307,16 +330,18 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
                     "corroboration_key": payload.get("corroboration_key"),
                     "value": payload.get("value"),
                     "client_timestamp_ns": payload.get("client_timestamp_ns"),
+                    "received_at_ns": now_ns,
                     "device_trust_at_report": payload.get(
                         "device_trust_at_report", DEFAULT_DEVICE_TRUST
                     ),
                 },
             )
         )
-        acked.append(env["id"])
 
-    client.upsert(FACTS_COLLECTION, points=fact_points)
-    client.upsert(EVENTS_COLLECTION, points=event_points)
+    if fact_points:
+        client.upsert(FACTS_COLLECTION, points=fact_points)
+    if event_points:
+        client.upsert(EVENTS_COLLECTION, points=event_points)
     return {"acked_ids": acked, "count": len(acked)}
 
 
@@ -548,7 +573,6 @@ def retract_event(req: RetractRequest) -> Dict[str, Any]:
     this point the fact is tombstoned (payload flag) so it drops out of `/facts`
     and `/snapshot` and is reported to pulling devices via `/retracted`.
     """
-    seq = _next_seq()
     event_id = _event_id(req.device_id, req.point_id, req.client_sequence)
     key = req.corroboration_key
     # Resolve the key from the point's own stored observation if not supplied.
@@ -567,22 +591,32 @@ def retract_event(req: RetractRequest) -> Dict[str, Any]:
         # No supplied key and no stored observation to resolve it from.
         raise HTTPException(status_code=404, detail="no observation for (device, point) to retract")
 
-    event_point = models.PointStruct(
-        id=event_id,
-        vector=[0.0],
-        payload={
-            "device_id": req.device_id,
-            "point_id": req.point_id,
-            "event_type": "RETRACTED",
-            "seq": seq,
-            "client_sequence": req.client_sequence,
-            "corroboration_key": key,
-            "value": None,
-            "client_timestamp_ns": req.client_timestamp_ns or int(time.time() * 1e9),
-            "device_trust_at_report": 0.0,
-        },
+    # Insert-if-absent (P0-3): a retried retract keeps its original seq.
+    existing = client.retrieve(
+        EVENTS_COLLECTION, ids=[event_id], with_payload=True, with_vectors=False
     )
-    client.upsert(EVENTS_COLLECTION, points=[event_point])
+    if existing:
+        seq = existing[0].payload.get("seq")
+    else:
+        seq = _next_seq()
+        event_point = models.PointStruct(
+            id=event_id,
+            vector=[0.0],
+            payload={
+                "device_id": req.device_id,
+                "point_id": req.point_id,
+                "event_type": "RETRACTED",
+                "seq": seq,
+                "client_sequence": req.client_sequence,
+                "corroboration_key": key,
+                "value": None,
+                "client_timestamp_ns": req.client_timestamp_ns or int(time.time() * 1e9),
+                "received_at_ns": int(time.time() * 1e9),
+                "device_trust_at_report": 0.0,
+            },
+        )
+        client.upsert(EVENTS_COLLECTION, points=[event_point])
+
 
     # Tombstone the fact if nothing live references the point any more.
     tombstoned = False

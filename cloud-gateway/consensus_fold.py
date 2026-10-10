@@ -54,12 +54,32 @@ def _round(x: float) -> float:
     return round(x, 6)
 
 
+def _event_order_key(e: Dict[str, Any]):
+    """Order one device's events deterministically (P0-3).
+
+    Within a device the persistent `client_sequence` is authoritative, so a
+    delayed or retried event (which keeps its client_sequence) can never override
+    a newer one just because it reached the hub later and got a higher hub `seq`.
+    The hub `seq` is the tie-break, and the fallback for legacy events that carry
+    no client_sequence. Across devices, recency still uses the hub `seq`.
+    """
+    cs = e.get("client_sequence")
+    primary = cs if cs is not None else e["seq"]
+    return (primary, e["seq"])
+
+
 def _latest_by_device(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """Each device's current event = its highest-`seq` event. Ordering is by hub
-    seq only; wall-clock is ignored."""
+    """Each device's current event = its highest-ordered event (client_sequence
+    first, then hub seq). Pure and order-independent: we take the max by key, so
+    insertion order of the event list never changes the result (invariant 6)."""
     latest: Dict[str, Dict[str, Any]] = {}
-    for e in sorted(events, key=lambda e: e["seq"]):
-        latest[e["device_id"]] = e  # later seq overwrites earlier
+    best_key: Dict[str, Any] = {}
+    for e in events:
+        d = e["device_id"]
+        k = _event_order_key(e)
+        if d not in best_key or k > best_key[d]:
+            best_key[d] = k
+            latest[d] = e
     return latest
 
 
