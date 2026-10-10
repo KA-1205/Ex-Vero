@@ -27,12 +27,29 @@ never has to reach the gateway fold — keeping the answer path offline-clean.
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+import re
 
 # Fewer-is-better preference order for the augment step: CONFIRMED first, then
 # unknown/unlabelled, then DISPUTED last (still included, just de-prioritised and
 # flagged). Anything unrecognised sorts with "unknown".
 _STATE_RANK = {"CONFIRMED": 0, "RESOLVED_LWW": 0, None: 1, "UNKNOWN": 1, "DISPUTED": 2}
 _DISPUTED_FLAG = "[DISPUTED] "
+
+# Prompt-injection hardening (C3 / P2-4). Retrieved facts are UNTRUSTED data from
+# field devices. Control bytes (NUL, ESC/ANSI, other C0 controls) are stripped
+# and newlines are flattened so a fact can neither smuggle terminal escapes nor
+# break out of its single context line to forge new prompt structure. The
+# generators additionally delimit the context and instruct the model to ignore
+# any instructions embedded in it (see `adapter.build_grounded_prompt`).
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitize_fact(text: Any) -> str:
+    """Neutralise a single untrusted fact value for safe inclusion in a prompt."""
+    s = "" if text is None else str(text)
+    s = s.replace("\r", " ").replace("\n", " ")  # no multi-line break-out
+    s = _CONTROL_RE.sub("", s)                     # strip control / escape bytes
+    return s.strip()
 
 
 @dataclass
@@ -58,7 +75,7 @@ def select_context(retrieved: List[Any], top_k: int) -> List[Dict[str, Any]]:
     for hit in retrieved:
         payload = getattr(hit, "payload", None) or {}
         state = payload.get("consensus_state")
-        value = payload.get("value", "")
+        value = _sanitize_fact(payload.get("value", ""))
         items.append(
             {
                 "id": getattr(hit, "id", None),
