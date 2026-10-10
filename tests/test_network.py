@@ -81,7 +81,7 @@ def _init(inner_transport):
 
 def _synced_flag(device_id, point_id):
     shard = main.device_shards[device_id]["mutable"]
-    rec = shard.retrieve([point_id], with_payload=True, with_vector=False)
+    rec = shard.retrieve([int(point_id)], with_payload=True, with_vector=False)
     assert rec, f"point {point_id} vanished from the device"
     return rec[0].payload["_sync_meta"]["synced"]
 
@@ -326,7 +326,7 @@ def test_urgent_drains_before_routine_under_degraded():
             client.post(f"/devices/{device_id}/push")
 
             order = [e["point_id"] for e in stub.events if e["device_id"] == device_id]
-            assert order.index(urgent["id"]) < order.index(routine["id"])
+            assert order.index(int(urgent["id"])) < order.index(int(routine["id"]))
         finally:
             os.chdir(old)
 

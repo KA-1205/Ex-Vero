@@ -156,7 +156,7 @@ def test_eviction_removes_oldest_synced_points():
             pids = []
             for i in range(10):
                 cap = _capture_urgent(client, device_id, f"k{i}", f"structural collapse at site {i}")
-                pids.append(cap["id"])
+                pids.append(int(cap["id"]))
 
             # Total should be 10 (no eviction yet - all pending)
             assert _get_total_count(device_id) == 10

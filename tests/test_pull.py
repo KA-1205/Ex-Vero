@@ -75,13 +75,13 @@ def _init(stub):
 def _immutable_has(device_id, point_id):
     """Retrieve a point straight from the device's IMMUTABLE shard (not union)."""
     shard = main.device_shards[device_id]["immutable"]
-    rec = shard.retrieve([point_id], with_payload=True, with_vector=False)
+    rec = shard.retrieve([int(point_id)], with_payload=True, with_vector=False)
     return bool(rec)
 
 
 def _mutable_has(device_id, point_id):
     shard = main.device_shards[device_id]["mutable"]
-    rec = shard.retrieve([point_id], with_payload=True, with_vector=False)
+    rec = shard.retrieve([int(point_id)], with_payload=True, with_vector=False)
     return bool(rec)
 
 

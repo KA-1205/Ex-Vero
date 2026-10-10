@@ -125,7 +125,9 @@ class StubTransport:
 
     # --- test conveniences ------------------------------------------------
     def server_has(self, device_id: str, point_id: int) -> bool:
-        return point_id in self.store.get(device_id, {})
+        # The capture API returns the point id as a string (JS-safe), but the
+        # hub keys facts by the integer point id — coerce so a str id round-trips.
+        return int(point_id) in self.store.get(device_id, {})
 
     def server_count(self, device_id: str) -> int:
         return len(self.store.get(device_id, {}))

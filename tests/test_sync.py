@@ -79,7 +79,7 @@ def _init(stub):
 def _synced_flag(device_id, point_id):
     """Read `_sync_meta.synced` for a point straight from the mutable shard."""
     shard = main.device_shards[device_id]["mutable"]
-    rec = shard.retrieve([point_id], with_payload=True, with_vector=False)
+    rec = shard.retrieve([int(point_id)], with_payload=True, with_vector=False)
     assert rec, f"point {point_id} vanished from the device"
     return rec[0].payload["_sync_meta"]["synced"]
 
@@ -169,7 +169,7 @@ def test_successful_push_marks_synced_and_reaches_server():
             assert stub.server_has(device_id, pid)
 
             # Invariant 9: the pushed envelope records the embedding model+version.
-            env = stub.store[device_id][pid]
+            env = stub.store[device_id][int(pid)]
             assert env["payload"]["model"] == main.adapters[0].name
             assert env["payload"]["model_version"] == main.adapters[0].version
         finally:
@@ -267,7 +267,7 @@ def test_urgent_drains_before_routine():
             client.post(f"/devices/{device_id}/push")
             # The gateway recorded events in push order: URGENT before ROUTINE.
             order = [e["point_id"] for e in stub.events if e["device_id"] == device_id]
-            assert order.index(u_id) < order.index(r_id)
+            assert order.index(int(u_id)) < order.index(int(r_id))
         finally:
             os.chdir(old)
 
