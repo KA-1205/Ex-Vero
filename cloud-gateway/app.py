@@ -64,6 +64,21 @@ try:
 except ImportError:  # Docker image: snapshot.py is COPY'd next to app.py
     from snapshot import build_snapshot_tar
 
+try:
+    from edge_node.value_cluster import (
+        DEFAULT_CLUSTER_SIM,
+        cluster_id as _cluster_id,
+        contradicts as _contradicts,
+        cosine as _cosine,
+    )
+except ImportError:  # Docker image: value_cluster.py is COPY'd next to app.py
+    from value_cluster import (
+        DEFAULT_CLUSTER_SIM,
+        cluster_id as _cluster_id,
+        contradicts as _contradicts,
+        cosine as _cosine,
+    )
+
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
 # Creating a collection on a cold Qdrant Server legitimately takes tens of
@@ -95,6 +110,9 @@ CONSENSUS_DECAY = float(os.environ.get("CONSENSUS_DECAY", "0.0"))
 # Per-vertical staleness half-life in seconds (B4 / P1-4); the fold halves a
 # report's weight every half-life of real elapsed time. Non-zero by default.
 CONSENSUS_HALF_LIFE_S = float(os.environ.get("CONSENSUS_HALF_LIFE_S", DEFAULT_HALF_LIFE_S))
+# Cosine at/above which two non-contradicting values share a semantic cluster
+# (B5 / P1-5). Config-overridable; the contradiction guard always runs first.
+CLUSTER_SIM_THRESHOLD = float(os.environ.get("CONSENSUS_CLUSTER_SIM", DEFAULT_CLUSTER_SIM))
 
 
 def _half_life_ns() -> Optional[float]:
@@ -229,6 +247,65 @@ def _event_id(device_id: str, point_id: int, client_sequence: int) -> str:
     return hashlib.md5(raw).hexdigest()
 
 
+def _cluster_reps_for_key(corroboration_key: str) -> List[Dict[str, Any]]:
+    """Existing value clusters already recorded for a corroboration_key: a list
+    of {"cluster", "value", "vector"} drawn from the stored facts (B5)."""
+    reps: Dict[str, Dict[str, Any]] = {}
+    if client is None or not client.collection_exists(FACTS_COLLECTION):
+        return []
+    flt = models.Filter(
+        must=[models.FieldCondition(
+            key="corroboration_key", match=models.MatchValue(value=corroboration_key))]
+    )
+    offset = None
+    while True:
+        pts, offset = client.scroll(
+            FACTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+            with_payload=True, with_vectors=True,
+        )
+        for p in pts:
+            payload = p.payload or {}
+            cl = payload.get("value_cluster")
+            if cl is None:
+                continue
+            if cl not in reps:
+                env = _envelope_from_point(p)
+                reps[cl] = {
+                    "cluster": cl,
+                    "value": payload.get("value"),
+                    "vector": env.get("vector"),
+                }
+        if offset is None:
+            break
+    return list(reps.values())
+
+
+def _assign_value_cluster(
+    corroboration_key: str, value: Optional[str], vector: Optional[List[float]],
+    reps: List[Dict[str, Any]],
+) -> str:
+    """Assign `value` to an existing cluster or mint a new one (B5).
+
+    The contradiction guard runs first: a different number or flipped negation
+    can never join an existing cluster, however similar the embedding. Otherwise
+    a cosine >= CLUSTER_SIM_THRESHOLD against a cluster's representative merges
+    them (paraphrases cluster). `reps` is updated in place so later envelopes in
+    the same batch cluster against earlier ones too.
+    """
+    for rep in reps:
+        if _contradicts(value, rep.get("value")):
+            continue
+        rv = rep.get("vector")
+        if vector is not None and rv is not None:
+            if _cosine(vector, rv) >= CLUSTER_SIM_THRESHOLD:
+                return rep["cluster"]
+        elif value == rep.get("value"):
+            return rep["cluster"]
+    cl = _cluster_id(corroboration_key, value)
+    reps.append({"cluster": cl, "value": value, "vector": vector})
+    return cl
+
+
 def _ensure_events_collection() -> None:
     if not client.collection_exists(EVENTS_COLLECTION):
         # Events are never searched by similarity; a 1-dim dummy vector satisfies
@@ -278,6 +355,11 @@ def _ensure_facts_collection() -> None:
         )
         client.create_payload_index(
             FACTS_COLLECTION, "reporter_device_id", models.PayloadSchemaType.KEYWORD
+        )
+        # B5: value clustering scrolls existing facts for a corroboration_key, so
+        # index it to keep that lookup off a full scan on a real server.
+        client.create_payload_index(
+            FACTS_COLLECTION, "corroboration_key", models.PayloadSchemaType.KEYWORD
         )
 
 
@@ -439,9 +521,25 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
     device_trust_at_report = _trust_now.get(req.device_id, DEFAULT_DEVICE_TRUST)
 
     now_ns = int(time.time() * 1e9)
+    # Per-key cluster representatives, seeded from stored facts and extended as we
+    # process the batch, so paraphrases within one push cluster together (B5).
+    batch_reps: Dict[str, List[Dict[str, Any]]] = {}
     for env in req.envelopes:
         payload = env.get("payload") or {}
         acked.append(env["id"])
+
+        # Assign the semantic value cluster (B5 / P1-5): paraphrases merge, a
+        # different number or flipped negation stays separate (contradiction
+        # guard). Stored on both the fact and the event so the fold groups by it.
+        ckey = payload.get("corroboration_key")
+        value_cluster = None
+        if ckey is not None:
+            if ckey not in batch_reps:
+                batch_reps[ckey] = _cluster_reps_for_key(ckey)
+            value_cluster = _assign_value_cluster(
+                ckey, payload.get("value"), env.get("vector"), batch_reps[ckey]
+            )
+            payload["value_cluster"] = value_cluster
 
         if env["id"] not in existing_facts:
             vectors: Dict[str, Any] = {}
@@ -485,6 +583,7 @@ def ingest(req: IngestRequest, authed_device: Optional[str] = Depends(require_de
                     "client_sequence": env["client_sequence"],
                     "corroboration_key": payload.get("corroboration_key"),
                     "value": payload.get("value"),
+                    "value_cluster": value_cluster,
                     "client_timestamp_ns": payload.get("client_timestamp_ns"),
                     "received_at_ns": now_ns,
                     "device_trust_at_report": device_trust_at_report,

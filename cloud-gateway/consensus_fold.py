@@ -187,14 +187,22 @@ def fold_consensus(
             trust = float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
         return trust * _recency(e)
 
-    # Group live devices by the value they report. Iterate devices in a fixed
-    # (sorted) order so the accumulation is order-independent.
+    # Group live devices by the SEMANTIC value cluster they report (B5), falling
+    # back to the raw value when no cluster id is present. Paraphrases carrying
+    # the same `value_cluster` fold together; a contradicting report (different
+    # number/negation) was given a different cluster at ingest and stays separate.
+    # Iterate devices in a fixed (sorted) order so accumulation is order-independent.
     groups: Dict[Any, Dict[str, Any]] = {}
     for device in sorted(live):
         e = live[device]
-        g = groups.setdefault(e["value"], {"support": 0.0, "devices": []})
+        ck = e.get("value_cluster") or e["value"]
+        g = groups.setdefault(ck, {"support": 0.0, "devices": [], "value": e["value"]})
         g["support"] += weight(e)
         g["devices"].append(device)
+        # Representative display value: the smallest value string in the cluster,
+        # chosen deterministically so the output never depends on event order.
+        if str(e["value"]) < str(g["value"]):
+            g["value"] = e["value"]
 
     total = sum(g["support"] for g in groups.values())
 
@@ -202,11 +210,11 @@ def fold_consensus(
     values = sorted(
         (
             {
-                "value": v,
+                "value": g["value"],
                 "support": _round(g["support"]),
                 "devices": sorted(g["devices"]),
             }
-            for v, g in groups.items()
+            for g in groups.values()
         ),
         key=lambda x: (-x["support"], str(x["value"])),
     )
@@ -332,11 +340,25 @@ def derive_device_trust(
             resolved_value = resolved["value"]
 
         newest_seq = max(e["seq"] for e in live.values())
+        # Agreement is by semantic cluster (B5): a paraphrase in the winning
+        # cluster counts as agreeing even if its exact wording differs. The
+        # winning cluster is the one whose representative is `resolved_value`.
+        def _cluster(ev: Dict[str, Any]):
+            return ev.get("value_cluster") or ev["value"]
+
+        winner_cluster = None
+        for ev in live.values():
+            if ev["value"] == resolved_value:
+                winner_cluster = _cluster(ev)
+                break
+        if winner_cluster is None:
+            winner_cluster = resolved_value  # RESOLVED ground truth with no live match
+
         for device, e in live.items():
             w = math.exp(-decay * (newest_seq - e["seq"]))
             acc = tally.setdefault(device, [0.0, 0.0])
             acc[1] += w
-            if e["value"] == resolved_value:
+            if _cluster(e) == winner_cluster or e["value"] == resolved_value:
                 acc[0] += w
 
     out: Dict[str, float] = {}

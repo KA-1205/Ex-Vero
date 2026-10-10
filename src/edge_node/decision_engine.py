@@ -3,6 +3,7 @@ import time
 from typing import List, Tuple, Dict, Any
 from qdrant_edge import EdgeShard, Query, QueryRequest as EdgeQueryRequest, Point
 from .adapter import Adapter
+from .value_cluster import contradicts
 
 Verdict = str  # one of: "KEEP_LOCAL", "QUEUE_LOW", "QUEUE_HIGH", "REDACT_AND_QUEUE", "REJECT"
 
@@ -46,29 +47,33 @@ class DecisionEngine:
             return False, f"Missing required fields: {', '.join(missing)}"
         return True, ""
 
-    def _novelty_check(self, shard: EdgeShard, adapter: Adapter, vector: List[float], exclude_point_id: int = None) -> Tuple[float, str]:
-        """Query shard for nearest neighbor and return similarity score and reason."""
+    def _novelty_check(self, shard: EdgeShard, adapter: Adapter, vector: List[float], exclude_point_id: int = None) -> Tuple[float, str, Any]:
+        """Query shard for nearest neighbor and return (similarity, reason,
+        neighbor_value). The neighbor's value lets the caller apply the B5
+        contradiction guard so a near-duplicate that disagrees on a number or
+        negation is not dropped as redundant."""
         if shard is None:
             # No shard object - treat as having moderate novelty baseline
-            return 0.75, "No shard to check novelty (using baseline novelty)"
+            return 0.75, "No shard to check novelty (using baseline novelty)", None
         try:
             query_obj = Query.Nearest(query=vector, using=adapter.name)
             edge_request = EdgeQueryRequest(limit=1, query=query_obj, with_vector=False, with_payload=True)
             results = shard.query(edge_request)
             if not results:
                 # No prior points - treat as having moderate novelty baseline
-                return 0.75, "No prior points found (using baseline novelty)"
+                return 0.75, "No prior points found (using baseline novelty)", None
             # Filter out the point we're trying to insert (if it already exists)
             if exclude_point_id is not None:
                 results = [r for r in results if r.id != exclude_point_id]
                 if not results:
-                    return 0.75, "No other prior points found (using baseline novelty)"
+                    return 0.75, "No other prior points found (using baseline novelty)", None
             # similarity score is in results[0].score (cosine similarity)
             similarity = results[0].score
-            return similarity, f"Novelty score {similarity:.3f}"
+            neighbor_value = (results[0].payload or {}).get("value")
+            return similarity, f"Novelty score {similarity:.3f}", neighbor_value
         except Exception as e:
             # If error due to dimension mismatch etc., treat as novel
-            return 0.0, f"Error during novelty check: {e}"
+            return 0.0, f"Error during novelty check: {e}", None
 
     def evaluate(self, payload: Dict[str, Any], vector: List[float], shard: EdgeShard, adapter: Adapter, exclude_point_id: int = None) -> Tuple[Verdict, str]:
         """
@@ -81,7 +86,13 @@ class DecisionEngine:
         has_pii, pii_reason = self._check_pii(value)
         
         # 2. Novelty check
-        novelty_score, novelty_reason = self._novelty_check(shard, adapter, vector, exclude_point_id)
+        novelty_score, novelty_reason, neighbor_value = self._novelty_check(shard, adapter, vector, exclude_point_id)
+
+        # B5 contradiction guard: a near-duplicate that disagrees on a number or
+        # on negation ("5 bar" vs "50 bar", "safe" vs "not safe") is a genuinely
+        # different claim, never redundant — so it must never be REJECTed as a
+        # duplicate even when its embedding is nearly identical.
+        contradicts_neighbor = contradicts(value, neighbor_value)
         
         # 3. Urgency check
         urgency, matched_keywords = self._compute_urgency(value)
@@ -98,7 +109,7 @@ class DecisionEngine:
         queue_high_from_urgency = False
         
         if has_pii:
-            if novelty_score >= self.novelty_high - 1e-9:
+            if novelty_score >= self.novelty_high - 1e-9 and not contradicts_neighbor:
                 verdict = "REJECT"
                 reason = f"{pii_reason}; {novelty_reason}"
             elif urgency >= self.urgency_threshold:
@@ -110,7 +121,7 @@ class DecisionEngine:
         else:
             # Use generous epsilon for REJECT threshold to handle float precision
             reject_threshold = self.novelty_high - 0.02  # 0.98 - 0.02 = 0.96
-            if novelty_score >= reject_threshold:
+            if novelty_score >= reject_threshold and not contradicts_neighbor:
                 verdict = "REJECT"
                 reason = f"Redundant: {novelty_reason}"
             else:
