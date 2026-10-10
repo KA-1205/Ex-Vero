@@ -221,8 +221,11 @@ Every number below comes from real code run against labelled fixtures. No figure
 | Hybrid search recall | <!-- TODO: paste from your benchmark output --> | labelled fixtures |
 | Bytes sent vs sync-everything | <!-- TODO: paste from your benchmark output --> | benchmark run |
 | Consensus / conflict resolver accuracy | <!-- TODO: paste from your benchmark output --> | labelled pairs |
+| Crash safety | **50/50 facts recovered** after SIGKILL + restart (0 lost) | `tools/crash_test.py` → `results/crash_safety.json` |
 
 Recall and resolver margins are deliberately narrower than the original hardcoded claims, and per-shape results are returned so a reader can see where each number comes from.
+
+**Crash safety (D1/T10):** `tools/crash_test.py` runs a real edge node in a subprocess against a throwaway shard dir (`EDGE_SHARD_DIR`), captures 50 facts, `SIGKILL`s it, restarts, and counts survivors. `optimize()` alone did **not** survive the kill (facts were lost); adding `shard.flush()` after each capture and after `mark_synced` made captures durable with no WAL. Latest run: 50/50 recovered — see `results/crash_safety.json`.
 
 ## Deploying to Vercel
 

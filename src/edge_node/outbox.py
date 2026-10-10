@@ -140,6 +140,9 @@ def mark_synced(shard: EdgeShard, point_ids: List[int]) -> None:
     )
     shard.update(op)
     shard.optimize()
+    # Durability (D1 / T10): persist the synced flag to disk so a crash right
+    # after an ack cannot resurrect an already-synced point as pending.
+    shard.flush()
 
 
 def retraction_marker_id(target_point_id: int) -> int:

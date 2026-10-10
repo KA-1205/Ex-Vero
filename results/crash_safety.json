@@ -1,0 +1,14 @@
+{
+  "scenario": "capture_then_sigkill_then_restart",
+  "captured": 50,
+  "recovered": 50,
+  "lost": 0,
+  "durable": true,
+  "capture_latency_ms_p50": 22.69,
+  "shard_dir_override": "EDGE_SHARD_DIR",
+  "config": "tiny-edge.yaml",
+  "flush_added": true,
+  "note": "optimize() alone did NOT survive a SIGKILL (facts were lost); adding shard.flush() after each capture write and after mark_synced made captures durable with no WAL. mark_synced persists by the same flush path.",
+  "platform": "linux",
+  "python": "3.11.16"
+}

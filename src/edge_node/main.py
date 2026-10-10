@@ -103,7 +103,10 @@ CONSENSUS_THRESHOLD: float = 0.66
 MAX_LOCAL_POINTS: int = 500
 # Device ids whose benchmark corpus has already been seeded this process.
 _bench_seeded: set = set()
-SHARD_BASE_PATH = "./shards"
+# Where device shards live on disk. Overridable so a crash/durability harness
+# (tools/crash_test.py, D1) can point a subprocess at a throwaway temp dir
+# instead of the repo's ./shards (D1 Verify-first).
+SHARD_BASE_PATH = os.environ.get("EDGE_SHARD_DIR", "./shards")
 _rogue_devices: Set[str] = set()
 
 # Pre-configured demo fleet (Phase 1)
@@ -673,6 +676,10 @@ async def capture(device_id: str, raw_request: Request):
     point = Point(id=point_id, vector=point_vectors, payload=payload)
     mutable_shard.update(UpdateOperation.upsert_points(points=[point]))
     mutable_shard.optimize()
+    # Durability (D1 / T10): optimize() alone did not survive a SIGKILL in the
+    # crash harness (facts were lost), so flush the segment to disk after the
+    # write. Measured cost is recorded in results/crash_safety.json.
+    mutable_shard.flush()
 
     # Eviction check
     evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS)
