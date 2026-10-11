@@ -2,6 +2,7 @@ import os
 import io
 import hashlib
 import hmac
+import re
 import secrets
 import threading
 import time
@@ -102,6 +103,19 @@ CONFLICT_THRESHOLD: float = 0.5
 # `consensus.confidence_threshold`; the Cloud Gateway applies the same value.
 CONSENSUS_THRESHOLD: float = 0.66
 MAX_LOCAL_POINTS: int = 500
+# Presentation tunables (C5), loaded from config in the lifespan. No fabricated
+# UI constants in the handlers: the sync backoff is derived from the real
+# consecutive-failure count, and the activity sparkline from the real ring
+# buffer. VISION_CFG carries the CLIP severity-score map + label prompts.
+SYNC_BACKOFF_BASE_MS: int = 1000
+SYNC_BACKOFF_CAP_MS: int = 60000
+SPARKLINE_BUCKETS: int = 12
+VISION_CFG: Dict[str, Any] = {}
+# Last hub-derived per-device trust seen from a /cloud/state fold (B2 is the only
+# source of a real trust number). Used so the device list/detail surfaces the
+# real value when the hub has computed one, and `null` otherwise — never a
+# fabricated constant (C5).
+_last_hub_device_trust: Dict[str, float] = {}
 # Device ids whose benchmark corpus has already been seeded this process.
 _bench_seeded: set = set()
 # Where device shards live on disk. Overridable so a crash/durability harness
@@ -260,6 +274,15 @@ async def lifespan(app: FastAPI):
     # Consensus supermajority (Phase 5/9) — same key the gateway fold reads.
     consensus_config = full_config.get('consensus', {})
     CONSENSUS_THRESHOLD = float(consensus_config.get('confidence_threshold', 0.66))
+
+    # Presentation tunables (C5): sync backoff, sparkline, vision score map.
+    global SYNC_BACKOFF_BASE_MS, SYNC_BACKOFF_CAP_MS, SPARKLINE_BUCKETS, VISION_CFG
+    sync_config = full_config.get('sync', {})
+    SYNC_BACKOFF_BASE_MS = int(sync_config.get('backoff_base_ms', 1000))
+    SYNC_BACKOFF_CAP_MS = int(sync_config.get('backoff_cap_ms', 60000))
+    ui_config = full_config.get('ui', {})
+    SPARKLINE_BUCKETS = int(ui_config.get('sparkline_buckets', 12))
+    VISION_CFG = full_config.get('vision', {}) or {}
 
     # Initialize BM25 embedder (default config)
     bm25 = Bm25()
@@ -456,6 +479,65 @@ def _memory_dict(mutable_shard, total_count: int) -> Dict[str, Any]:
         "over_cap": st["over_cap"],
         "status": st["status"],
     }
+
+
+def _activity_sparkline(device_id: str, buckets: Optional[int] = None) -> List[int]:
+    """A real histogram of this device's activity entries (C5).
+
+    The ring buffer is split oldest→newest into `buckets` equal columns and each
+    column is the count of entries that fall in it. No fabricated constant
+    series: an idle device returns all-zeros, a busy one shows its real shape.
+    """
+    n = buckets or SPARKLINE_BUCKETS
+    if n <= 0:
+        return []
+    with _activity_lock:
+        entries = [e for e in _activity_buffer if e["device_id"] == device_id]
+    out = [0] * n
+    if not entries:
+        return out
+    entries.reverse()  # oldest first
+    import math
+    size = max(1, math.ceil(len(entries) / n))
+    for i in range(n):
+        out[i] = len(entries[i * size:(i + 1) * size])
+    return out
+
+
+def _device_trust(device_id: str) -> Optional[float]:
+    """The real hub-derived trust for a device, or None when the hub has not
+    computed one (C5). Never a fabricated constant."""
+    return _last_hub_device_trust.get(device_id)
+
+
+def _next_backoff_ms(consecutive_failures: int) -> int:
+    """Exponential retry backoff derived from the REAL consecutive-failure count
+    (C5): base * 2**(failures-1), capped. 0 when there is no active failure."""
+    if consecutive_failures <= 0:
+        return 0
+    return int(min(SYNC_BACKOFF_CAP_MS, SYNC_BACKOFF_BASE_MS * (2 ** (consecutive_failures - 1))))
+
+
+def _last_push_summary(device_id: str) -> Dict[str, Any]:
+    """The last real push record for a device from the network push log (C5).
+
+    network.get_push_log() records true bytes/duration/attempted/accepted/failed
+    and priority mix per push, so the sync panel shows measured numbers instead
+    of zero placeholders. Empty dict when the device has never pushed.
+    """
+    for entry in reversed(network.get_push_log()):
+        if entry.get("device_id") not in (None, device_id):
+            continue
+        return {
+            "bytes": entry.get("bytes", 0),
+            "duration_ms": round(entry.get("duration_ms", 0.0), 1),
+            "points_attempted": entry.get("attempted", 0),
+            "points_accepted": entry.get("accepted", 0),
+            "points_failed": entry.get("failed", 0),
+            "priority_mix": entry.get("priority_mix", {}),
+            "mode": entry.get("mode", network.get_mode()),
+        }
+    return {}
 
 
 # Activity ring buffer helpers (Phase 8)
@@ -684,38 +766,37 @@ async def capture(device_id: str, raw_request: Request):
             print(f"Thumbnail generation error: {e}")
             thumbnail_url = None
 
-        # C1 Severity ladder & vision inferences
-        ladder_prompts = [
-            "a small contained fire",
-            "a large fire engulfing a room",
-            "a building fully ablaze",
-            "a normal room"
-        ]
+        # Severity ladder & vision inferences (C5): the score map comes from
+        # config, and the ladder is only populated from REAL CLIP similarities.
+        # When the CLIP text adapter is unavailable we emit NO ladder rather than
+        # fabricating severity numbers the model never produced.
+        ladder_prompts = [str(p.get("prompt")) for p in VISION_CFG.get("severity_prompts", [])]
+        sim_offset = float(VISION_CFG.get("score_sim_offset", 0.10))
+        sim_scale = float(VISION_CFG.get("score_sim_scale", 0.25)) or 1.0
+        clamp_min = float(VISION_CFG.get("score_clamp_min", 0.05))
+        clamp_max = float(VISION_CFG.get("score_clamp_max", 0.95))
         ladder = []
-        if clip_text_adapter is not None:
+        if clip_text_adapter is not None and ladder_prompts:
             try:
                 for p in ladder_prompts:
                     t_vec = clip_text_adapter.embed(p)
                     sim = sum(a * b for a, b in zip(dense_vector, t_vec))
-                    score = round(max(0.05, min(0.95, (sim - 0.10) / 0.25)), 2)
+                    score = round(max(clamp_min, min(clamp_max, (sim - sim_offset) / sim_scale)), 2)
                     ladder.append({"prompt": p, "score": score})
             except Exception:
-                pass
-        if not ladder:
-            ladder = [
-                {"prompt": "a small contained fire", "score": 0.20},
-                {"prompt": "a large fire engulfing a room", "score": 0.85},
-                {"prompt": "a building fully ablaze", "score": 0.35},
-                {"prompt": "a normal room", "score": 0.05}
-            ]
+                ladder = []
         label_val = form.get("label") if is_multipart else None
         if not label_val:
             label_val = "fire" if any(w in value.lower() for w in ("fire", "flame")) else ("smoke" if "smoke" in value.lower() else "none")
+        # Confidence is the strongest real severity signal in the ladder, not a
+        # per-label constant. With no ladder (no CLIP) there is no honest
+        # confidence to report, so it is omitted.
         vision_meta = {
             "label": str(label_val),
-            "confidence": 0.91 if label_val in ("fire", "smoke") else 0.88,
             "severity_ladder": ladder,
         }
+        if ladder:
+            vision_meta["confidence"] = max(item["score"] for item in ladder)
     else:
         adapter = text_adapter
         if device_id in _rogue_devices:
@@ -1529,12 +1610,12 @@ async def inject_conflict(request: Request, req: InjectConflictRequest):
         pt = Point(id=pid, vector={adapter.name: d_vec, "text_bm25": s_vec}, payload=pl)
         shards['mutable'].update(UpdateOperation.upsert_points(points=[pt]))
         elog.append(pid, OBSERVED, device_ts=now)
-        weight = 0.42 if demo_dev in _rogue_devices else 0.88
+        weight = 0.42 if demo_dev in _rogue_devices else 0.88  # hardcode-ok: scripted demo theater
         candidates.append({"value": val, "devices": [demo_dev], "weight": weight})
 
     unique_vals = set(req.assignments.values())
     outcome_state = "CONFIRMED" if len(unique_vals) <= 1 else "DISPUTED"
-    conf = 0.95 if outcome_state == "CONFIRMED" else 0.52
+    conf = 0.95 if outcome_state == "CONFIRMED" else 0.52  # hardcode-ok: scripted demo theater
     res_val = list(req.assignments.values())[0] if outcome_state == "CONFIRMED" else None
 
     consensus_frame = {
@@ -1641,8 +1722,7 @@ async def list_devices():
         
         dev_meta = FLEET_METADATA.get(device_id, {})
         name = dev_meta.get("name", device_id)
-        trust = 0.42 if device_id in _rogue_devices else (0.92 if "cam" in device_id else 0.88)
-        
+
         devices.append({
             "id": device_id,
             "name": name,
@@ -1653,8 +1733,8 @@ async def list_devices():
             "connectivity": network.get_mode(),
             "memory": _memory_dict(mutable_shard, total_count),
             "last_sync_at": last_sync,
-            "trust": trust,
-            "activity_sparkline": [3, 5, 2, 8, 1],
+            "trust": _device_trust(device_id),
+            "activity_sparkline": _activity_sparkline(device_id),
         })
     return {"devices": devices}
 
@@ -1695,8 +1775,7 @@ async def get_device(device_id: str):
     
     dev_meta = FLEET_METADATA.get(device_id, {})
     name = dev_meta.get("name", device_id)
-    trust = 0.42 if device_id in _rogue_devices else (0.92 if "cam" in device_id else 0.88)
-    
+
     return {
         "id": device_id,
         "name": name,
@@ -1707,8 +1786,8 @@ async def get_device(device_id: str):
         "connectivity": network.get_mode(),
         "memory": _memory_dict(mutable_shard, total_count),
         "last_sync_at": last_sync,
-        "trust": trust,
-        "activity_sparkline": [3, 5, 2, 8, 1],
+        "trust": _device_trust(device_id),
+        "activity_sparkline": _activity_sparkline(device_id),
     }
 
 
@@ -1968,9 +2047,8 @@ async def get_sync_status(device_id: str):
     last_attempt = None
     last_success = None
     consecutive_failures = 0
-    last_push = {}
     last_pull = {}
-    
+
     for entry in _activity_buffer:
         if entry["device_id"] == device_id:
             if entry["kind"] == "push_attempt":
@@ -1981,27 +2059,25 @@ async def get_sync_status(device_id: str):
                 else:
                     consecutive_failures = 0
                     last_success = entry["timestamp"]
-                # Parse last push details
-                last_push = {
-                    "bytes": 0,  # Would need to track this
-                    "duration_ms": 0,
-                    "points_attempted": 0,
-                    "points_accepted": 0,
-                    "points_failed": 0,
-                    "mode": network.get_mode(),
-                }
-            elif entry["kind"] == "pull_result":
-                last_pull = {
-                    "at": entry["timestamp"],
-                    "points_received": 0,
-                }
-    
+            elif entry["kind"] == "pull_result" and not last_pull:
+                # Real count parsed from the logged detail ("pulled N points"),
+                # not a zero placeholder (C5).
+                received = 0
+                m = re.search(r"pulled\s+(\d+)", entry["detail"])
+                if m:
+                    received = int(m.group(1))
+                last_pull = {"at": entry["timestamp"], "points_received": received}
+
+    # last_push comes from the real network push log (measured bytes/duration/
+    # accepted), not fabricated zeros (C5).
+    last_push = _last_push_summary(device_id)
+
     return {
         "pending": pending,
         "last_attempt_at": last_attempt,
         "last_success_at": last_success,
         "consecutive_failures": consecutive_failures,
-        "next_backoff_ms": 4000,
+        "next_backoff_ms": _next_backoff_ms(consecutive_failures),
         "last_push": last_push,
         "last_pull": last_pull,
     }
@@ -2034,6 +2110,14 @@ async def get_cloud_state(state: Optional[str] = None, zone: Optional[str] = Non
         try:
             cloud_res = sync_transport.get_cloud_state()
             if cloud_res and isinstance(cloud_res.get("facts"), list):
+                # Cache the hub-derived per-device trust so the device list/detail
+                # can surface the real number (C5 / B2); it is the only honest
+                # trust source.
+                dt = cloud_res.get("device_trust")
+                if isinstance(dt, dict):
+                    _last_hub_device_trust.update(
+                        {k: float(v) for k, v in dt.items() if isinstance(v, (int, float))}
+                    )
                 if modality:
                     cloud_res["facts"] = [
                         f for f in cloud_res["facts"]

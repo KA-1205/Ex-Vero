@@ -233,6 +233,7 @@ class NetworkTransport:
         attempted = len(envelopes)
         t0 = time.perf_counter()
         entry = {
+            "device_id": device_id,
             "mode": _mode,
             "bytes": nbytes,
             "attempted": attempted,

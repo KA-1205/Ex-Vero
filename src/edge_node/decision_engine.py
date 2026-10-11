@@ -19,6 +19,11 @@ class DecisionEngine:
         self.novelty_low = float(policy_config.get("novelty_threshold_low", 0.70))
         self.required_fields = set(policy_config.get("required_fields", []))
         self.bandwidth = policy_config.get("bandwidth", "FULL")  # OFFLINE, DEGRADED, FULL
+        # Tunables (C5): no bare numeric literals in the pipeline below. Defaults
+        # reproduce the previous behaviour exactly.
+        self.novelty_baseline = float(policy_config.get("novelty_baseline", 0.75))
+        self.reject_margin = float(policy_config.get("reject_margin", 0.02))
+        self.float_epsilon = float(policy_config.get("float_epsilon", 1e-9))
 
     def _compute_urgency(self, text: str) -> Tuple[float, List[str]]:
         """Return urgency score 0-1 based on keyword presence and matched keywords."""
@@ -54,19 +59,19 @@ class DecisionEngine:
         negation is not dropped as redundant."""
         if shard is None:
             # No shard object - treat as having moderate novelty baseline
-            return 0.75, "No shard to check novelty (using baseline novelty)", None
+            return self.novelty_baseline, "No shard to check novelty (using baseline novelty)", None
         try:
             query_obj = Query.Nearest(query=vector, using=adapter.name)
             edge_request = EdgeQueryRequest(limit=1, query=query_obj, with_vector=False, with_payload=True)
             results = shard.query(edge_request)
             if not results:
                 # No prior points - treat as having moderate novelty baseline
-                return 0.75, "No prior points found (using baseline novelty)", None
+                return self.novelty_baseline, "No prior points found (using baseline novelty)", None
             # Filter out the point we're trying to insert (if it already exists)
             if exclude_point_id is not None:
                 results = [r for r in results if r.id != exclude_point_id]
                 if not results:
-                    return 0.75, "No other prior points found (using baseline novelty)", None
+                    return self.novelty_baseline, "No other prior points found (using baseline novelty)", None
             # similarity score is in results[0].score (cosine similarity)
             similarity = results[0].score
             neighbor_value = (results[0].payload or {}).get("value")
@@ -109,7 +114,7 @@ class DecisionEngine:
         queue_high_from_urgency = False
         
         if has_pii:
-            if novelty_score >= self.novelty_high - 1e-9 and not contradicts_neighbor:
+            if novelty_score >= self.novelty_high - self.float_epsilon and not contradicts_neighbor:
                 verdict = "REJECT"
                 reason = f"{pii_reason}; {novelty_reason}"
             elif urgency >= self.urgency_threshold:
@@ -120,7 +125,7 @@ class DecisionEngine:
                 reason = f"{pii_reason}"
         else:
             # Use generous epsilon for REJECT threshold to handle float precision
-            reject_threshold = self.novelty_high - 0.02  # 0.98 - 0.02 = 0.96
+            reject_threshold = self.novelty_high - self.reject_margin
             if novelty_score >= reject_threshold and not contradicts_neighbor:
                 verdict = "REJECT"
                 reason = f"Redundant: {novelty_reason}"

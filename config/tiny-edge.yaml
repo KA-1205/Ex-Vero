@@ -41,9 +41,26 @@ policy:
     - "structural collapse"
     - "gas leak"
     - "flood"
+  # A constrained node redacts/holds PII exactly like the full profile — the
+  # patterns must load here too, or a tiny node would silently sync raw PII (C5).
+  pii_patterns:
+    - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN
+    - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # email
+  # Decision-engine tunables (C5): same named keys as the full profile.
+  novelty_baseline: 0.75
+  reject_margin: 0.02
+  float_epsilon: 1.0e-9
 
 memory:
   max_local_points: 200
 
 consensus:
   confidence_threshold: 0.66
+
+# Sync-status + dashboard tunables (C5): named keys, documented defaults.
+sync:
+  backoff_base_ms: 1000
+  backoff_cap_ms: 60000
+
+ui:
+  sparkline_buckets: 12

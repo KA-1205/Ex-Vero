@@ -49,6 +49,14 @@ policy:
   required_fields: ["status", "client_timestamp_ns", "reporter_device_id"]
   bandwidth: "FULL"
   trust_decay: 0.3
+  # Decision-engine tunables (C5): no bare numeric literals in the logic module.
+  # novelty_baseline is the similarity assumed when there is no shard / no prior
+  # point to compare against; reject_margin is subtracted from
+  # novelty_threshold_high to get the "redundant" cutoff; float_epsilon is the
+  # precision slack when a PII near-duplicate is compared to the high bound.
+  novelty_baseline: 0.75
+  reject_margin: 0.02
+  float_epsilon: 1.0e-9
 
 conflict:
   # Dense COSINE similarity above which two same-zone reports are treated as the
@@ -101,12 +109,32 @@ network:
 memory:
   max_local_points: 500
 
+# Sync status presentation (C5). The retry backoff shown by
+# GET /devices/{id}/sync is derived from the real consecutive-failure count:
+# next = min(cap, base * 2**(failures-1)); 0 when there is no active failure.
+sync:
+  backoff_base_ms: 1000
+  backoff_cap_ms: 60000
+
+# Dashboard presentation tunables (C5). The activity sparkline is a real
+# histogram of a device's entries in the activity ring buffer, bucketed into
+# this many columns — never a fabricated constant series.
+ui:
+  sparkline_buckets: 12
+
 vision:
   severity_prompts:
     - prompt: "a small contained fire"
     - prompt: "a large fire engulfing a room"
     - prompt: "a building fully ablaze"
     - prompt: "a normal room"
+  # Linear map from a CLIP cosine similarity to a 0-1 severity score (C5):
+  # score = clamp((sim - sim_offset) / sim_scale, clamp_min, clamp_max). No bare
+  # literals in the capture handler.
+  score_sim_offset: 0.10
+  score_sim_scale: 0.25
+  score_clamp_min: 0.05
+  score_clamp_max: 0.95
   labels:
     - label: "fire"
       prompt: "a photo of flames or fire"
