@@ -167,6 +167,7 @@ def fold_consensus(
             "confidence": 0.0,
             "threshold": threshold,
             "live_device_count": 0,
+            "contributions": [],
         }
 
     newest_seq = max(e["seq"] for e in live.values())
@@ -186,12 +187,13 @@ def fold_consensus(
             return 0.5 ** (age / float(half_life_ns))
         return math.exp(-decay * (newest_seq - e["seq"]))
 
-    def weight(e: Dict[str, Any]) -> float:
+    def _trust_of(e: Dict[str, Any]) -> float:
         if device_trust is not None:
-            trust = float(device_trust.get(e["device_id"], DEFAULT_DEVICE_TRUST))
-        else:
-            trust = float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
-        return trust * _recency(e)
+            return float(device_trust.get(e["device_id"], DEFAULT_DEVICE_TRUST))
+        return float(e.get("device_trust_at_report", DEFAULT_DEVICE_TRUST))
+
+    def weight(e: Dict[str, Any]) -> float:
+        return _trust_of(e) * _recency(e)
 
     # Group live devices by the SEMANTIC value cluster they report (B5), falling
     # back to the raw value when no cluster id is present. Paraphrases carrying
@@ -263,6 +265,22 @@ def fold_consensus(
     else:
         status = "DISPUTED"
 
+    # Per-device breakdown of exactly what each live report contributed to the
+    # verdict (D4 / T2 "why this verdict"): the value it reported, the trust used
+    # as its base weight, the recency factor applied, and the final weight. Built
+    # in a fixed (sorted) device order and rounded with the same helper, so the
+    # breakdown is as order-independent and byte-stable as the rest of the fold.
+    contributions = [
+        {
+            "device": device,
+            "value": live[device]["value"],
+            "trust": _round(_trust_of(live[device])),
+            "recency": _round(_recency(live[device])),
+            "weight": _round(weight(live[device])),
+        }
+        for device in sorted(live)
+    ]
+
     return {
         "corroboration_key": key,
         "status": status,
@@ -273,6 +291,78 @@ def fold_consensus(
         "live_device_count": len(live),
         "cross_modal": cross_modal,
         "modal_votes": modal_votes,
+        "contributions": contributions,
+    }
+
+
+def explain_fold(folded: Dict[str, Any]) -> Dict[str, Any]:
+    """Template, LLM-free "why this verdict" reasons for a fold (D4 / T2).
+
+    Pure and deterministic: every number quoted is read straight out of `folded`
+    (itself order-independent), so the same verdict always produces byte-identical
+    reasons. No model, no network — a template per status that states the real
+    fold numbers (support, agreement ratio, confidence, threshold, device counts),
+    plus a cross-modal line when the winner is backed by more than one modality.
+    """
+    status = folded.get("status")
+    key = folded.get("corroboration_key")
+    value = folded.get("value")
+    confidence = folded.get("confidence", 0.0)
+    threshold = folded.get("threshold", DEFAULT_THRESHOLD)
+    live = int(folded.get("live_device_count", 0))
+    values = folded.get("values", [])
+
+    total = _round(sum(v.get("support", 0.0) for v in values))
+    winner = values[0] if values else None
+    winner_support = winner.get("support", 0.0) if winner else 0.0
+    winner_devices = winner.get("devices", []) if winner else []
+    agreement = _round((winner_support / total)) if total else 0.0
+
+    reasons: List[str] = []
+    if status == "ABSENT":
+        reasons.append(
+            f"No live report remains for '{key}': every observation has been "
+            f"retracted, so there is nothing to corroborate."
+        )
+    elif status == "LWW":
+        device = winner_devices[0] if winner_devices else None
+        reasons.append(
+            f"Uncorroborated: one live device ('{device}') reports '{value}'. "
+            f"A single source cannot corroborate itself, so confidence is "
+            f"{confidence} and the fact is shown as UNCORROBORATED "
+            f"(threshold {threshold})."
+        )
+    elif status == "CONFIRMED":
+        reasons.append(
+            f"Confirmed: {len(winner_devices)} of {live} live devices agree on "
+            f"'{value}' (support {winner_support} of {total}, agreement "
+            f"{agreement}); confidence {confidence} is at or above the "
+            f"threshold {threshold}."
+        )
+    elif status == "DISPUTED":
+        competing = ", ".join(
+            f"'{v.get('value')}' (support {v.get('support')})" for v in values
+        )
+        reasons.append(
+            f"Disputed: {live} live devices do not agree. The leading value "
+            f"'{value}' holds support {winner_support} of {total} (agreement "
+            f"{agreement}); confidence {confidence} is below the threshold "
+            f"{threshold}, so no value is chosen. Values: {competing}."
+        )
+
+    if folded.get("cross_modal"):
+        modalities = sorted((folded.get("modal_votes") or {}).keys())
+        reasons.append(
+            f"Cross-modal corroboration: the winning value is backed by "
+            f"{len(modalities)} modalities ({', '.join(modalities)}), adding one "
+            f"independent supporting vote that raised confidence."
+        )
+
+    return {
+        "status": status,
+        "corroboration_key": key,
+        "reasons": reasons,
+        "summary": " ".join(reasons),
     }
 
 

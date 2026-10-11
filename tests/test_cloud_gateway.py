@@ -420,6 +420,49 @@ def test_restart_resumes_seq_from_meta_point_without_reissuing(gateway_client):
     assert new_seq > high_before, "restart re-issued an old seq"
 
 
+# --- D4 / T2: "why this verdict" explain endpoint ---------------------------
+
+def _consensus_explain_three_agree(gateway_client, key):
+    for i, dev in enumerate(("dev-e1", "dev-e2", "dev-e3"), start=1):
+        env = {
+            "id": 820000 + i,
+            "vector": [0.1] * 384,
+            "sparse": None,
+            "payload": {
+                "value": "gas leak zone e",
+                "model": "text",
+                "modality": "text",
+                "corroboration_key": key,
+                "reporter_device_id": dev,
+                "client_timestamp_ns": i,
+            },
+            "client_sequence": 1,
+        }
+        r = gateway_client.post("/ingest", json={"device_id": dev, "envelopes": [env]})
+        assert r.status_code == 200, r.text
+
+
+def test_consensus_explain_endpoint_returns_contributions_and_reasons(gateway_client):
+    """D4 / T2: GET /consensus/{key}/explain returns the fold PLUS a per-device
+    `contributions` breakdown and template reasons that quote the real numbers."""
+    key = "zone_e.gas"
+    _consensus_explain_three_agree(gateway_client, key)
+
+    resp = gateway_client.get(f"/consensus/{key}/explain")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["status"] == "CONFIRMED"
+    # Per-device breakdown for all three live devices.
+    assert {c["device"] for c in data["contributions"]} == {"dev-e1", "dev-e2", "dev-e3"}
+    for c in data["contributions"]:
+        assert set(c) == {"device", "value", "trust", "recency", "weight"}
+    # Reasons quote the real fold numbers.
+    assert data["reasons"]
+    assert str(data["confidence"]) in data["summary"]
+    assert str(data["threshold"]) in data["summary"]
+
+
 # --- F1: trust smoothing (Beta prior + clamp) is wired from gateway config ----
 
 def _trust_events_three_vs_one():

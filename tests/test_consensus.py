@@ -28,6 +28,7 @@ from consensus_fold import (  # noqa: E402
     OBSERVED,
     RETRACTED,
     derive_device_trust,
+    explain_fold,
     fold_consensus,
 )
 
@@ -219,6 +220,90 @@ def test_retried_and_shuffled_batch_gives_identical_output():
         batch = events + events  # retried (duplicated) batch
         rng.shuffle(batch)
         assert json.dumps(fold_consensus(batch, threshold=THRESHOLD), sort_keys=True) == canonical
+
+
+# --- D4 / T2: "why this verdict" contributions + explain ---------------------
+
+
+def test_fold_exposes_per_device_contributions():
+    """D4: the fold carries a per-device breakdown — value, trust used, recency
+    weight, final weight — for every live device, in sorted order."""
+    events = [
+        _ev(1, "dev_a", "gas leak zone c"),
+        _ev(2, "dev_b", "gas leak zone c"),
+        _ev(3, "dev_c", "no leak zone c"),
+    ]
+    out = fold_consensus(events, threshold=THRESHOLD)
+    contribs = out["contributions"]
+    assert [c["device"] for c in contribs] == ["dev_a", "dev_b", "dev_c"]
+    for c in contribs:
+        assert set(c) == {"device", "value", "trust", "recency", "weight"}
+        # decay=0, no half-life → recency is 1.0 and weight == trust.
+        assert c["recency"] == 1.0
+        assert c["weight"] == c["trust"]
+    by_dev = {c["device"]: c for c in contribs}
+    assert by_dev["dev_c"]["value"] == "no leak zone c"
+
+
+def _explain(events):
+    out = fold_consensus(events, threshold=THRESHOLD)
+    return out, explain_fold(out)
+
+
+def test_explain_states_real_numbers_for_each_shape():
+    """D4 done-when: for 1 / 2-agree / 2-vs-1 / 3-vs-1 / 1-vs-1 the reason text
+    quotes the fold's REAL numbers (confidence, threshold, support)."""
+    # 1 device → LWW/uncorroborated.
+    out, exp = _explain([_ev(1, "dev_a", "x")])
+    assert out["status"] == "LWW"
+    assert str(out["confidence"]) in exp["summary"]
+    assert str(out["threshold"]) in exp["summary"]
+    assert "UNCORROBORATED" in exp["summary"]
+
+    # 2 agree → CONFIRMED.
+    out, exp = _explain([_ev(1, "dev_a", "x"), _ev(2, "dev_b", "x")])
+    assert out["status"] == "CONFIRMED"
+    assert str(out["confidence"]) in exp["summary"]
+    assert str(out["threshold"]) in exp["summary"]
+
+    # 2 vs 1 → the leading value's real support is quoted.
+    out, exp = _explain([
+        _ev(1, "dev_a", "x"), _ev(2, "dev_b", "x"), _ev(3, "dev_c", "y"),
+    ])
+    winner_support = out["values"][0]["support"]
+    assert str(winner_support) in exp["summary"]
+    assert str(out["confidence"]) in exp["summary"]
+
+    # 3 vs 1.
+    out, exp = _explain([
+        _ev(1, "dev_a", "x"), _ev(2, "dev_b", "x"),
+        _ev(3, "dev_d", "x"), _ev(4, "dev_c", "y"),
+    ])
+    assert str(out["values"][0]["support"]) in exp["summary"]
+    assert str(out["confidence"]) in exp["summary"]
+
+    # 1 vs 1 → DISPUTED, both values named.
+    out, exp = _explain([_ev(1, "dev_a", "x"), _ev(2, "dev_b", "y")])
+    assert out["status"] == "DISPUTED"
+    assert "'x'" in exp["summary"] and "'y'" in exp["summary"]
+    assert str(out["confidence"]) in exp["summary"]
+    assert str(out["threshold"]) in exp["summary"]
+
+
+def test_explain_is_deterministic_under_shuffle():
+    """D4 done-when: the explanation is byte-identical regardless of event order."""
+    events = [
+        _ev(1, "dev_a", "x"), _ev(2, "dev_b", "x"),
+        _ev(3, "dev_c", "y"), _ev(4, "dev_d", "x"),
+    ]
+    canonical = json.dumps(explain_fold(fold_consensus(events, threshold=THRESHOLD)), sort_keys=True)
+    rng = random.Random(7)
+    for _ in range(20):
+        shuffled = events[:]
+        rng.shuffle(shuffled)
+        assert json.dumps(
+            explain_fold(fold_consensus(shuffled, threshold=THRESHOLD)), sort_keys=True
+        ) == canonical
 
 
 @pytest.mark.integration

@@ -52,6 +52,7 @@ from consensus_fold import (
     DEFAULT_TRUST_CEILING,
     DEFAULT_TRUST_FLOOR,
     derive_device_trust,
+    explain_fold,
     fold_consensus,
 )
 import vector_space
@@ -1000,6 +1001,31 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
     )
     result["device_trust"] = device_trust
     return result
+
+
+@app.get("/consensus/{corroboration_key}/explain")
+def consensus_explain(corroboration_key: str) -> Dict[str, Any]:
+    """"Why this verdict" for a fact (D4 / T2): the trust-weighted fold plus a
+    per-device `contributions` breakdown and template, LLM-free reasons that
+    quote the real fold numbers.
+
+    The reasons come from the pure `consensus_fold.explain_fold`, so they are
+    deterministic (byte-identical for the same event set regardless of insertion
+    order) and quote only numbers the fold actually produced — no model, no
+    network.
+    """
+    events = _events_for_key(corroboration_key)
+    device_trust = _derive_trust(events)
+    folded = fold_consensus(
+        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
+        device_trust=device_trust, now_ns=int(time.time() * 1e9), half_life_ns=_half_life_ns(),
+        cross_modal_weight=CONSENSUS_CROSS_MODAL_WEIGHT,
+    )
+    explanation = explain_fold(folded)
+    folded["device_trust"] = device_trust
+    folded["reasons"] = explanation["reasons"]
+    folded["summary"] = explanation["summary"]
+    return folded
 
 
 class RetractRequest(BaseModel):
