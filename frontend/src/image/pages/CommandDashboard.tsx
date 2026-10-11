@@ -57,7 +57,7 @@ export function CommandDashboard() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {facts.map((f) => {
                     const isConfirmed = f.status === 'CONFIRMED'
-                    const confPct = Math.round(f.confidence * 100)
+                    const confPct = f.confidence === null ? null : Math.round(f.confidence * 100)
 
                     return (
                       <div
@@ -96,7 +96,7 @@ export function CommandDashboard() {
                             </div>
                           )}
                           <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono text-[9px] font-bold">
-                            {confPct}% conf
+                            {confPct === null ? '—' : `${confPct}% conf`}
                           </div>
                         </div>
 

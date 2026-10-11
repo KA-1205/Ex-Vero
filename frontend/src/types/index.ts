@@ -104,7 +104,7 @@ export interface ConsensusEvent {
 }
 export interface CloudFact {
   id: string; corroboration_key: string; zone?: string; summary: string; status: 'CONFIRMED' | 'DISPUTED' | 'UNCORROBORATED'
-  confidence: number; corroborating_devices: string[]; last_updated: string
+  confidence: number | null; corroborating_devices: string[]; last_updated: string
 }
 export interface ApiCloudFact {
   corroboration_key: string; state: 'CONFIRMED' | 'DISPUTED' | 'UNCORROBORATED'; value: string; confidence: number | null

@@ -207,7 +207,7 @@ function ZoneTile({ keyName, fact, records, onOpen }: { keyName: string; fact?: 
     <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#315C86]">
       <div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-xs font-semibold">{fact?.zone ?? zoneLabel(keyName)}</span><StatePill state={state} /></div>
       <Thumb src={latest?.thumbnail_url ?? fact?.thumbnail_url} alt={latest?.content_preview ?? fact?.summary ?? keyName} className="mt-2 aspect-video" />
-      <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[10px] text-ink-dim"><span>{fact ? `${Math.round(fact.confidence * 100)}% confidence` : '—'}</span><span>{fact ? `${fact.corroborating_devices.length} cameras` : '—'}</span></div>
+      <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[10px] text-ink-dim"><span>{fact?.confidence != null ? `${Math.round(fact.confidence * 100)}% confidence` : '—'}</span><span>{fact ? `${fact.corroborating_devices.length} cameras` : '—'}</span></div>
       <div className="mt-1 flex justify-between gap-2 text-[10px] text-ink-faint"><span>{records.length > 1 ? `+${records.length - 1} similar` : '—'}</span><span>{latest ? timeSince(latest.captured_at) : '—'}</span></div>
     </button>
   )
@@ -215,7 +215,7 @@ function ZoneTile({ keyName, fact, records, onOpen }: { keyName: string; fact?: 
 
 function DisputeCard({ fact, records, explanation }: { fact: CloudFact; records: MemoryRecord[]; explanation: string }) {
   const claims = records.slice(0, 2)
-  return <div className="border border-alert/50 bg-alert/5 p-2"><div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-[10px] font-semibold">{fact.zone ?? fact.corroboration_key}</span><MonoValue className="text-[10px] text-alert">{Math.round(fact.confidence * 100)}%</MonoValue></div><div className="mt-2 grid grid-cols-2 gap-2">{claims.map((record) => <div key={record.id} className="min-w-0"><Thumb src={record.thumbnail_url} alt={record.content_preview} className="aspect-video" /><div className="mt-1 truncate font-mono text-[9px] text-ink-dim">{record.content_preview}</div></div>)}{claims.length === 0 && <div className="col-span-2 font-mono text-[10px] text-ink-faint">No frame thumbnails available</div>}</div><div className="mt-2 truncate font-mono text-[10px] text-ink-dim">{explanation}</div></div>
+  return <div className="border border-alert/50 bg-alert/5 p-2"><div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-[10px] font-semibold">{fact.zone ?? fact.corroboration_key}</span><MonoValue className="text-[10px] text-alert">{fact.confidence == null ? '—' : `${Math.round(fact.confidence * 100)}%`}</MonoValue></div><div className="mt-2 grid grid-cols-2 gap-2">{claims.map((record) => <div key={record.id} className="min-w-0"><Thumb src={record.thumbnail_url} alt={record.content_preview} className="aspect-video" /><div className="mt-1 truncate font-mono text-[9px] text-ink-dim">{record.content_preview}</div></div>)}{claims.length === 0 && <div className="col-span-2 font-mono text-[10px] text-ink-faint">No frame thumbnails available</div>}</div><div className="mt-2 truncate font-mono text-[10px] text-ink-dim">{explanation}</div></div>
 }
 
 function EvidenceCard({ entry }: { entry: DecisionFeedEntry }) {

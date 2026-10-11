@@ -199,7 +199,7 @@ export async function fetchMemoryRecords(deviceId: string, filters: MemoryFilter
 export async function fetchMemoryDetail(deviceId: string, pointId: string): Promise<MemoryDetail> {
   if (mock.USE_MOCKS) {
     const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId) ?? mock.mockMemoryRecords(deviceId)[0]
-    return { point: { id: Number(pointId.replace(/\D/g, '')) || 1, value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
+    return { point: { id: String(Number(pointId.replace(/\D/g, '')) || 1), value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
   }
   const detail = await getJSON<any>(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
   return {
@@ -305,4 +305,3 @@ export async function fetchDeviceTrend(deviceId: string, key?: string): Promise<
     return null
   }
 }
-

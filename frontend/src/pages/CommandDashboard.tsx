@@ -78,7 +78,7 @@ export function CommandDashboard() {
                 </div>
               </div>
               <div className="text-right shrink-0 flex flex-col items-end gap-2">
-                <MonoValue className="text-sm">{f.confidence.toFixed(2)}</MonoValue>
+                <MonoValue className="text-sm">{f.confidence?.toFixed(2) ?? '—'}</MonoValue>
                 <div className="text-[11px] text-ink-faint">
                   {new Date(f.last_updated).toLocaleTimeString()}
                 </div>

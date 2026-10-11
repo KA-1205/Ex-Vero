@@ -63,7 +63,7 @@ export async function queryDevice(deviceId: string, question: string): Promise<Q
   }
   const response = await postJSON<{
     answer?: string; answer_path?: QueryResult['answer_path']; model?: string; latency_ms: number;
-    sources?: QueryResult['sources']; results: { id: number; score: number; payload?: { value?: string }; value?: string }[]
+    sources?: QueryResult['sources']; results: { id: number | string; score: number; payload?: { value?: string }; value?: string }[]
   }>(`/devices/${encodeURIComponent(deviceId)}/query`, { text: question, answer: true, limit: 10 })
   return {
     answer: response.answer ?? 'No answer was generated for this query.',
@@ -71,13 +71,13 @@ export async function queryDevice(deviceId: string, question: string): Promise<Q
     model: response.model ?? 'unknown',
     latency_ms: response.latency_ms,
     sources: response.sources ?? [],
-    results: response.results,
+    results: response.results.map((result) => ({ ...result, id: String(result.id) })),
   }
 }
 export async function captureFact(req: CaptureRequest): Promise<CaptureResponse> {
   if (mock.USE_MOCKS) {
     await new Promise((r) => setTimeout(r, 250))
-    return { id: Date.now(), verdict: 'QUEUE_LOW', reason: 'Mock response: capture accepted for demo.', conflicts: [], modality: req.file ? 'vision' : 'text' }
+    return { id: String(Date.now()), verdict: 'QUEUE_LOW', reason: 'Mock response: capture accepted for demo.', conflicts: [], modality: req.file ? 'vision' : 'text' }
   }
   const path = `/devices/${encodeURIComponent(req.device_id)}/capture`
   if (req.file) {
@@ -135,7 +135,7 @@ export async function fetchMemoryRecords(deviceId: string, filters: MemoryFilter
 export async function fetchMemoryDetail(deviceId: string, pointId: string): Promise<MemoryDetail> {
   if (mock.USE_MOCKS) {
     const row = mock.mockMemoryRecords(deviceId).find((item) => item.id === pointId) ?? mock.mockMemoryRecords(deviceId)[0]
-    return { point: { id: Number(pointId.replace(/\D/g, '')) || 1, value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
+    return { point: { id: String(Number(pointId.replace(/\D/g, '')) || 1), value: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, zone: row.zone ?? null, corroboration_key: `zone_${(row.zone ?? 'C').slice(-1).toLowerCase()}.hazard`, sync_state: row.state, model: 'demo-model', model_version: 'mock', created_at: row.captured_at }, decision: { device_id: deviceId, point_id: Number(pointId.replace(/\D/g, '')) || 1, value_preview: row.content_preview, modality: row.modality, thumbnail_url: row.thumbnail_url ?? null, verdict: 'QUEUE_LOW', reason: row.decision_reason, timestamp: row.captured_at }, activity: [], consensus: null }
   }
   const detail = await getJSON<MemoryDetail>(`/devices/${encodeURIComponent(deviceId)}/memory/${encodeURIComponent(pointId)}`)
   return { ...detail, point: { ...detail.point, thumbnail_url: apiAsset(detail.point.thumbnail_url) }, decision: { ...detail.decision, thumbnail_url: apiAsset(detail.decision.thumbnail_url) } }
