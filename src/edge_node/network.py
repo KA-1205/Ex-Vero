@@ -276,6 +276,10 @@ class NetworkTransport:
         _apply(_byte_len(device_id))
         return self.inner.get_retracted(device_id)
 
+    def get_superseded(self, device_id: str) -> List[int]:
+        _apply(_byte_len(device_id))
+        return self.inner.get_superseded(device_id)
+
     def get_cloud_state(self) -> Dict[str, Any]:
         _apply(0)
         return self.inner.get_cloud_state()

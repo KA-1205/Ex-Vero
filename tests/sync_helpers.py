@@ -31,6 +31,8 @@ class StubTransport:
         self.events: List[Dict[str, Any]] = []
         # point ids the hub has tombstoned (folded to ABSENT after a retract)
         self.tombstoned: set = set()
+        # point ids the hub has superseded via a RESOLVED decision (D7)
+        self.superseded: set = set()
         # failure controls
         self.fail = False        # fail every push while True
         self.fail_next = False   # fail exactly one push, then clear
@@ -93,6 +95,31 @@ class StubTransport:
 
     def get_retracted(self, device_id: str) -> List[int]:
         return sorted(self.tombstoned)
+
+    def get_superseded(self, device_id: str) -> List[int]:
+        return sorted(self.superseded)
+
+    def resolve(self, corroboration_key: str, value: str, resolver_id: str = "operator") -> Dict[str, Any]:
+        """Mimic the hub's /admin/resolve: append a RESOLVED event and flag every
+        losing fact (different value) as superseded so the next pull deletes it."""
+        self.events.append({
+            "device_id": resolver_id,
+            "resolver_id": resolver_id,
+            "event_type": "RESOLVED",
+            "corroboration_key": corroboration_key,
+            "value": value,
+        })
+        losing: List[int] = []
+        for dev in self.store.values():
+            for pid, env in dev.items():
+                payload = env.get("payload") or {}
+                if payload.get("corroboration_key") == corroboration_key and payload.get("value") != value:
+                    losing.append(pid)
+        for pid in losing:
+            for dev in self.store.values():
+                dev.pop(pid, None)
+            self.superseded.add(pid)
+        return {"resolved": True, "superseded_ids": sorted(set(losing))}
 
     def get_cloud_state(self) -> Dict[str, Any]:
         return {"facts": [], "device_trust": {}}

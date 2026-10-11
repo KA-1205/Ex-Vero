@@ -158,7 +158,31 @@ def fold_consensus(
     # A device whose latest event is a retraction has withdrawn its vote.
     live = {d: e for d, e in latest.items() if e["event_type"] == OBSERVED}
 
+    # A human/admin RESOLVED decision is authoritative ground truth (D7 / T3):
+    # the latest RESOLVED by hub `seq` fixes the verdict until a NEWER RESOLVED
+    # supersedes it. Later observations are recorded in `post_resolution_conflicts`
+    # but never move the value — the fleet cannot overturn an operator's call by
+    # re-reporting. Ordered strictly by hub seq, like the rest of the fold.
+    resolved_events = [e for e in events if e.get("event_type") == RESOLVED]
+    latest_resolved = (
+        max(resolved_events, key=lambda e: e.get("seq", 0)) if resolved_events else None
+    )
+
     if not live:
+        if latest_resolved is not None:
+            return {
+                "corroboration_key": key,
+                "status": "RESOLVED",
+                "value": latest_resolved.get("value"),
+                "values": [],
+                "confidence": 1.0,
+                "threshold": threshold,
+                "live_device_count": 0,
+                "contributions": [],
+                "resolved_by": latest_resolved.get("resolver_id"),
+                "resolved_seq": latest_resolved.get("seq"),
+                "post_resolution_conflicts": [],
+            }
         return {
             "corroboration_key": key,
             "status": "ABSENT",
@@ -281,7 +305,7 @@ def fold_consensus(
         for device in sorted(live)
     ]
 
-    return {
+    result = {
         "corroboration_key": key,
         "status": status,
         "value": winner["value"],
@@ -293,6 +317,32 @@ def fold_consensus(
         "modal_votes": modal_votes,
         "contributions": contributions,
     }
+
+    # A standing RESOLVED decision overrides the fold's own verdict (D7 / T3).
+    # The operator-chosen value becomes the authoritative answer; live
+    # observations are still surfaced in `values`/`contributions`, and any that
+    # arrived AFTER the resolution and disagree are listed in
+    # `post_resolution_conflicts` — recorded, but they do not move the verdict.
+    if latest_resolved is not None:
+        resolved_value = latest_resolved.get("value")
+        resolved_seq = latest_resolved.get("seq", 0)
+        resolved_cluster = latest_resolved.get("value_cluster") or resolved_value
+        conflicts = []
+        for device in sorted(live):
+            e = live[device]
+            e_cluster = e.get("value_cluster") or e["value"]
+            if e.get("seq", 0) > resolved_seq and e_cluster != resolved_cluster:
+                conflicts.append(
+                    {"device": device, "value": e["value"], "seq": e.get("seq", 0)}
+                )
+        result["status"] = "RESOLVED"
+        result["value"] = resolved_value
+        result["confidence"] = 1.0
+        result["resolved_by"] = latest_resolved.get("resolver_id")
+        result["resolved_seq"] = resolved_seq
+        result["post_resolution_conflicts"] = conflicts
+
+    return result
 
 
 def explain_fold(folded: Dict[str, Any]) -> Dict[str, Any]:
@@ -319,7 +369,17 @@ def explain_fold(folded: Dict[str, Any]) -> Dict[str, Any]:
     agreement = _round((winner_support / total)) if total else 0.0
 
     reasons: List[str] = []
-    if status == "ABSENT":
+    if status == "RESOLVED":
+        resolver = folded.get("resolved_by")
+        conflicts = folded.get("post_resolution_conflicts", [])
+        reasons.append(
+            f"Resolved: an operator ('{resolver}') fixed the value of '{key}' to "
+            f"'{value}' (resolution seq {folded.get('resolved_seq')}). This is "
+            f"authoritative and does not change until a newer resolution; "
+            f"{len(conflicts)} later observation(s) disagree and are recorded as "
+            f"post-resolution conflicts without moving the verdict."
+        )
+    elif status == "ABSENT":
         reasons.append(
             f"No live report remains for '{key}': every observation has been "
             f"retracted, so there is nothing to corroborate."

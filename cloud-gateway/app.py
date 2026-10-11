@@ -812,6 +812,8 @@ def facts(device_id: str) -> Dict[str, Any]:
         for p in points:
             if (p.payload or {}).get("_tombstoned") == 1:
                 continue  # retracted fact (P0-2): excluded from pull
+            if (p.payload or {}).get("_superseded") == 1:
+                continue  # superseded by a RESOLVED decision (D7): excluded from pull
             env = _envelope_from_point(p)
             env["client_sequence"] = (p.payload or {}).get("_sync_meta", {}).get(
                 "client_sequence", 0
@@ -877,6 +879,8 @@ def _all_fact_envelopes() -> List[Dict[str, Any]]:
         for p in points:
             if (p.payload or {}).get("_tombstoned") == 1:
                 continue  # retracted fact (P0-2): excluded from the snapshot
+            if (p.payload or {}).get("_superseded") == 1:
+                continue  # superseded by a RESOLVED decision (D7): excluded
             envelopes.append(_envelope_from_point(p))
         if offset is None:
             break
@@ -1128,6 +1132,170 @@ def retracted(device_id: str) -> Dict[str, Any]:
                 break
     return {"retracted_ids": sorted(ids)}
 
+
+# --- Human resolve & signed supersede (D7 / T3) ----------------------------
+# An operator can override the fold with an authoritative RESOLVED decision. The
+# request is signed with an admin HMAC over "{timestamp}.{raw_body}" (same scheme
+# as device auth, admin secret) so an unsigned/tampered resolve is refused. The
+# RESOLVED event joins the append-only log — the pure fold then reports the key
+# as RESOLVED with the operator's value — and every fact for the key whose value
+# cluster LOSES is flagged `_superseded`, so a pulling device deletes those points
+# (and their outbox entries) and the losing value disappears from search/answers.
+
+
+async def require_admin_signature(request: "Request") -> None:
+    """Verify an admin HMAC over `"{timestamp}.{raw_body}"` for a write admin
+    endpoint (D7). Open when no admin secret is configured (dev/test)."""
+    secret = _admin_token()
+    if secret is None:
+        return  # open mode
+    timestamp = request.headers.get(AUTH_TS_HEADER)
+    signature = request.headers.get(AUTH_SIG_HEADER)
+    if not timestamp or not signature:
+        raise HTTPException(status_code=401, detail="missing admin signature")
+    body = await request.body()
+    expected = expected_signature(secret, timestamp, body)
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="bad admin signature")
+
+
+class ResolveRequest(BaseModel):
+    corroboration_key: str
+    value: str
+    resolver_id: str
+    client_timestamp_ns: Optional[int] = None
+
+
+def _resolve_event_id(key: str, resolver_id: str, seq: int) -> str:
+    raw = f"RESOLVED:{key}:{resolver_id}:{seq}".encode()
+    return hashlib.md5(raw).hexdigest()
+
+
+def _winning_cluster_for_key(corroboration_key: str, value: str) -> Optional[str]:
+    """The value_cluster of the fact(s) carrying the resolver's winning value, so
+    paraphrases of the winner are kept and only genuinely different values lose."""
+    if client is None or not client.collection_exists(FACTS_COLLECTION):
+        return None
+    flt = models.Filter(
+        must=[models.FieldCondition(
+            key="corroboration_key", match=models.MatchValue(value=corroboration_key))]
+    )
+    offset = None
+    while True:
+        pts, offset = client.scroll(
+            FACTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+            with_payload=True, with_vectors=False,
+        )
+        for p in pts:
+            payload = p.payload or {}
+            if payload.get("value") == value:
+                return payload.get("value_cluster")
+        if offset is None:
+            break
+    return None
+
+
+@app.post("/admin/resolve")
+async def admin_resolve(
+    req: ResolveRequest, request: "Request", _admin: None = Depends(require_admin_signature)
+) -> Dict[str, Any]:
+    """Record an authoritative human/admin RESOLVED decision for a fact (D7).
+
+    Appends a RESOLVED event (winner value, resolver id, hub seq) to the log and
+    flags every losing fact for the key `_superseded`, so a pulling device drops
+    those points. The fold then reports the key as RESOLVED and later conflicting
+    observations are recorded but never move the verdict.
+    """
+    key = req.corroboration_key
+    seq = _next_seq()
+    now_ns = int(time.time() * 1e9)
+    winning_cluster = _winning_cluster_for_key(key, req.value)
+    event_id = _resolve_event_id(key, req.resolver_id, seq)
+
+    _ensure_events_collection()
+    event_point = models.PointStruct(
+        id=event_id,
+        vector=[0.0],
+        payload={
+            "device_id": req.resolver_id,
+            "resolver_id": req.resolver_id,
+            "event_type": "RESOLVED",
+            "seq": seq,
+            "corroboration_key": key,
+            "value": req.value,
+            "value_cluster": winning_cluster,
+            "client_timestamp_ns": req.client_timestamp_ns or now_ns,
+            "received_at_ns": now_ns,
+            "device_trust_at_report": 1.0,
+        },
+    )
+    client.upsert(EVENTS_COLLECTION, points=[event_point])
+    _persist_seq_highwater()
+
+    # Flag every losing fact for the key as superseded (deleted on the next pull).
+    superseded_ids: List[int] = []
+    if client.collection_exists(FACTS_COLLECTION):
+        flt = models.Filter(
+            must=[models.FieldCondition(
+                key="corroboration_key", match=models.MatchValue(value=key))]
+        )
+        offset = None
+        losing: List[Any] = []
+        while True:
+            pts, offset = client.scroll(
+                FACTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+                with_payload=True, with_vectors=False,
+            )
+            for p in pts:
+                payload = p.payload or {}
+                cl = payload.get("value_cluster")
+                is_winner = (
+                    payload.get("value") == req.value
+                    or (winning_cluster is not None and cl == winning_cluster)
+                )
+                if not is_winner:
+                    losing.append(p.id)
+            if offset is None:
+                break
+        if losing:
+            client.set_payload(
+                FACTS_COLLECTION,
+                payload={"_superseded": 1},
+                points=models.PointIdsList(points=losing),
+            )
+            superseded_ids = sorted(losing)
+
+    # Re-stamp consensus_state so a pulling device sees RESOLVED on the winner.
+    _stamp_consensus_state([key])
+    return {
+        "resolved": True,
+        "corroboration_key": key,
+        "value": req.value,
+        "seq": seq,
+        "superseded_ids": superseded_ids,
+    }
+
+
+@app.get("/superseded/{device_id}")
+def superseded(device_id: str) -> Dict[str, Any]:
+    """Point ids the hub has superseded via a RESOLVED decision (D7). A pulling
+    device deletes any of these it still holds (and their outbox entries), so the
+    losing value disappears from local search and answers."""
+    ids: List[int] = []
+    if client.collection_exists(FACTS_COLLECTION):
+        flt = models.Filter(
+            must=[models.FieldCondition(key="_superseded", match=models.MatchValue(value=1))]
+        )
+        offset = None
+        while True:
+            pts, offset = client.scroll(
+                FACTS_COLLECTION, scroll_filter=flt, limit=1000, offset=offset,
+                with_payload=False, with_vectors=False,
+            )
+            ids.extend(p.id for p in pts)
+            if offset is None:
+                break
+    return {"superseded_ids": sorted(ids)}
 
 
 class InjectConflictRequest(BaseModel):

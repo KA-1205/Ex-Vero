@@ -306,6 +306,87 @@ def test_explain_is_deterministic_under_shuffle():
         ) == canonical
 
 
+# --- D7 / T3: human RESOLVED decision is authoritative -----------------------
+
+
+def _resolved(seq, value, key="zone_c_gas", resolver="operator"):
+    return {
+        "corroboration_key": key,
+        "device_id": resolver,
+        "resolver_id": resolver,
+        "value": value,
+        "event_type": "RESOLVED",
+        "seq": seq,
+    }
+
+
+def test_resolved_decision_overrides_the_fold():
+    """D7: a RESOLVED decision fixes the verdict to the operator's value, even
+    over a would-be DISPUTED fold."""
+    base = [_ev(1, "dev_a", "leak building 4"), _ev(2, "dev_b", "leak building 7")]
+    assert fold_consensus(base, threshold=THRESHOLD)["status"] == "DISPUTED"
+
+    out = fold_consensus(base + [_resolved(3, "leak building 4")], threshold=THRESHOLD)
+    assert out["status"] == "RESOLVED"
+    assert out["value"] == "leak building 4"
+    assert out["resolved_by"] == "operator"
+    assert out["resolved_seq"] == 3
+    assert out["post_resolution_conflicts"] == []
+
+
+def test_post_resolution_conflict_is_recorded_but_does_not_move_the_verdict():
+    """D7: an observation AFTER the resolution that disagrees is listed in
+    post_resolution_conflicts, yet the resolved value stands."""
+    base = [_ev(1, "dev_a", "leak building 4"), _ev(2, "dev_b", "leak building 7")]
+    events = base + [_resolved(3, "leak building 4"), _ev(4, "dev_b", "leak building 7")]
+    out = fold_consensus(events, threshold=THRESHOLD)
+    assert out["status"] == "RESOLVED"
+    assert out["value"] == "leak building 4"
+    conflicts = out["post_resolution_conflicts"]
+    assert [c["device"] for c in conflicts] == ["dev_b"]
+    assert conflicts[0]["value"] == "leak building 7"
+
+
+def test_newer_resolution_supersedes_the_older_one():
+    """D7: the latest RESOLVED by hub seq wins."""
+    base = [_ev(1, "dev_a", "a"), _ev(2, "dev_b", "b")]
+    events = base + [_resolved(3, "a"), _resolved(5, "b")]
+    out = fold_consensus(events, threshold=THRESHOLD)
+    assert out["status"] == "RESOLVED"
+    assert out["value"] == "b"
+    assert out["resolved_seq"] == 5
+
+
+def test_resolved_fold_is_deterministic_under_shuffle():
+    """D7 done-when: the resolved fold is byte-identical regardless of order."""
+    events = [
+        _ev(1, "dev_a", "leak building 4"),
+        _ev(2, "dev_b", "leak building 7"),
+        _resolved(3, "leak building 4"),
+        _ev(4, "dev_b", "leak building 7"),
+    ]
+    canonical = json.dumps(fold_consensus(events, threshold=THRESHOLD), sort_keys=True)
+    rng = random.Random(55)
+    for _ in range(20):
+        shuffled = events[:]
+        rng.shuffle(shuffled)
+        assert json.dumps(fold_consensus(shuffled, threshold=THRESHOLD), sort_keys=True) == canonical
+
+
+def test_resolved_counts_as_ground_truth_for_trust():
+    """D7: trust credits the device that matched the RESOLVED value and penalizes
+    the one that disagreed, even where the raw fold would be a 1-vs-1 DISPUTED
+    that otherwise adjudicates nobody."""
+    events = [
+        _ev(1, "dev_a", "leak building 4"),
+        _ev(2, "dev_b", "leak building 7"),
+        _resolved(3, "leak building 4"),
+    ]
+    trust = derive_device_trust(events, threshold=THRESHOLD)
+    assert trust["dev_a"] == 1.0
+    assert trust["dev_b"] < trust["dev_a"]
+
+
 @pytest.mark.integration
 def test_real_gateway_folds_two_disagreeing_devices_to_disputed():
     """Integration: two devices push different values for one corroboration_key

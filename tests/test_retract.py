@@ -205,3 +205,58 @@ def test_retract_unknown_point_returns_404():
             assert r.status_code == 404, r.text
         finally:
             os.chdir(old)
+
+
+def test_resolve_supersede_removes_losing_value_on_pull(monkeypatch):
+    """D7 (T3): two devices report contradictory values for one key; an operator
+    resolve on the hub supersedes the loser, and after a pull the losing value is
+    gone from the second device's search and the hub reports RESOLVED."""
+    os.environ["QDRANT_URL"] = ":memory:"
+    import app as gateway_app
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            with TestClient(gateway_app.app) as gw_client:  # runs gateway lifespan
+                base = "http://gw"
+                monkeypatch.setattr(
+                    sync_transport_mod, "httpx", _ASGIHttpShim(gw_client, base)
+                )
+                _init(sync_transport_mod.GatewayTransport(base))
+                edge = TestClient(main.app)
+
+                key = "zone_c_status"
+                winner_text = "structural collapse at main street with people trapped"
+                loser_text = "zone c is all clear nothing wrong no damage"
+
+                cap_a = _capture(edge, "dev_a", key, winner_text)
+                cap_b = _capture(edge, "dev_b", key, loser_text)
+                assert edge.post("/devices/dev_a/push").json()["pushed_count"] == 1
+                assert edge.post("/devices/dev_b/push").json()["pushed_count"] == 1
+                loser_pid = int(cap_b["id"])
+
+                # dev_b pulls and now holds the loser (its own) + the winner.
+                pulled = edge.post("/devices/dev_b/pull").json()
+                assert pulled["errors"] == [], pulled
+                assert str(loser_pid) in _query_ids(edge, "dev_b", "all clear nothing wrong")
+
+                # Operator resolves to dev_a's value.
+                rr = gw_client.post(
+                    "/admin/resolve",
+                    json={"corroboration_key": key, "value": winner_text, "resolver_id": "op-1"},
+                )
+                assert rr.status_code == 200, rr.text
+                assert loser_pid in rr.json()["superseded_ids"]
+
+                # The hub now reports the key as RESOLVED with the winner value.
+                folded = gw_client.get(f"/consensus/{key}").json()
+                assert folded["status"] == "RESOLVED"
+                assert folded["value"] == winner_text
+
+                # dev_b pulls again: the superseded loser is deleted locally.
+                pulled2 = edge.post("/devices/dev_b/pull").json()
+                assert loser_pid in pulled2["superseded_ids"], pulled2
+                assert str(loser_pid) not in _query_ids(edge, "dev_b", "all clear nothing wrong")
+        finally:
+            os.chdir(old)

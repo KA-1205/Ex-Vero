@@ -1148,6 +1148,7 @@ class PullResponse(BaseModel):
     pulled_count: int
     errors: List[str] = []
     retracted_ids: List[int] = []
+    superseded_ids: List[int] = []
 
 
 @app.post("/devices/{device_id}/pull")
@@ -1201,6 +1202,22 @@ def _do_pull(device_id: str) -> "PullResponse":
         delete_points(mutable_shard, retracted_ids)
         delete_points(immutable_shard, retracted_ids)
 
+    # 1c. Apply the hub's RESOLVED supersedes (D7 / T3): an operator's resolve
+    # flags the losing facts, which the device deletes from BOTH shards (and so
+    # their outbox entries), making the superseded value disappear from local
+    # search and answers. Mirrors the tombstone path and is likewise applied even
+    # when the snapshot is empty. Guarded so a transport double without the method
+    # (older stub) still works.
+    superseded_ids: List[int] = []
+    if hasattr(sync_transport, "get_superseded"):
+        try:
+            superseded_ids = [int(x) for x in sync_transport.get_superseded(device_id)]
+        except Exception as e:  # noqa: BLE001 — surfaced, not swallowed
+            retract_errors.append(f"superseded fetch failed: {e}")
+    if superseded_ids:
+        delete_points(mutable_shard, superseded_ids)
+        delete_points(immutable_shard, superseded_ids)
+
     flush_errors = flush_errors + retract_errors
 
     # The sync boundary: points synced at/before now are safely on the hub and
@@ -1212,10 +1229,10 @@ def _do_pull(device_id: str) -> "PullResponse":
     try:
         snapshot_path = sync_transport.pull_snapshot(device_id, manifest)
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=flush_errors + [f"pull failed: {e}"], retracted_ids=retracted_ids)
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"pull failed: {e}"], retracted_ids=retracted_ids, superseded_ids=superseded_ids)
 
     if snapshot_path is None:
-        return PullResponse(pulled_count=0, errors=flush_errors, retracted_ids=retracted_ids)
+        return PullResponse(pulled_count=0, errors=flush_errors, retracted_ids=retracted_ids, superseded_ids=superseded_ids)
 
     # Refuse to restore a snapshot whose vectors came from a model incompatible
     # with ours (D2 / T5): a cosine search across spaces returns silent garbage.
@@ -1234,6 +1251,7 @@ def _do_pull(device_id: str) -> "PullResponse":
                 pulled_count=0,
                 errors=flush_errors + [f"snapshot stamp mismatch, restore refused: {problems}"],
                 retracted_ids=retracted_ids,
+                superseded_ids=superseded_ids,
             )
 
     before = immutable_shard.count(CountRequest())
@@ -1241,7 +1259,7 @@ def _do_pull(device_id: str) -> "PullResponse":
         immutable_shard.update_from_snapshot(snapshot_path)
         immutable_shard.optimize()
     except Exception as e:
-        return PullResponse(pulled_count=0, errors=flush_errors + [f"snapshot restore failed: {e}"], retracted_ids=retracted_ids)
+        return PullResponse(pulled_count=0, errors=flush_errors + [f"snapshot restore failed: {e}"], retracted_ids=retracted_ids, superseded_ids=superseded_ids)
     finally:
         # The snapshot file is a throwaway staging artifact.
         try:
@@ -1269,7 +1287,7 @@ def _do_pull(device_id: str) -> "PullResponse":
     if flush_errors:
         log_activity(device_id, "error", f"pull flush errors: {flush_errors}", point_id=None)
 
-    return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors, retracted_ids=retracted_ids)
+    return PullResponse(pulled_count=max(pulled_count, 0), errors=flush_errors, retracted_ids=retracted_ids, superseded_ids=superseded_ids)
 
 
 def _count_value(count_result) -> int:

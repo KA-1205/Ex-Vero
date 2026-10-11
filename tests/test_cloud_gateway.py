@@ -5,6 +5,9 @@ Criterion:
   /cloud/state returns one reconciled fact with a confidence score, not three raw rows.
 """
 
+import hashlib
+import hmac
+import json
 import os
 import sys
 import tempfile
@@ -461,6 +464,84 @@ def test_consensus_explain_endpoint_returns_contributions_and_reasons(gateway_cl
     assert data["reasons"]
     assert str(data["confidence"]) in data["summary"]
     assert str(data["threshold"]) in data["summary"]
+
+
+# --- D7 / T3: human resolve & signed supersede -------------------------------
+
+def _ingest_two_disagreeing(gateway_client, key):
+    for i, (dev, val) in enumerate(
+        (("dev-r1", "methane 120ppm"), ("dev-r2", "all clear")), start=1
+    ):
+        env = {
+            "id": 830000 + i,
+            "vector": [0.1 * i] * 384,
+            "sparse": None,
+            "payload": {
+                "value": val,
+                "model": "text",
+                "modality": "text",
+                "corroboration_key": key,
+                "reporter_device_id": dev,
+                "client_timestamp_ns": i,
+            },
+            "client_sequence": 1,
+        }
+        r = gateway_client.post("/ingest", json={"device_id": dev, "envelopes": [env]})
+        assert r.status_code == 200, r.text
+    return 830001, 830002  # (winner id, loser id)
+
+
+def test_admin_resolve_supersedes_losing_value(gateway_client):
+    """D7 / T3: an operator resolve records a RESOLVED verdict and flags the
+    losing fact superseded; /consensus reports RESOLVED and /superseded lists the
+    loser so a pulling device deletes it."""
+    key = "zone_r.resolve"
+    winner_id, loser_id = _ingest_two_disagreeing(gateway_client, key)
+
+    resp = gateway_client.post(
+        "/admin/resolve",
+        json={"corroboration_key": key, "value": "methane 120ppm", "resolver_id": "op-1"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["resolved"] is True
+    assert loser_id in body["superseded_ids"]
+    assert winner_id not in body["superseded_ids"]
+
+    # /superseded lists the loser for a pulling device to delete.
+    s = gateway_client.get("/superseded/dev-r2").json()["superseded_ids"]
+    assert loser_id in s
+
+    # The fold is now authoritative RESOLVED with the operator's value.
+    c = gateway_client.get(f"/consensus/{key}").json()
+    assert c["status"] == "RESOLVED"
+    assert c["value"] == "methane 120ppm"
+
+
+def test_admin_resolve_refuses_unsigned_when_admin_secret_set(gateway_client, monkeypatch):
+    """D7 done-when: an unsigned resolve is refused once an admin secret exists;
+    a correctly HMAC-signed one is accepted."""
+    monkeypatch.setenv("GATEWAY_ADMIN_TOKEN", "s3cret-admin")
+    key = "zone_r.signed"
+    _ingest_two_disagreeing(gateway_client, key)
+
+    payload = {"corroboration_key": key, "value": "methane 120ppm", "resolver_id": "op-1"}
+
+    # Unsigned → refused.
+    r = gateway_client.post("/admin/resolve", json=payload)
+    assert r.status_code == 401, r.text
+
+    # Correctly signed (HMAC over "{timestamp}.{raw_body}") → accepted.
+    raw = json.dumps(payload).encode("utf-8")
+    ts = "1700000000.0"
+    sig = hmac.new(b"s3cret-admin", ts.encode("utf-8") + b"." + raw, hashlib.sha256).hexdigest()
+    r2 = gateway_client.post(
+        "/admin/resolve",
+        content=raw,
+        headers={"x-timestamp": ts, "x-signature": sig, "content-type": "application/json"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["resolved"] is True
 
 
 # --- F1: trust smoothing (Beta prior + clamp) is wired from gateway config ----

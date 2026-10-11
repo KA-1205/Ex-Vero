@@ -58,6 +58,11 @@ class SyncTransport(Protocol):
         them locally on pull."""
         ...
 
+    def get_superseded(self, device_id: str) -> List[int]:
+        """Point ids the hub has superseded via a RESOLVED decision (D7); the
+        device deletes them (and their outbox entries) locally on pull."""
+        ...
+
     def get_cloud_state(self) -> Dict[str, Any]:
         """Fetch merged fleet state from the hub."""
         ...
@@ -149,6 +154,11 @@ class GatewayTransport:
         r = httpx.get(f"{self.base_url}/retracted/{device_id}", timeout=self.timeout)
         r.raise_for_status()
         return list(r.json().get("retracted_ids", []))
+
+    def get_superseded(self, device_id: str) -> List[int]:
+        r = httpx.get(f"{self.base_url}/superseded/{device_id}", timeout=self.timeout)
+        r.raise_for_status()
+        return list(r.json().get("superseded_ids", []))
 
     def get_cloud_state(self) -> Dict[str, Any]:
         r = httpx.get(f"{self.base_url}/cloud/state", timeout=self.timeout)
