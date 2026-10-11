@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import edge_node.main as main  # noqa: E402
 import edge_node.network as network  # noqa: E402
 from edge_node.registry import load_adapters, build_generators  # noqa: E402
-from edge_node.answer import answer_question  # noqa: E402
+from edge_node.answer import answer_question, generate_cited  # noqa: E402
 from edge_node.adapter import ExtractiveGenerator  # noqa: E402
 from qdrant_edge import (  # noqa: E402
     EdgeConfig,
@@ -344,6 +344,95 @@ def test_generator_chain_is_config_selected():
 
     # No generator block at all → still a usable chain (extractive only).
     assert [g.name for g in build_generators({})] == ["extractive"]
+
+
+# --------------------------------------------------------------------------- #
+# D6 / T4 — cited answers
+# --------------------------------------------------------------------------- #
+class CitingGenerator:
+    """A model stand-in that returns a fixed cited answer (no network)."""
+    name = "citing"
+    answer_path = "offline"
+
+    def __init__(self, text):
+        self._text = text
+
+    def generate(self, question, context):
+        return self._text
+
+
+def test_cited_out_of_range_citation_marks_sentence_unsupported():
+    """D6 done-when: a generator citing a number outside the retrieved set marks
+    that sentence unsupported; a valid citation is supported."""
+    hits = [
+        _Hit(1, 0.9, {"value": "zone c gas leak", "consensus_state": "CONFIRMED",
+                      "reporter_device_id": "dev-a", "modality": "text"}),
+        _Hit(2, 0.8, {"value": "zone d flooding", "consensus_state": None}),
+    ]
+    gen = CitingGenerator("Zone C has a gas leak [1]. Everything else is calm [9].")
+    res = generate_cited("what is happening?", hits, [gen], top_k=5)
+
+    assert res.sentences[0]["supported"] is True
+    assert res.sentences[0]["citations"] == [1]
+    # [9] is out of range (only 2 sources) → unsupported, no valid citation kept.
+    assert res.sentences[1]["supported"] is False
+    assert res.sentences[1]["citations"] == []
+    # Sources carry device + modality provenance.
+    assert res.sources[0]["device"] == "dev-a"
+    assert res.sources[0]["modality"] == "text"
+
+
+def test_cited_extractive_cites_by_construction():
+    """D6 done-when: the extractive path cites by construction — every sentence
+    carries a valid in-range citation and is supported."""
+    hits = [
+        _Hit(1, 0.9, {"value": "zone c gas leak", "consensus_state": "CONFIRMED"}),
+        _Hit(2, 0.8, {"value": "zone d flooding", "consensus_state": None}),
+    ]
+    res = generate_cited("q", hits, [ExtractiveGenerator()], top_k=5)
+    assert res.answer_path == "extractive"
+    assert res.sentences
+    for i, s in enumerate(res.sentences, 1):
+        assert s["supported"] is True
+        assert s["citations"] == [i]
+    assert "[1]" in res.answer and "[2]" in res.answer
+
+
+def test_cited_falls_back_to_extractive_when_model_unreachable():
+    """D6: when every model generator fails the cited path still answers, cited
+    by construction via the extractive fallback."""
+    hits = [_Hit(1, 0.5, {"value": "flood on 4th street", "consensus_state": None})]
+    res = generate_cited("q", hits, [FailingGenerator(), ExtractiveGenerator()], top_k=5)
+    assert res.answer_path == "extractive"
+    assert res.sentences[0]["supported"] is True
+    assert res.sentences[0]["citations"] == [1]
+
+
+def test_cited_endpoint_returns_sentences_and_provenance():
+    """D6: /query with cited=true returns the per-sentence breakdown and source
+    provenance, grounded in real retrieved ids (extractive path, offline)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init([ExtractiveGenerator()])
+            client = TestClient(main.app)
+            dev = "dev_cited"
+            _capture(client, dev, "zone_c.hazard", "Gas leak at the Zone C east stairwell", zone="C")
+            _capture(client, dev, "zone_d.hazard", "Structural collapse at Zone D ramp", zone="D")
+            resp = client.post(
+                f"/devices/{dev}/query",
+                json={"text": "gas hazard zone", "answer": True, "cited": True},
+            ).json()
+            assert resp["answer_path"] == "extractive"
+            assert resp["sentences"], "cited answer must carry sentences"
+            for s in resp["sentences"]:
+                assert s["supported"] is True
+                assert all(isinstance(c, int) for c in s["citations"])
+            assert resp["sources"][0]["modality"] == "text"
+        finally:
+            _teardown()
+            os.chdir(old)
 
 
 # --------------------------------------------------------------------------- #

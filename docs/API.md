@@ -152,6 +152,24 @@ every network mode. `latency_ms` is measured.
 { "text": "which zones have active gas hazards?", "answer": true, "limit": 10 }
 ```
 `answer: false` returns retrieval only (no generation).
+
+Set `"cited": true` to also get a per-sentence citation breakdown (D6 / T4). The context is
+numbered `[1]…[n]`; each returned sentence is validated against the retrieved set, and an
+out-of-range or missing marker marks that sentence `supported: false`. The extractive path
+cites by construction. `sources` then also carry `device` + `modality` provenance.
+- **200 (with `cited: true`)** adds:
+```json
+{
+  "sentences": [
+    { "text": "Zone C has a gas hazard at the east stairwell", "citations": [1], "supported": true },
+    { "text": "A rumor claims zone E is on fire", "citations": [], "supported": false }
+  ],
+  "sources": [
+    { "id": 172946122334, "score": 0.0163, "value": "Gas leak at Zone C east stairwell",
+      "consensus_state": "CONFIRMED", "device": "dev-01", "modality": "text" }
+  ]
+}
+```
 - **200**
 ```json
 {

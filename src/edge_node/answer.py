@@ -60,7 +60,10 @@ class AnswerResult:
     answer: str
     answer_path: str          # "offline" | "online" | "extractive"
     model: str                # the serving generator's name
-    sources: List[Dict[str, Any]]  # [{id, score, value, consensus_state}, ...]
+    sources: List[Dict[str, Any]]  # [{id, score, value, consensus_state, device, modality}, ...]
+    # Cited answers (D6 / T4): per-sentence breakdown
+    # [{text, citations:[n...], supported:bool}, ...]. None for the plain path.
+    sentences: Optional[List[Dict[str, Any]]] = None
 
 
 def select_context(retrieved: List[Any], top_k: int) -> List[Dict[str, Any]]:
@@ -82,6 +85,9 @@ def select_context(retrieved: List[Any], top_k: int) -> List[Dict[str, Any]]:
                 "score": float(getattr(hit, "score", 0.0) or 0.0),
                 "value": value,
                 "consensus_state": state,
+                # Carry provenance for cited answers (D6 / T4).
+                "device": payload.get("reporter_device_id"),
+                "modality": payload.get("modality", "text"),
             }
         )
 
@@ -114,15 +120,7 @@ def answer_question(
     """
     top = select_context(retrieved, top_k)
     context = [it["context_line"] for it in top]
-    sources = [
-        {
-            "id": it["id"],
-            "score": it["score"],
-            "value": it["value"],
-            "consensus_state": it["consensus_state"],
-        }
-        for it in top
-    ]
+    sources = [_source_of(it) for it in top]
 
     last_error: Optional[Exception] = None
     for generator in generators:
@@ -142,3 +140,112 @@ def answer_question(
     # fallback and every generator failed. Fail loudly rather than inventing an
     # answer — the runtime chain always ends in the extractive generator.
     raise RuntimeError(f"no generator could answer (last error: {last_error})")
+
+
+def _source_of(it: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": it["id"],
+        "score": it["score"],
+        "value": it["value"],
+        "consensus_state": it["consensus_state"],
+        "device": it.get("device"),
+        "modality": it.get("modality", "text"),
+    }
+
+
+# Citation marker like "[3]" used by the cited-answer path (D6 / T4).
+_CITATION_RE = re.compile(r"\[(\d+)\]")
+
+
+def _cite_instruction(question: str) -> str:
+    return (
+        f"{question}\n\n"
+        "After EACH sentence, cite the fact that supports it using its bracketed "
+        "number from the context, e.g. [1]. Use only those numbered facts; if a "
+        "sentence has no supporting fact, do not invent a citation."
+    )
+
+
+def _split_sentences(text: str) -> List[str]:
+    parts = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    return [p for p in parts if p.strip()]
+
+
+def _parse_cited_sentences(text: str, n_sources: int) -> List[Dict[str, Any]]:
+    """Split generated text into sentences and validate each sentence's citation
+    markers against the retrieved set (1..n_sources). A sentence is `supported`
+    only when it carries at least one marker and EVERY marker is in range; an
+    out-of-range or missing marker makes it unsupported (D6 / T4)."""
+    sentences: List[Dict[str, Any]] = []
+    for part in _split_sentences(text):
+        markers = [int(m) for m in _CITATION_RE.findall(part)]
+        valid = [m for m in markers if 1 <= m <= n_sources]
+        supported = bool(markers) and all(1 <= m <= n_sources for m in markers)
+        clean = _CITATION_RE.sub("", part)
+        clean = re.sub(r"\s+", " ", clean).strip()
+        sentences.append({"text": clean, "citations": valid, "supported": supported})
+    return sentences
+
+
+def _extractive_cited(top: List[Dict[str, Any]], model: str) -> AnswerResult:
+    """Build a cited answer by CONSTRUCTION from the numbered context, so every
+    sentence is grounded and carries a valid citation (D6 / T4)."""
+    sentences = [
+        {"text": it["value"], "citations": [i], "supported": True}
+        for i, it in enumerate(top, 1)
+        if it["value"]
+    ]
+    if sentences:
+        answer = "Based on local records: " + " ".join(
+            f"{s['text']} [{s['citations'][0]}]" for s in sentences
+        )
+    else:
+        answer = "No local records match that question."
+    return AnswerResult(
+        answer=answer, answer_path="extractive", model=model,
+        sources=[_source_of(it) for it in top], sentences=sentences,
+    )
+
+
+def generate_cited(
+    question: str,
+    retrieved: List[Any],
+    generators: List[Any],
+    *,
+    top_k: int = 5,
+) -> AnswerResult:
+    """Grounded answer WITH per-sentence citations (D6 / T4).
+
+    The context is numbered `[1]…[n]`; a model generator is asked to cite each
+    sentence with a bracketed number, and every marker is validated against the
+    retrieved set (an out-of-range or missing marker marks that sentence
+    `supported: false`). The extractive generator (and the fall-through when every
+    model generator fails) cites by construction, so a cited answer is always
+    available. Sources carry `device` + `modality` provenance.
+    """
+    top = select_context(retrieved, top_k)
+    numbered = [f"[{i}] {it['context_line']}" for i, it in enumerate(top, 1)]
+    sources = [_source_of(it) for it in top]
+
+    last_error: Optional[Exception] = None
+    for generator in generators:
+        if getattr(generator, "answer_path", "") == "extractive":
+            # Cite by construction — no model, no markers to validate.
+            return _extractive_cited(top, getattr(generator, "name", "extractive"))
+        try:
+            text = generator.generate(_cite_instruction(question), numbered)
+        except Exception as e:
+            last_error = e
+            continue
+        sentences = _parse_cited_sentences(text, len(top))
+        return AnswerResult(
+            answer=text,
+            answer_path=getattr(generator, "answer_path", "offline"),
+            model=getattr(generator, "name", "unknown"),
+            sources=sources,
+            sentences=sentences,
+        )
+
+    # Every model generator failed and no extractive one was in the chain: build
+    # the cited answer by construction rather than returning nothing.
+    return _extractive_cited(top, "extractive")

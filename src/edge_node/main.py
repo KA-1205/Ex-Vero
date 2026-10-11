@@ -71,7 +71,7 @@ from .consensus import EventLog, fold_trust, lww_trust, OBSERVED, RETRACTED
 from .conflicts import detect_conflicts, register_conflicts, get_conflicts, clear_conflicts, POSSIBLE_CONFLICT
 from . import network
 from .retrieval import hybrid_query
-from .answer import answer_question
+from .answer import answer_question, generate_cited
 from .telemetry import record_query_latency, get_telemetry
 from .eviction import (
     evict_by_count_and_optimize,
@@ -454,6 +454,9 @@ class QueryRequest(BaseModel):
     device_id: Optional[str] = None
     answer: bool = True   # when true, generate a grounded RAG answer (Phase 7)
     limit: int = 10       # retrieval fan-out
+    # Cited answers (D6 / T4): when true, return a per-sentence citation breakdown
+    # (`sentences`) alongside the answer, each sentence validated against sources.
+    cited: bool = False
     # Optional geo recall (D9 / T8): restrict hits to within `radius_m` of
     # (lat, lon). This filters retrieval only — it never changes a
     # corroboration_key or the consensus fold.
@@ -474,6 +477,17 @@ class SourceRef(BaseModel):
     score: float
     value: Optional[str] = None
     consensus_state: Optional[str] = None
+    # Provenance for cited answers (D6 / T4).
+    device: Optional[str] = None
+    modality: Optional[str] = None
+
+
+class CitedSentence(BaseModel):
+    """One sentence of a cited answer (D6 / T4): its text, the source numbers it
+    cites, and whether those citations validate against the retrieved set."""
+    text: str
+    citations: List[int] = []
+    supported: bool = False
 
 
 class QueryResponse(BaseModel):
@@ -484,6 +498,8 @@ class QueryResponse(BaseModel):
     answer_path: Optional[str] = None    # "offline" | "online" | "extractive"
     model: Optional[str] = None
     sources: Optional[List[SourceRef]] = None
+    # Present only when `cited: true` was requested (D6 / T4).
+    sentences: Optional[List[CitedSentence]] = None
 
 
 def get_shard_path(device_id: str, shard_type: str) -> str:
@@ -1127,13 +1143,21 @@ async def query(device_id: str, request: QueryRequest):
     if request.answer and generators:
         # Ollama generation is a blocking HTTP round-trip; keep it off the event
         # loop so the answer path never stalls other requests (AGENTS.md).
-        result = await asyncio.to_thread(answer_question, request.text, hits, generators)
+        if request.cited:
+            result = await asyncio.to_thread(generate_cited, request.text, hits, generators)
+        else:
+            result = await asyncio.to_thread(answer_question, request.text, hits, generators)
         answer_fields = {
             "answer": result.answer,
             "answer_path": result.answer_path,
             "model": result.model,
-            "sources": [SourceRef(id=str(s["id"]), score=s["score"], value=s.get("value"), consensus_state=s.get("consensus_state")) for s in result.sources],
+            "sources": [SourceRef(id=str(s["id"]), score=s["score"], value=s.get("value"), consensus_state=s.get("consensus_state"), device=s.get("device"), modality=s.get("modality")) for s in result.sources],
         }
+        if result.sentences is not None:
+            answer_fields["sentences"] = [
+                CitedSentence(text=s["text"], citations=s["citations"], supported=s["supported"])
+                for s in result.sentences
+            ]
 
     latency_ms = (time.time() - start_time) * 1000
     record_query_latency(latency_ms)
