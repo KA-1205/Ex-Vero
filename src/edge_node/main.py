@@ -35,6 +35,7 @@ from qdrant_edge import (
     FieldCondition,
     MatchValue,
     RangeFloat,
+    HasIdCondition,
 )
 from datetime import datetime, timezone
 
@@ -48,6 +49,7 @@ from .registry import load_adapters, build_generators
 from . import model_stamp
 from . import snapshot as edge_snapshot
 from . import sync_gate
+from .redaction import redact as _redact_text
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import (
     add_sync_meta,
@@ -1080,6 +1082,9 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
     sparse_obj = None
     if sparse is not None:
         sparse_obj = {"indices": list(sparse.indices), "values": list(sparse.values)}
+    # Never ship the device-local redaction record (it holds the raw PII the
+    # redaction removed): strip it from the outbound payload copy (D5 / T7).
+    payload = {k: v for k, v in payload.items() if k != "_redaction"}
     meta = payload.get("_sync_meta", {})
     return {
         "id": rec.id,
@@ -1088,6 +1093,47 @@ def _envelope_from_record(rec, adapter_name: str) -> dict:
         "payload": payload,
         "client_sequence": meta.get("client_sequence", 0),
     }
+
+
+def _redact_envelope_in_place(env: dict) -> List[Dict[str, Any]]:
+    """Redact PII from an outbound envelope so the hub never sees it (D5 / T7).
+
+    Rebuilds the envelope from the REDACTED text: the `value`, the sparse BM25
+    (recomputed from the redacted text — the stored sparse was built from the raw
+    value and would otherwise leak PII tokens), and, for a text point, the dense
+    vector (re-embedded from the redacted text). An image point's dense vector
+    comes from the image, not the caption, so it is left untouched. Returns the
+    removed spans (for the device's local record), or [] when there was no PII.
+    """
+    payload = env.get("payload") or {}
+    raw_value = payload.get("value")
+    patterns = [getattr(p, "pattern", p) for p in getattr(decision_engine, "pii_patterns", [])]
+    if not isinstance(raw_value, str) or not patterns:
+        return []
+    redacted, spans = _redact_text(raw_value, patterns)
+    if not spans:
+        return []
+
+    new_payload = dict(payload)
+    new_payload["value"] = redacted
+    new_payload.pop("_redaction", None)  # defensive: never leak the local record
+    new_payload["redacted"] = 1
+    env["payload"] = new_payload
+
+    # Recompute the sparse leg from the redacted text (the raw sparse leaked PII).
+    if env.get("sparse") is not None:
+        sp = bm25.embed_document(redacted)
+        env["sparse"] = {"indices": list(sp.indices), "values": list(sp.values)}
+
+    # Re-embed the dense vector from the redacted text for text points only.
+    if payload.get("modality", "text") == "text" and env.get("vector") is not None:
+        model_name = payload.get("model")
+        adapter = next((a for a in adapters if a.name == model_name), None)
+        if adapter is None:
+            adapter = next((a for a in adapters if a.modality == "text"), adapters[0])
+        env["vector"] = list(adapter.embed(redacted))
+
+    return spans
 
 
 @app.post("/devices/{device_id}/push")
@@ -1141,6 +1187,16 @@ def _do_push(device_id: str):
             envelopes.append(env)
             ids_in_order.append(pid)
 
+        # PII redaction before anything leaves the device (D5 / T7): rebuild each
+        # envelope from redacted text (value + sparse + dense), so no PII reaches
+        # the hub. The raw copy stays in the local shard; we keep the removed
+        # spans to persist a local redaction record on the acked points below.
+        redaction_records: Dict[int, List[Dict[str, Any]]] = {}
+        for pid, env in zip(ids_in_order, envelopes):
+            spans = _redact_envelope_in_place(env)
+            if spans:
+                redaction_records[pid] = spans
+
         # Value-per-KB sync gate (D3 / T1): under a byte budget, select the most
         # valuable facts first (URGENT before ROUTINE, then age-boosted value
         # density) and defer the rest to the next push — they stay pending on the
@@ -1188,6 +1244,17 @@ def _do_push(device_id: str):
                 acked = set(ack.get("acked_ids", []))
                 mark_ids = [pid for pid in ids_in_order if pid in acked]
                 mark_synced(mutable_shard, mark_ids)
+
+                # Persist the device-local redaction record for the acked points
+                # (D5 / T7): the raw fact stays in the shard, plus the spans we
+                # removed, so the UI can show both the raw and redacted copies.
+                for pid in mark_ids:
+                    if pid in redaction_records:
+                        mutable_shard.update(UpdateOperation.set_payload_by_filter(
+                            filter=Filter(must=[HasIdCondition(point_ids={pid})]),
+                            payload={"spans": redaction_records[pid]},
+                            key="_redaction",
+                        ))
 
                 # Append a local OBSERVED event per pushed point (consensus trust
                 # view), in push order so URGENT precedes ROUTINE.

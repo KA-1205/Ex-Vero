@@ -1008,6 +1008,29 @@ def consensus(corroboration_key: str) -> Dict[str, Any]:
     return result
 
 
+@app.get("/fact/{point_id}")
+def fact(point_id: int) -> Dict[str, Any]:
+    """Return the single fact the hub holds for a point id (D5 / T7).
+
+    The hub only ever receives REDACTED facts (the edge strips PII before push),
+    so this is the redacted copy — the device keeps the raw copy locally and the
+    UI shows both. 404 when the hub holds no such point.
+    """
+    if client is None or not client.collection_exists(FACTS_COLLECTION):
+        raise HTTPException(status_code=404, detail="no such fact")
+    recs = client.retrieve(FACTS_COLLECTION, ids=[point_id], with_payload=True, with_vectors=False)
+    if not recs:
+        raise HTTPException(status_code=404, detail="no such fact")
+    payload = recs[0].payload or {}
+    return {
+        "point_id": point_id,
+        "value": payload.get("value"),
+        "redacted": payload.get("redacted", 0),
+        "corroboration_key": payload.get("corroboration_key"),
+        "payload": payload,
+    }
+
+
 @app.get("/consensus/{corroboration_key}/explain")
 def consensus_explain(corroboration_key: str) -> Dict[str, Any]:
     """"Why this verdict" for a fact (D4 / T2): the trust-weighted fold plus a
