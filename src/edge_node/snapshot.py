@@ -74,7 +74,6 @@ def build_edge_config(dense_name: str, dim: int, extra_vectors: Optional[Dict[st
 def _point_from_envelope(
     env: Dict[str, Any],
     dense_name: str,
-    all_vector_dims: Optional[Dict[str, int]] = None,
 ) -> Point:
     """Reconstruct an Edge point from a hub envelope.
 
@@ -82,17 +81,18 @@ def _point_from_envelope(
     original document tokenization, so the envelope carries it. If the hub is
     missing the sparse leg we recompute it from the text as a fallback rather
     than shipping a point that can never be found by the BM25 leg.
+
+    A named dense slot the envelope does not carry is OMITTED, not zero-filled
+    (C2 / P2-3). Verified against the pinned `qdrant-edge-py==0.8.0`: an Edge
+    point may carry a subset of the configured named vectors, and a point with
+    no image slot is not returned by an image query. The old `[0.0]*size` fill
+    made a text-only fact a candidate for the image leg.
     """
     vector: Dict[str, Any] = {}
     if env.get("vectors") and isinstance(env["vectors"], dict):
         vector.update(env["vectors"])
     elif env.get("vector") is not None:
         vector[dense_name] = env["vector"]
-
-    if all_vector_dims:
-        for vname, vsize in all_vector_dims.items():
-            if vname not in vector:
-                vector[vname] = [0.0] * vsize
 
     sparse = env.get("sparse")
     if sparse is not None:
@@ -144,10 +144,7 @@ def build_snapshot_tar(
     config = build_edge_config(dense_name, dim, extra_vectors)
     shard = EdgeShard.create(shard_dir, config)
     try:
-        all_dims = {dense_name: dim}
-        if extra_vectors:
-            all_dims.update(extra_vectors)
-        points = [_point_from_envelope(env, dense_name, all_dims) for env in envelopes]
+        points = [_point_from_envelope(env, dense_name) for env in envelopes]
         shard.update(UpdateOperation.upsert_points(points=points))
         # Optimize bumps the segment version above the destination's empty
         # segment, so update_from_snapshot actually applies it (a version-0

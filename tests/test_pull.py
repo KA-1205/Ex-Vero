@@ -270,6 +270,62 @@ def test_query_dedupes_across_shards_by_id():
             os.chdir(old)
 
 
+def test_pulled_text_only_point_not_returned_by_image_search():
+    """C2 / P2-3: a text-only fact pulled into the immutable shard must NOT be
+    matched by an image-slot search.
+
+    The old snapshot builder zero-filled every missing named slot (`[0.0]*size`),
+    which made a text-only fact a candidate for the image leg. The pinned
+    qdrant-edge-py==0.8.0 lets a point omit a configured slot, so the builder now
+    omits it and the image search excludes the point (while the text leg still
+    finds it).
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            stub = StubTransport()
+            _init(stub)
+            client = TestClient(main.app)
+
+            cap = _capture(client, "dev_a", "textOnlyC2",
+                           "structural collapse at the mill with people trapped")
+            xid = int(cap["id"])
+            client.post("/devices/dev_a/push")
+            pulled = client.post("/devices/dev_b/pull").json()
+            assert pulled["errors"] == [], pulled
+            assert _immutable_has("dev_b", xid)
+
+            shard = main.device_shards["dev_b"]["immutable"]
+            rec = shard.retrieve([xid], with_payload=False, with_vector=True)[0]
+            text_vec = list(rec.vector["text"])
+            image_dim = next(a.dim for a in main.adapters if a.modality == "vision")
+
+            from qdrant_edge import Query, QueryRequest as EdgeQueryRequest
+
+            def _ids(result):
+                recs = result[0] if isinstance(result, tuple) else result
+                return [r.id for r in recs]
+
+            img = shard.query(EdgeQueryRequest(
+                limit=10,
+                query=Query.Nearest(query=[0.5] * image_dim, using="image"),
+                with_payload=False,
+                with_vector=False,
+            ))
+            assert xid not in _ids(img), "text-only point was returned by image search"
+
+            txt = shard.query(EdgeQueryRequest(
+                limit=10,
+                query=Query.Nearest(query=text_vec, using="text"),
+                with_payload=False,
+                with_vector=False,
+            ))
+            assert xid in _ids(txt), "text-only point must still be found by text search"
+        finally:
+            os.chdir(old)
+
+
 @pytest.mark.integration
 def test_real_gateway_partial_snapshot_roundtrip():
     """Integration: A pushes to the real Cloud Gateway (Qdrant Server), then a

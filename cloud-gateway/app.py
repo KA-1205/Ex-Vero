@@ -890,8 +890,9 @@ def _build_edge_snapshot(envelopes: List[Dict[str, Any]], work_dir: str) -> Opti
     carries every named dense slot from the single source of truth, so a mixed
     text/image fact set round-trips and `update_from_snapshot` — which the device
     runs against an immutable shard that has both slots — never rejects a shape
-    mismatch. Each envelope carries its named `vectors`, so a missing slot is
-    filled by the builder rather than crashing on a `None` dense vector.
+    mismatch. Each envelope carries its named `vectors`; a slot the fact does not
+    have is OMITTED (C2 / P2-3), so a text-only fact is never a candidate for an
+    image query (no fabricated zero vector).
     """
     if not envelopes:
         return None
