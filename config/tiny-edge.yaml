@@ -61,6 +61,13 @@ consensus:
 sync:
   backoff_base_ms: 1000
   backoff_cap_ms: 60000
+  # Value-per-KB sync gate (D3 / T1). Max bytes to push per sync; 0 = no limit
+  # (push the whole outbox). On a thin link set a positive budget so the most
+  # valuable facts (URGENT first, then age-boosted value density) go first and
+  # the rest defer to the next push. aging_factor controls how fast a deferred
+  # fact's value grows with age so nothing is starved.
+  budget_bytes: 0
+  aging_factor: 0.01
 
 ui:
   sparkline_buckets: 12

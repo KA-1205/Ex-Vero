@@ -80,6 +80,20 @@ class DecisionEngine:
             # If error due to dimension mismatch etc., treat as novel
             return 0.0, f"Error during novelty check: {e}", None
 
+    def score(self, payload: Dict[str, Any], vector: List[float], shard: EdgeShard, adapter: Adapter, exclude_point_id: int = None) -> Tuple[float, float]:
+        """Novelty and urgency as the value inputs the sync gate persists (D3/T1).
+
+        Novelty is ``1 - nearest-neighbour similarity`` clamped to [0,1] (a fact
+        unlike anything held is more valuable to sync); urgency is the keyword
+        score. Pure read — it never writes the shard. Returned so the capture path
+        can stamp them on `_sync_meta` for the value-per-KB gate to rank by.
+        """
+        value = payload.get("value", "")
+        similarity, _, _ = self._novelty_check(shard, adapter, vector, exclude_point_id)
+        novelty = max(0.0, min(1.0, 1.0 - float(similarity)))
+        urgency, _ = self._compute_urgency(value)
+        return novelty, urgency
+
     def evaluate(self, payload: Dict[str, Any], vector: List[float], shard: EdgeShard, adapter: Adapter, exclude_point_id: int = None) -> Tuple[Verdict, str]:
         """
         Run the decision pipeline and return (verdict, reason).

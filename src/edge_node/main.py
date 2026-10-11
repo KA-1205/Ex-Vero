@@ -2,6 +2,7 @@ import os
 import io
 import hashlib
 import hmac
+import json
 import re
 import secrets
 import threading
@@ -46,6 +47,7 @@ from .adapter import Adapter, ClipTextAdapter
 from .registry import load_adapters, build_generators
 from . import model_stamp
 from . import snapshot as edge_snapshot
+from . import sync_gate
 from .decision_engine import DecisionEngine, log_decision, get_feed, clear_feed, load_policy
 from .outbox import (
     add_sync_meta,
@@ -109,6 +111,12 @@ MAX_LOCAL_POINTS: int = 500
 # buffer. VISION_CFG carries the CLIP severity-score map + label prompts.
 SYNC_BACKOFF_BASE_MS: int = 1000
 SYNC_BACKOFF_CAP_MS: int = 60000
+# Value-per-KB sync gate (D3 / T1). `SYNC_BUDGET_BYTES <= 0` means no limit (push
+# the whole outbox, the pre-D3 behaviour); a positive budget caps each push so a
+# constrained link sends the most valuable facts first. Read from config
+# `sync.budget_bytes` / `sync.aging_factor` in the lifespan.
+SYNC_BUDGET_BYTES: int = 0
+SYNC_AGING_FACTOR: float = sync_gate.DEFAULT_AGING_FACTOR
 SPARKLINE_BUCKETS: int = 12
 VISION_CFG: Dict[str, Any] = {}
 # Last hub-derived per-device trust seen from a /cloud/state fold (B2 is the only
@@ -277,9 +285,14 @@ async def lifespan(app: FastAPI):
 
     # Presentation tunables (C5): sync backoff, sparkline, vision score map.
     global SYNC_BACKOFF_BASE_MS, SYNC_BACKOFF_CAP_MS, SPARKLINE_BUCKETS, VISION_CFG
+    global SYNC_BUDGET_BYTES, SYNC_AGING_FACTOR
     sync_config = full_config.get('sync', {})
     SYNC_BACKOFF_BASE_MS = int(sync_config.get('backoff_base_ms', 1000))
     SYNC_BACKOFF_CAP_MS = int(sync_config.get('backoff_cap_ms', 60000))
+    # Value-per-KB sync gate (D3 / T1): a non-positive budget keeps the pre-D3
+    # "push everything" behaviour; a positive one caps each push by bytes.
+    SYNC_BUDGET_BYTES = int(sync_config.get('budget_bytes', 0))
+    SYNC_AGING_FACTOR = float(sync_config.get('aging_factor', sync_gate.DEFAULT_AGING_FACTOR))
     ui_config = full_config.get('ui', {})
     SPARKLINE_BUCKETS = int(ui_config.get('sparkline_buckets', 12))
     VISION_CFG = full_config.get('vision', {}) or {}
@@ -860,6 +873,22 @@ async def capture(device_id: str, raw_request: Request):
     shards['client_seq'] += 1
     meta["client_sequence"] = shards['client_seq']
 
+    # Persist the novelty + urgency scores at capture (D3 / T1) so the
+    # value-per-KB sync gate can rank pending facts by information-per-byte
+    # without re-querying the shard at push time. Novelty = 1 - nearest-neighbour
+    # similarity; urgency = keyword score. Both already drove the verdict above;
+    # here we recompute and store them as explicit sync-value inputs.
+    try:
+        nov, urg = decision_engine.score(
+            payload, dense_vector, mutable_shard, adapter, exclude_point_id=point_id
+        )
+        meta["novelty"] = round(nov, 6)
+        meta["urgency"] = round(urg, 6)
+    except Exception:
+        # Scoring is best-effort metadata; a failure must never block a capture.
+        meta.setdefault("novelty", 0.0)
+        meta.setdefault("urgency", 0.0)
+
     # Compute BM25 sparse vector
     sparse_vector = bm25.embed_document(value)
 
@@ -1111,6 +1140,39 @@ def _do_push(device_id: str):
             env = _envelope_from_record(rec, adapter_name)
             envelopes.append(env)
             ids_in_order.append(pid)
+
+        # Value-per-KB sync gate (D3 / T1): under a byte budget, select the most
+        # valuable facts first (URGENT before ROUTINE, then age-boosted value
+        # density) and defer the rest to the next push — they stay pending on the
+        # device, never dropped. A non-positive budget means no limit (push all),
+        # preserving the pre-D3 behaviour. Selection is a pure function so it is
+        # reproducible and the deferred points are not stranded (a lower-sequence
+        # deferred point still goes next time; the hub upsert is idempotent).
+        if SYNC_BUDGET_BYTES > 0 and envelopes:
+            now_ns = time.time() * 1_000_000_000
+            candidates = []
+            for pid, rec, env in zip(
+                [p for p, _ in outbox], [r for _, r in outbox], envelopes
+            ):
+                meta = (rec.payload or {}).get("_sync_meta", {})
+                nov = float(meta.get("novelty", 0.0))
+                urg = float(meta.get("urgency", 0.0))
+                ts = (rec.payload or {}).get("client_timestamp_ns")
+                age_s = max(0.0, (now_ns - float(ts)) / 1e9) if ts else 0.0
+                candidates.append({
+                    "id": pid,
+                    "env": env,
+                    "bytes": len(json.dumps(env, default=str).encode("utf-8")),
+                    "value": nov + urg,
+                    "age_s": age_s,
+                    "urgent": meta.get("sync_priority") == "URGENT",
+                    "client_sequence": meta.get("client_sequence", 0),
+                })
+            selected, _deferred = sync_gate.select_batch(
+                candidates, SYNC_BUDGET_BYTES, aging_factor=SYNC_AGING_FACTOR
+            )
+            envelopes = [c["env"] for c in selected]
+            ids_in_order = [c["id"] for c in selected]
 
         if envelopes:
             # Push to the gateway. Mark synced ONLY on ack (invariant 1): on any

@@ -272,6 +272,93 @@ def test_urgent_drains_before_routine():
             os.chdir(old)
 
 
+# --- D3 / T1: value-per-KB sync gate -----------------------------------------
+
+def test_capture_persists_novelty_and_urgency():
+    """D3: capture stamps novelty + urgency on `_sync_meta` so the sync gate can
+    rank by value without re-querying the shard at push time."""
+    import json
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            stub = StubTransport()
+            _init(stub)
+            client = TestClient(main.app)
+            dev = "dev_scores"
+            cap = client.post(
+                f"/devices/{dev}/capture",
+                json={"device_id": dev, "corroboration_key": "s1",
+                      "value": "structural collapse with people trapped"},
+            )
+            pid = int(cap.json()["id"])
+            shard = main.device_shards[dev]["mutable"]
+            meta = shard.retrieve([pid], with_payload=True, with_vector=False)[0].payload["_sync_meta"]
+            assert "novelty" in meta and "urgency" in meta
+            assert meta["urgency"] == 1.0  # urgency keyword present
+            assert 0.0 <= meta["novelty"] <= 1.0
+        finally:
+            os.chdir(old)
+
+
+def test_budget_sends_urgent_first_and_defers_rest_until_next_push():
+    """D3 done-when: under a byte budget the URGENT gas alert reaches the hub
+    before the bulky ROUTINE 'photo', which is deferred and then drains on the
+    next push (never dropped, never stranded)."""
+    import json
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        saved_budget = main.SYNC_BUDGET_BYTES
+        try:
+            stub = StubTransport()
+            _init(stub)
+            client = TestClient(main.app)
+            dev = "dev_budget"
+
+            routine = client.post(
+                f"/devices/{dev}/capture",
+                json={"device_id": dev, "corroboration_key": "photo1",
+                      "value": "a calm routine note about the weather " * 20},
+            )
+            urgent = client.post(
+                f"/devices/{dev}/capture",
+                json={"device_id": dev, "corroboration_key": "gas1",
+                      "value": "gas leak with people trapped"},
+            )
+            assert urgent.json()["verdict"] == "QUEUE_HIGH"
+            assert routine.json()["verdict"] == "QUEUE_LOW"
+            u_id, r_id = int(urgent.json()["id"]), int(routine.json()["id"])
+
+            # Budget that fits exactly one of the two envelopes.
+            shard = main.device_shards[dev]["mutable"]
+            sizes = {
+                pid: len(json.dumps(
+                    main._envelope_from_record(rec, main.adapters[0].name), default=str
+                ).encode("utf-8"))
+                for pid, rec in get_outbox(shard, limit=10)
+            }
+            main.SYNC_BUDGET_BYTES = sum(sizes.values()) - 1
+
+            # First push: the URGENT gas alert goes; the ROUTINE photo is deferred.
+            p1 = client.post(f"/devices/{dev}/push").json()
+            assert p1["pushed_count"] == 1
+            assert stub.server_has(dev, u_id)
+            assert not stub.server_has(dev, r_id)
+            assert _synced_flag(dev, r_id) == 0  # still pending on the device
+
+            # Second push: the deferred photo drains (eventually sends).
+            p2 = client.post(f"/devices/{dev}/push").json()
+            assert p2["pushed_count"] == 1
+            assert stub.server_has(dev, r_id)
+            # Gas alert reached the hub strictly before the photo.
+            order = [e["point_id"] for e in stub.events if e["device_id"] == dev]
+            assert order.index(u_id) < order.index(r_id)
+        finally:
+            main.SYNC_BUDGET_BYTES = saved_budget
+            os.chdir(old)
+
+
 @pytest.mark.integration
 def test_real_gateway_and_qdrant_server_roundtrip():
     """Integration: push to the real Cloud Gateway backed by a real Qdrant
