@@ -41,6 +41,24 @@ def test_gateway_dockerfile_has_healthcheck():
     assert "/health" in dockerfile
 
 
+def test_gateway_dockerfile_copies_every_gateway_module():
+    """Every cloud-gateway/*.py must be COPY'd into the image.
+
+    A sibling imported by app.py but not copied (evidence.py, added in D10) makes
+    the container exit at import with ModuleNotFoundError — the gateway crash-
+    loops and every edge push fails to resolve it. Guard the whole class.
+    """
+    dockerfile = _read(os.path.join("cloud-gateway", "Dockerfile"))
+    gw_dir = os.path.join(REPO_ROOT, "cloud-gateway")
+    modules = sorted(f for f in os.listdir(gw_dir) if f.endswith(".py"))
+    assert modules, "no cloud-gateway modules found"
+    for mod in modules:
+        assert f"cloud-gateway/{mod}" in dockerfile, (
+            f"cloud-gateway/{mod} is imported by app.py but not COPY'd in "
+            f"cloud-gateway/Dockerfile"
+        )
+
+
 def test_dockerignore_exists_and_excludes_noise():
     content = _read(".dockerignore")
     for needle in ("__pycache__", ".venv", ".git", ".env"):

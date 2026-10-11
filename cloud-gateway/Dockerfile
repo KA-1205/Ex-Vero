@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY cloud-gateway/app.py .
 COPY cloud-gateway/consensus_fold.py .
 COPY cloud-gateway/vector_space.py .
+# evidence is imported at module load by app.py (D10 / T12, hash-sealed evidence
+# packet); without it the gateway image exits at import with ModuleNotFoundError.
+COPY cloud-gateway/evidence.py .
 # The shared snapshot builder (one builder, used by the edge tests too). app.py
 # falls back to `import snapshot` when the src/ tree isn't present (this image).
 COPY src/edge_node/snapshot.py ./snapshot.py
