@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ex-Vero — Verify an Evidence Packet</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    code, pre { background: #f4f4f5; border-radius: 4px; }
+    pre { padding: 1rem; overflow-x: auto; }
+    code { padding: 0 .25rem; }
+    .warn { border-left: 4px solid #d97706; background: #fffbeb; padding: .75rem 1rem; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Verify an Ex-Vero evidence packet</h1>
+  <p>
+    An evidence packet is a self-contained, reproducible record of how one fact's
+    conflicting reports folded into a single verdict. It carries the event log,
+    the fold parameters, the derived trust, the fold output, a SHA-256 of the
+    exact fold code, and a canonical-JSON <code>hash</code> sealing all of it.
+  </p>
+
+  <h2>1. Fetch a packet</h2>
+  <pre>curl -s "$GATEWAY/evidence/zone_c_gas" &gt; packet.json</pre>
+
+  <h2>2. Verify it</h2>
+  <pre>python tools/verify_packet.py packet.json
+# or straight from the hub:
+curl -s "$GATEWAY/evidence/zone_c_gas" | python tools/verify_packet.py -</pre>
+  <p>The verifier runs four independent checks:</p>
+  <ul>
+    <li><strong>SEAL</strong> — recomputes the canonical-JSON hash; any changed byte, dropped event, or nudged parameter is detected.</li>
+    <li><strong>FOLD</strong> — re-runs the pure fold on the packet's own events and confirms the verdict matches exactly.</li>
+    <li><strong>MODULE</strong> — compares the packet's fold-code SHA-256 to your local <code>consensus_fold.py</code>.</li>
+    <li><strong>SIGN</strong> — if an admin secret is available, verifies the HMAC signature.</li>
+  </ul>
+
+  <div class="warn">
+    <p><strong>What this proves — and what it does not.</strong></p>
+    <p>
+      A verified packet proves the verdict is a faithful function of the recorded
+      events. It does <em>not</em> prove the events themselves are true.
+    </p>
+    <p>
+      A bare <code>hash</code> detects <em>accidental</em> change only. It does not
+      prevent whoever produced the packet from forging a consistent one. Use the
+      HMAC <code>signature</code> (present when the hub has admin keys) to detect
+      forgery.
+    </p>
+  </div>
+</body>
+</html>

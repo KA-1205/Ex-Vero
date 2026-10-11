@@ -55,6 +55,7 @@ from consensus_fold import (
     explain_fold,
     fold_consensus,
 )
+import evidence
 import vector_space
 
 # The snapshot builder is shared with the edge (one builder, no drift): the hub
@@ -1030,6 +1031,58 @@ def consensus_explain(corroboration_key: str) -> Dict[str, Any]:
     folded["reasons"] = explanation["reasons"]
     folded["summary"] = explanation["summary"]
     return folded
+
+
+# Path to the exact fold module whose SHA-256 seals the packet. It sits beside
+# app.py both in a repo-root run and in the Docker image (COPY'd next to app.py).
+_FOLD_MODULE_PATH = os.path.join(os.path.dirname(__file__), "consensus_fold.py")
+
+
+@app.get("/evidence/{corroboration_key}")
+def evidence_packet(corroboration_key: str) -> Dict[str, Any]:
+    """Hash-sealed evidence packet for a fact (D10 / T12).
+
+    Returns a self-contained, reproducible record: the event log, the fold
+    parameters, the derived trust, the DETERMINISTIC fold output, a SHA-256 of
+    the fold module, and a canonical-JSON `hash` sealing all of it. When admin
+    keys are configured a `signature` (HMAC over the hash) is added — a bare hash
+    only detects accidental change, not forgery. The packet proves the verdict is
+    a faithful function of the recorded events; it does NOT claim they are true.
+    """
+    events = _events_for_key(corroboration_key)
+    # Trust and fold are computed DETERMINISTICALLY here (no injected clock /
+    # half-life) so the verifier can reproduce the verdict from the events alone.
+    device_trust = _derive_trust(events)
+    folded = fold_consensus(
+        events, threshold=CONSENSUS_THRESHOLD, decay=CONSENSUS_DECAY,
+        device_trust=device_trust, cross_modal_weight=CONSENSUS_CROSS_MODAL_WEIGHT,
+    )
+    fold_params = {
+        "threshold": CONSENSUS_THRESHOLD,
+        "decay": CONSENSUS_DECAY,
+        "cross_modal_weight": CONSENSUS_CROSS_MODAL_WEIGHT,
+        "trust_alpha": CONSENSUS_TRUST_ALPHA,
+        "trust_beta": CONSENSUS_TRUST_BETA,
+        "trust_floor": CONSENSUS_TRUST_FLOOR,
+        "trust_ceiling": CONSENSUS_TRUST_CEILING,
+    }
+    packet = evidence.build_packet(
+        corroboration_key=corroboration_key,
+        events=events,
+        folded=folded,
+        fold_params=fold_params,
+        device_trust=device_trust,
+        fold_module_sha256=evidence.module_source_sha256(_FOLD_MODULE_PATH),
+    )
+    secret = _admin_token()
+    if secret is not None:
+        packet["signature"] = evidence.sign(packet["hash"], secret)
+    packet["disclaimer"] = (
+        "This packet proves the verdict is a faithful function of the recorded "
+        "events, not that the events are true. A bare hash detects accidental "
+        "change only; verify the signature for integrity against forgery."
+    )
+    return packet
 
 
 class RetractRequest(BaseModel):
