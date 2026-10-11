@@ -43,18 +43,26 @@ def hybrid_query(
     prefetch_limit: int = 25,
     image_vector: Optional[List[float]] = None,
     image_name: Optional[str] = None,
+    geo_filter=None,
 ) -> List[RetrievedPoint]:
     """Run the fused dense+BM25+CLIP query over both shards and return deduped hits,
     highest score first.
+
+    `geo_filter`, when given, is a pre-built `qdrant_edge.Filter` (a GeoRadius on
+    the `location` field, D9 / T8). It is applied to every prefetch leg AND the
+    fused request so only in-radius points can be retrieved — a recall filter
+    only, it never changes a corroboration_key or the consensus fold.
     """
     prefetches = [
         Prefetch(
             limit=prefetch_limit,
             query=Query.Nearest(query=dense_vector, using=dense_name),
+            filter=geo_filter,
         ),
         Prefetch(
             limit=prefetch_limit,
             query=Query.Nearest(query=sparse_vector, using="text_bm25"),
+            filter=geo_filter,
         ),
     ]
     if image_vector is not None and image_name is not None:
@@ -62,6 +70,7 @@ def hybrid_query(
             Prefetch(
                 limit=prefetch_limit,
                 query=Query.Nearest(query=image_vector, using=image_name),
+                filter=geo_filter,
             )
         )
 
@@ -69,6 +78,7 @@ def hybrid_query(
         limit=limit,
         prefetches=prefetches,
         query=Fusion.Rrf(k=60),
+        filter=geo_filter,
         with_payload=True,
         with_vector=False,
     )

@@ -36,6 +36,9 @@ from qdrant_edge import (
     MatchValue,
     RangeFloat,
     HasIdCondition,
+    GeoRadius,
+    GeoPoint,
+    PayloadSchemaType,
 )
 from datetime import datetime, timezone
 
@@ -115,6 +118,10 @@ MAX_LOCAL_POINTS: int = 500
 # Tiered storage (D8 / T9): byte cap for thumbnails before oldest synced image
 # points are demoted to embedding-only. 0 = disabled.
 MAX_THUMBNAIL_BYTES: int = 0
+# Geo-aware recall (D9 / T8): a per-vertical zone -> {lat, lon} map (source (b)).
+# Empty = the feature is off for this vertical unless a capture carries explicit
+# coordinates (source (c)).
+GEO_ZONE_COORDS: Dict[str, Dict[str, float]] = {}
 # Presentation tunables (C5), loaded from config in the lifespan. No fabricated
 # UI constants in the handlers: the sync backoff is derived from the real
 # consecutive-failure count, and the activity sparkline from the real ring
@@ -294,6 +301,15 @@ async def lifespan(app: FastAPI):
     global MAX_THUMBNAIL_BYTES
     MAX_THUMBNAIL_BYTES = int(memory_config.get('max_thumbnail_bytes', 0))
 
+    # Geo-aware recall (D9 / T8): load the vertical's zone -> coords map, if any.
+    global GEO_ZONE_COORDS
+    geo_config = full_config.get('geo', {}) or {}
+    GEO_ZONE_COORDS = {
+        str(z): {"lat": float(c["lat"]), "lon": float(c["lon"])}
+        for z, c in (geo_config.get('zone_coords', {}) or {}).items()
+        if isinstance(c, dict) and "lat" in c and "lon" in c
+    }
+
     # Consensus supermajority (Phase 5/9) — same key the gateway fold reads.
     consensus_config = full_config.get('consensus', {})
     CONSENSUS_THRESHOLD = float(consensus_config.get('confidence_threshold', 0.66))
@@ -415,6 +431,11 @@ class CaptureRequest(BaseModel):
     entity: Optional[str] = None  # e.g. hazard type
     status: Optional[str] = "unverified"
     reporter_device_id: Optional[str] = None
+    # Optional explicit coordinates (D9 / T8, source (c)). When absent, a zone in
+    # the vertical's geo.zone_coords map supplies them (source (b)); when neither
+    # is present the fact simply has no location and geo recall ignores it.
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 class CaptureResponse(BaseModel):
@@ -433,6 +454,12 @@ class QueryRequest(BaseModel):
     device_id: Optional[str] = None
     answer: bool = True   # when true, generate a grounded RAG answer (Phase 7)
     limit: int = 10       # retrieval fan-out
+    # Optional geo recall (D9 / T8): restrict hits to within `radius_m` of
+    # (lat, lon). This filters retrieval only — it never changes a
+    # corroboration_key or the consensus fold.
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    radius_m: Optional[float] = None
 
 
 class PointResponse(BaseModel):
@@ -521,6 +548,40 @@ def _demote_thumbnails_if_over_cap(mutable_shard) -> list:
         thumbnail_bytes_of=_thumbnail_bytes_of,
         on_demote=_cleanup_thumbnail,
     )
+
+
+def _resolve_location(zone, lat, lon) -> Optional[Dict[str, float]]:
+    """Resolve a capture's geo location (D9 / T8): explicit lat/lon (source (c))
+    takes precedence, else the vertical's zone -> coords map (source (b)), else
+    None (the fact has no location and geo recall ignores it)."""
+    if lat is not None and lon is not None:
+        return {"lat": float(lat), "lon": float(lon)}
+    if zone and zone in GEO_ZONE_COORDS:
+        c = GEO_ZONE_COORDS[zone]
+        return {"lat": float(c["lat"]), "lon": float(c["lon"])}
+    return None
+
+
+def _ensure_geo_index(shard) -> None:
+    """Create the geo payload index on `location` so GeoRadius filters are not a
+    full scan (D9 / T8). Idempotent / benign if it already exists."""
+    try:
+        shard.update(UpdateOperation.create_field_index(
+            field_name="location", schema=PayloadSchemaType.Geo
+        ))
+    except Exception:
+        pass
+
+
+def _haversine_m(lat1, lon1, lat2, lon2) -> float:
+    """Great-circle distance in metres between two lat/lon points."""
+    import math
+    r = 6371000.0  # Earth radius (m)
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
 
 
 def _memory_dict(mutable_shard, total_count: int) -> Dict[str, Any]:
@@ -705,6 +766,8 @@ def get_or_create_shards(device_id: str):
     # Integer indexes for the outbox view (synced / syncable / client_sequence).
     # A bool field would silently match nothing (Phase 0 trap); integers work.
     ensure_indexes(mutable_shard)
+    # Geo index for optional geo-aware recall (D9 / T8).
+    _ensure_geo_index(mutable_shard)
 
     # Create or load immutable shard (empty for now)
     if not os.path.exists(immutable_path):
@@ -715,6 +778,7 @@ def get_or_create_shards(device_id: str):
         immutable_shard = EdgeShard.load(immutable_path)
         _verify_shard_stamp(immutable_path)
         print(f"Loaded immutable shard for {device_id}: {info}")
+    _ensure_geo_index(immutable_shard)
     
     max_client_sequence = 0
     from qdrant_edge import ScrollRequest
@@ -880,6 +944,14 @@ async def capture(device_id: str, raw_request: Request):
         payload["zone"] = zone
     if entity is not None:
         payload["entity"] = entity
+    # Geo-aware recall (D9 / T8): stamp a `location` geo field when the capture
+    # carries coordinates or its zone maps to coords. This is recall metadata
+    # only — it never changes the corroboration_key or the consensus fold.
+    _req_lat = getattr(req, "lat", None) if not is_multipart else None
+    _req_lon = getattr(req, "lon", None) if not is_multipart else None
+    _location = _resolve_location(zone, _req_lat, _req_lon)
+    if _location is not None:
+        payload["location"] = _location
     payload["status"] = (req.status or "unverified") if not is_multipart else "unverified"
     payload["client_timestamp_ns"] = int(time.time() * 1_000_000_000)
     payload["reporter_device_id"] = (req.reporter_device_id or req.device_id or device_id) if not is_multipart else device_id
@@ -1014,6 +1086,16 @@ async def query(device_id: str, request: QueryRequest):
             image_vector = None
 
     start_time = time.time()
+    # Optional geo recall (D9 / T8): restrict hits to within radius_m of (lat,lon).
+    geo_filter = None
+    if request.lat is not None and request.lon is not None and request.radius_m:
+        geo_filter = Filter(must=[FieldCondition(
+            key="location",
+            geo_radius=GeoRadius(
+                center=GeoPoint(lat=float(request.lat), lon=float(request.lon)),
+                radius=float(request.radius_m),
+            ),
+        )])
     hits = hybrid_query(
         mutable_shard=mutable_shard,
         immutable_shard=immutable_shard,
@@ -1023,11 +1105,23 @@ async def query(device_id: str, request: QueryRequest):
         limit=request.limit,
         image_vector=image_vector,
         image_name=image_name,
+        geo_filter=geo_filter,
     )
 
-    results = [
-        PointResponse(id=str(h.id), score=h.score, payload=h.payload) for h in hits
-    ]
+    results = []
+    for h in hits:
+        payload = h.payload
+        # Annotate the haversine distance from the query centre (recall metadata
+        # only; a "possible same event" hint, never a fold input).
+        if geo_filter is not None:
+            loc = (payload or {}).get("location")
+            if isinstance(loc, dict) and "lat" in loc and "lon" in loc:
+                payload = dict(payload or {})
+                payload["distance_m"] = round(
+                    _haversine_m(float(request.lat), float(request.lon),
+                                 float(loc["lat"]), float(loc["lon"])), 1
+                )
+        results.append(PointResponse(id=str(h.id), score=h.score, payload=payload))
 
     answer_fields = {}
     if request.answer and generators:

@@ -113,6 +113,15 @@ memory:
   # vector kept so they stay searchable). 0 = disabled.
   max_thumbnail_bytes: 0
 
+# Geo-aware recall (D9 / T8), per-vertical. A capture's location comes from an
+# explicit lat/lon in the request (source (c)) or, failing that, from this
+# zone -> coords map (source (b)). An empty map leaves the feature off unless a
+# capture carries coordinates. Geo recall only filters retrieval (an optional
+# near(lat,lon,radius_m) on /query) — it never changes a corroboration_key or
+# the consensus fold.
+geo:
+  zone_coords: {}
+
 # Sync status presentation (C5). The retry backoff shown by
 # GET /devices/{id}/sync is derived from the real consecutive-failure count:
 # next = min(cap, base * 2**(failures-1)); 0 when there is no active failure.
