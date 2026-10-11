@@ -108,6 +108,10 @@ network:
 # The UI shows used/cap so eviction is visibly working (backend.md §5).
 memory:
   max_local_points: 500
+  # Tiered storage (D8 / T9): once stored thumbnails exceed this many bytes, the
+  # oldest synced image points are demoted to embedding-only (thumbnail dropped,
+  # vector kept so they stay searchable). 0 = disabled.
+  max_thumbnail_bytes: 0
 
 # Sync status presentation (C5). The retry backoff shown by
 # GET /devices/{id}/sync is derived from the real consecutive-failure count:

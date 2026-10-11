@@ -70,7 +70,12 @@ from . import network
 from .retrieval import hybrid_query
 from .answer import answer_question
 from .telemetry import record_query_latency, get_telemetry
-from .eviction import evict_by_count_and_optimize, memory_status
+from .eviction import (
+    evict_by_count_and_optimize,
+    memory_status,
+    demote_images_over_thumbnail_cap,
+    remove_orphan_thumbnails,
+)
 from .benchmark import (
     load_jsonl,
     score_recall,
@@ -107,6 +112,9 @@ CONFLICT_THRESHOLD: float = 0.5
 # `consensus.confidence_threshold`; the Cloud Gateway applies the same value.
 CONSENSUS_THRESHOLD: float = 0.66
 MAX_LOCAL_POINTS: int = 500
+# Tiered storage (D8 / T9): byte cap for thumbnails before oldest synced image
+# points are demoted to embedding-only. 0 = disabled.
+MAX_THUMBNAIL_BYTES: int = 0
 # Presentation tunables (C5), loaded from config in the lifespan. No fabricated
 # UI constants in the handlers: the sync backoff is derived from the real
 # consecutive-failure count, and the activity sparkline from the real ring
@@ -280,6 +288,11 @@ async def lifespan(app: FastAPI):
     # Memory cap (Phase 8)
     memory_config = full_config.get('memory', {})
     MAX_LOCAL_POINTS = int(memory_config.get('max_local_points', 500))
+    # Tiered storage (D8 / T9): once thumbnails exceed this many bytes, demote the
+    # oldest synced image points to embedding-only (drop the thumbnail, keep the
+    # vector). 0 = disabled (no demotion), the pre-D8 behaviour.
+    global MAX_THUMBNAIL_BYTES
+    MAX_THUMBNAIL_BYTES = int(memory_config.get('max_thumbnail_bytes', 0))
 
     # Consensus supermajority (Phase 5/9) — same key the gateway fold reads.
     consensus_config = full_config.get('consensus', {})
@@ -485,6 +498,31 @@ def _cleanup_thumbnail(payload: Dict[str, Any]) -> None:
         pass
 
 
+def _thumbnail_bytes_of(payload: Dict[str, Any]) -> int:
+    """On-disk byte size of a point's thumbnail (0 if none / missing). Used by the
+    tiered-storage demotion to measure the thumbnail budget (D8 / T9)."""
+    url = payload.get("thumbnail_url")
+    if not url:
+        return 0
+    path = os.path.join(str(THUMBNAIL_DIR), os.path.basename(str(url)))
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _demote_thumbnails_if_over_cap(mutable_shard) -> list:
+    """Tier-demote oldest synced image points if thumbnails exceed the byte cap
+    (D8 / T9). No-op when tiering is disabled (MAX_THUMBNAIL_BYTES <= 0)."""
+    if MAX_THUMBNAIL_BYTES <= 0:
+        return []
+    return demote_images_over_thumbnail_cap(
+        mutable_shard, MAX_THUMBNAIL_BYTES,
+        thumbnail_bytes_of=_thumbnail_bytes_of,
+        on_demote=_cleanup_thumbnail,
+    )
+
+
 def _memory_dict(mutable_shard, total_count: int) -> Dict[str, Any]:
     """Memory-usage shape (API.md §1) plus the visible cap status (C1)."""
     st = memory_status(mutable_shard, MAX_LOCAL_POINTS)
@@ -656,6 +694,13 @@ def get_or_create_shards(device_id: str):
         _verify_shard_stamp(mutable_path)
         info = mutable_shard.info()
         print(f"Loaded mutable shard for {device_id}: {info}")
+        # Tiered storage (D8 / T9): on restart, prune thumbnail files no loaded
+        # point references any more (gated on tiering being enabled).
+        if MAX_THUMBNAIL_BYTES > 0:
+            try:
+                remove_orphan_thumbnails(mutable_shard, str(THUMBNAIL_DIR))
+            except Exception as exc:  # noqa: BLE001 — cleanup must never block load
+                print(f"orphan thumbnail scan failed for {device_id}: {exc}")
 
     # Integer indexes for the outbox view (synced / syncable / client_sequence).
     # A bool field would silently match nothing (Phase 0 trap); integers work.
@@ -929,6 +974,9 @@ async def capture(device_id: str, raw_request: Request):
 
     # Eviction check (removes the thumbnail file of any evicted vision point)
     evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS, on_evict=_cleanup_thumbnail)
+    # Tiered storage (D8 / T9): after the count cap, enforce the thumbnail byte
+    # cap by demoting the oldest synced image points to embedding-only.
+    _demote_thumbnails_if_over_cap(mutable_shard)
 
     # Log activity
     log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)

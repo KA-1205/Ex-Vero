@@ -53,6 +53,9 @@ policy:
 
 memory:
   max_local_points: 200
+  # Tiered storage (D8 / T9): byte cap for thumbnails before the oldest synced
+  # image points are demoted to embedding-only. 0 = disabled.
+  max_thumbnail_bytes: 0
 
 consensus:
   confidence_threshold: 0.66

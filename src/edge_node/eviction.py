@@ -48,6 +48,18 @@ from .outbox import SYNCED_KEY, SYNCABLE_KEY, SEQUENCE_KEY
 MEMORY_STATUS_OK = "ok"
 MEMORY_STATUS_FULL = "memory_full"
 
+# Storage tiers (D8 / T9). A full point keeps its thumbnail file; an
+# embedding-only point has had its thumbnail dropped to reclaim bytes but keeps
+# its vector, so it is still searchable (the UI shows a placeholder).
+TIER_FULL = "full"
+TIER_EMBEDDING_ONLY = "embedding_only"
+TIER_KEY = "tier"
+
+# A point is protected from demotion when the fleet has corroborated or disputed
+# it, or it is still URGENT — those must keep their thumbnail. Values mirror the
+# consensus states stamped on a fact (B7) and the URGENT sync priority.
+_PROTECTED_CONSENSUS = ("CONFIRMED", "DISPUTED")
+
 
 def _eligible_filter() -> Filter:
     """Filter matching exactly the safely-evictable points.
@@ -170,3 +182,114 @@ def evict_by_count_and_optimize(
         Number of points evicted.
     """
     return evict_if_over_cap(shard, max_local_points, on_evict=on_evict)
+
+
+def _is_image_point(payload: Dict[str, object]) -> bool:
+    return (payload or {}).get("modality") == "vision" or bool((payload or {}).get("thumbnail_url"))
+
+
+def _is_protected(payload: Dict[str, object]) -> bool:
+    """A point whose thumbnail must be kept: a corroborated/disputed fact, or one
+    still flagged URGENT (D8). Protected points are never demoted."""
+    p = payload or {}
+    if p.get("consensus_state") in _PROTECTED_CONSENSUS:
+        return True
+    meta = p.get("_sync_meta") or {}
+    return meta.get("sync_priority") == "URGENT"
+
+
+def demote_images_over_thumbnail_cap(
+    shard: EdgeShard,
+    max_thumbnail_bytes: int,
+    *,
+    thumbnail_bytes_of: Callable[[Dict[str, object]], int],
+    on_demote: Optional[Callable[[Dict[str, object]], None]] = None,
+) -> list:
+    """Tier-demote oldest SYNCED image points until thumbnail bytes <= cap (D8/T9).
+
+    Two tiers: a `full` point keeps its thumbnail; demotion drops the thumbnail
+    file and sets `tier=embedding_only`, `thumbnail_url=None`, keeping the vector
+    so the point stays searchable (the UI shows a placeholder). Only SYNCED
+    image points are eligible — a pending (unsynced) point is never demoted — and
+    CONFIRMED/DISPUTED/URGENT points are protected. Oldest `client_sequence`
+    first, so demotion order is deterministic. `thumbnail_bytes_of(payload)`
+    returns a point's current thumbnail size; `on_demote(payload)` removes the
+    file. Returns the demoted point ids (in demotion order). A non-positive cap
+    disables tiering.
+    """
+    if max_thumbnail_bytes <= 0:
+        return []
+
+    # All currently-full, synced image points, oldest local sequence first.
+    req = ScrollRequest(
+        limit=100000,
+        filter=Filter(must=[FieldCondition(key=SYNCED_KEY, match=MatchValue(value=1))]),
+        with_payload=True,
+        with_vector=False,
+        order_by=OrderBy(key=SEQUENCE_KEY, direction=Direction.Asc),
+    )
+    res = shard.scroll(req)
+    records = res[0] if isinstance(res, tuple) else res
+
+    full_images = [
+        r for r in records
+        if _is_image_point(r.payload or {})
+        and (r.payload or {}).get(TIER_KEY, TIER_FULL) == TIER_FULL
+    ]
+    total = sum(max(0, int(thumbnail_bytes_of(r.payload or {}))) for r in full_images)
+    if total <= max_thumbnail_bytes:
+        return []
+
+    demoted: list = []
+    for r in full_images:
+        if total <= max_thumbnail_bytes:
+            break
+        payload = r.payload or {}
+        if _is_protected(payload):
+            continue  # keep corroborated/disputed/urgent thumbnails
+        size = max(0, int(thumbnail_bytes_of(payload)))
+        if on_demote is not None:
+            try:
+                on_demote(payload)
+            except Exception as exc:  # noqa: BLE001 — cleanup must not block demotion
+                print(f"tiering on_demote callback failed: {exc}")
+        shard.update(UpdateOperation.set_payload_by_filter(
+            filter=Filter(must=[HasIdCondition(point_ids={r.id})]),
+            payload={TIER_KEY: TIER_EMBEDDING_ONLY, "thumbnail_url": None},
+        ))
+        demoted.append(r.id)
+        total -= size
+
+    if demoted:
+        shard.optimize()
+    return demoted
+
+
+def remove_orphan_thumbnails(shard: EdgeShard, thumbnail_dir: str) -> list:
+    """Delete thumbnail files on disk that no live point references (D8 startup
+    scan). Returns the removed filenames. Safe if the dir is missing."""
+    import os
+
+    if not thumbnail_dir or not os.path.isdir(thumbnail_dir):
+        return []
+
+    referenced = set()
+    offset = None
+    req = ScrollRequest(limit=100000, with_payload=True, with_vector=False)
+    res = shard.scroll(req)
+    records = res[0] if isinstance(res, tuple) else res
+    for r in records:
+        url = (r.payload or {}).get("thumbnail_url")
+        if url:
+            referenced.add(os.path.basename(str(url)))
+
+    removed = []
+    for name in os.listdir(thumbnail_dir):
+        full = os.path.join(thumbnail_dir, name)
+        if os.path.isfile(full) and name not in referenced:
+            try:
+                os.remove(full)
+                removed.append(name)
+            except OSError:
+                pass
+    return removed
