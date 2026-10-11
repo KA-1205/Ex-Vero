@@ -65,7 +65,7 @@ from . import network
 from .retrieval import hybrid_query
 from .answer import answer_question
 from .telemetry import record_query_latency, get_telemetry
-from .eviction import evict_by_count_and_optimize
+from .eviction import evict_by_count_and_optimize, memory_status
 from .benchmark import (
     load_jsonl,
     score_recall,
@@ -431,6 +431,33 @@ def _next_point_id() -> int:
         return secrets.randbits(63) or 1
 
 
+def _cleanup_thumbnail(payload: Dict[str, Any]) -> None:
+    """Remove the on-disk thumbnail of an evicted vision point (C1).
+
+    The payload stores only the served URL (`/thumbnails/<name>`); the file
+    lives under THUMBNAIL_DIR. A missing file (already pruned) is not an error.
+    """
+    url = payload.get("thumbnail_url")
+    if not url:
+        return
+    path = os.path.join(str(THUMBNAIL_DIR), os.path.basename(str(url)))
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _memory_dict(mutable_shard, total_count: int) -> Dict[str, Any]:
+    """Memory-usage shape (API.md §1) plus the visible cap status (C1)."""
+    st = memory_status(mutable_shard, MAX_LOCAL_POINTS)
+    return {
+        "used": total_count,
+        "cap": MAX_LOCAL_POINTS,
+        "over_cap": st["over_cap"],
+        "status": st["status"],
+    }
+
+
 # Activity ring buffer helpers (Phase 8)
 def log_activity(device_id: str, kind: str, detail: str, point_id: Optional[int] = None) -> None:
     """Append an activity entry to the ring buffer (newest first)."""
@@ -641,7 +668,9 @@ async def capture(device_id: str, raw_request: Request):
         else:
             adapter = vision_adapter
             dense_vector = adapter.embed(file_bytes)
-        point_id = generate_point_id(corroboration_key, value + str(time.time()))
+        # Content-hash id (C1): the same image bytes always map to the same point
+        # id, so a re-capture de-duplicates instead of appending a new point.
+        point_id = generate_point_id(corroboration_key, hashlib.sha256(file_bytes).hexdigest())
 
         # Generate thumbnail
         try:
@@ -786,8 +815,8 @@ async def capture(device_id: str, raw_request: Request):
     # write. Measured cost is recorded in results/crash_safety.json.
     mutable_shard.flush()
 
-    # Eviction check
-    evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS)
+    # Eviction check (removes the thumbnail file of any evicted vision point)
+    evict_by_count_and_optimize(mutable_shard, MAX_LOCAL_POINTS, on_evict=_cleanup_thumbnail)
 
     # Log activity
     log_activity(device_id, "capture", f"captured fact {point_id}: {verdict}", point_id)
@@ -1622,7 +1651,7 @@ async def list_devices():
             "latitude": dev_meta.get("latitude"),
             "longitude": dev_meta.get("longitude"),
             "connectivity": network.get_mode(),
-            "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
+            "memory": _memory_dict(mutable_shard, total_count),
             "last_sync_at": last_sync,
             "trust": trust,
             "activity_sparkline": [3, 5, 2, 8, 1],
@@ -1676,7 +1705,7 @@ async def get_device(device_id: str):
         "latitude": dev_meta.get("latitude"),
         "longitude": dev_meta.get("longitude"),
         "connectivity": network.get_mode(),
-        "memory": {"used": total_count, "cap": MAX_LOCAL_POINTS},
+        "memory": _memory_dict(mutable_shard, total_count),
         "last_sync_at": last_sync,
         "trust": trust,
         "activity_sparkline": [3, 5, 2, 8, 1],

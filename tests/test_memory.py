@@ -37,6 +37,8 @@ from qdrant_edge import (  # noqa: E402
     Filter,
     FieldCondition,
     MatchValue,
+    HasIdCondition,
+    UpdateOperation,
 )
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -471,6 +473,158 @@ def test_query_latency_recorded_for_telemetry():
             assert data["query_latency_p50_ms"] > 0, "p50 should be recorded"
             assert data["query_latency_p95_ms"] > 0, "p95 should be recorded"
             assert data["query_latency_p95_ms"] >= data["query_latency_p50_ms"]
+        finally:
+            os.chdir(old)
+
+
+# --------------------------------------------------------------------------- #
+# 7. C1: local-only points are evictable; pending-syncable points are protected
+# --------------------------------------------------------------------------- #
+def _set_syncable(device_id, pids, syncable):
+    shard = main.device_shards[device_id]["mutable"]
+    shard.update(UpdateOperation.set_payload_by_filter(
+        filter=Filter(must=[HasIdCondition(point_ids=set(pids))]),
+        payload={"syncable": syncable},
+        key="_sync_meta",
+    ))
+
+
+def _mutable_ids(device_id):
+    from qdrant_edge import ScrollRequest
+    shard = main.device_shards[device_id]["mutable"]
+    res = shard.scroll(ScrollRequest(limit=1000, with_payload=False, with_vector=False))
+    records = res[0] if isinstance(res, tuple) else res
+    return {r.id for r in records}
+
+
+def test_eviction_evicts_local_only_points_to_hold_cap():
+    """When only local-only (syncable=0) points exist, the cap is held by
+    evicting the oldest ones (deterministic, by local client_sequence)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init(max_local_points=5)
+            client = TestClient(main.app)
+            device_id = "dev_evict_local_only"
+            pids = []
+            for i in range(8):
+                cap = _capture_urgent(client, device_id, f"k{i}", f"held fact {i}")
+                pids.append(int(cap["id"]))
+            # Nothing evicted while they are pending-syncable.
+            assert _get_total_count(device_id) == 8
+
+            # Make them all local-only (syncable=0): now they are safe to drop.
+            _set_syncable(device_id, pids, 0)
+            from edge_node.eviction import evict_by_count_and_optimize
+            shard = main.device_shards[device_id]["mutable"]
+            evicted = evict_by_count_and_optimize(shard, 5)
+
+            assert evicted == 3, f"Expected 3 local-only points evicted, got {evicted}"
+            assert _get_total_count(device_id) == 5
+            # The 5 newest local-only points remain (oldest by client_sequence).
+            assert _mutable_ids(device_id) == set(pids[-5:])
+        finally:
+            os.chdir(old)
+
+
+def test_eviction_never_evicts_pending_syncable_even_when_over_cap():
+    """A pending-syncable point survives eviction while an older local-only point
+    is preferred for deletion, and the cap is still met."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init(max_local_points=5)
+            client = TestClient(main.app)
+            device_id = "dev_evict_mixed"
+            pids = []
+            for i in range(6):
+                cap = _capture_urgent(client, device_id, f"k{i}", f"fact {i}")
+                pids.append(int(cap["id"]))
+            pending = pids[3:]          # stay pending-syncable (protected)
+            _set_syncable(device_id, pids[:3], 0)  # oldest three become local-only
+
+            from edge_node.eviction import evict_by_count_and_optimize
+            shard = main.device_shards[device_id]["mutable"]
+            evicted = evict_by_count_and_optimize(shard, 5)
+
+            assert evicted == 1, f"Expected 1 eviction, got {evicted}"
+            remaining = _mutable_ids(device_id)
+            assert set(pending).issubset(remaining), "pending-syncable point was evicted!"
+            assert _get_total_count(device_id) == 5
+        finally:
+            os.chdir(old)
+
+
+# --------------------------------------------------------------------------- #
+# 8. C1: visible "memory full" status when only protected data remains
+# --------------------------------------------------------------------------- #
+def test_memory_status_full_when_pending_dominates():
+    """Over the cap with only pending-syncable points → nothing evictable, and
+    the API reports a visible memory_full status."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init(max_local_points=5)
+            client = TestClient(main.app)
+            device_id = "dev_memory_full"
+            for i in range(8):
+                _capture_urgent(client, device_id, f"k{i}", f"urgent fact {i}")
+
+            shard = main.device_shards[device_id]["mutable"]
+            from edge_node.eviction import evict_by_count_and_optimize, memory_status
+            assert evict_by_count_and_optimize(shard, 5) == 0  # all protected
+
+            st = memory_status(shard, 5)
+            assert st["over_cap"] is True
+            assert st["status"] == "memory_full"
+
+            data = client.get(f"/devices/{device_id}").json()
+            assert data["memory"]["over_cap"] is True
+            assert data["memory"]["status"] == "memory_full"
+        finally:
+            os.chdir(old)
+
+
+# --------------------------------------------------------------------------- #
+# 9. C1: eviction deletes the thumbnail file of an evicted vision point
+# --------------------------------------------------------------------------- #
+def test_eviction_deletes_thumbnail_file(tmp_path, monkeypatch):
+    """Evicting a synced point removes its on-disk thumbnail (C1)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            _init(max_local_points=100)  # high cap: no auto-eviction during captures
+            monkeypatch.setattr(main, "THUMBNAIL_DIR", tmp_path)
+            client = TestClient(main.app)
+            device_id = "dev_evict_thumb"
+
+            cap = _capture_urgent(client, device_id, "k0", "photo of fire")
+            pid = int(cap["id"])
+            name = f"thumb_{pid}.jpg"
+            (tmp_path / name).write_bytes(b"jpeg-bytes")
+
+            shard = main.device_shards[device_id]["mutable"]
+            shard.update(UpdateOperation.set_payload_by_filter(
+                filter=Filter(must=[HasIdCondition(point_ids={pid})]),
+                payload={"thumbnail_url": f"/thumbnails/{name}"},
+            ))
+            from edge_node.outbox import mark_synced
+            mark_synced(shard, [pid])
+            # Two pending points so the shard is over a cap of 2.
+            for i in (1, 2):
+                _capture_urgent(client, device_id, f"k{i}", f"fact {i}")
+            assert (tmp_path / name).exists()
+
+            from edge_node.eviction import evict_by_count_and_optimize
+            evicted = evict_by_count_and_optimize(shard, 2, on_evict=main._cleanup_thumbnail)
+
+            assert evicted == 1
+            assert not (tmp_path / name).exists(), "thumbnail must be deleted on eviction"
+            assert _get_total_count(device_id) == 2
         finally:
             os.chdir(old)
 
