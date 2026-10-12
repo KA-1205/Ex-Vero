@@ -1,20 +1,24 @@
 """Phase 2 — Extract UCI Gas Sensor facts into config/seed/gas_sensors_seed.jsonl.
 
-Reads C:\\Users\\HP\\Downloads\\ethylene_methane.txt\\ethylene_methane.txt
-(638 MB, Tab-separated with header: Time, Methane_ppm, Ethylene_ppm, 16 sensor channels)
+Reads the raw gas-sensor dump at config/seed/gas_sensor_raw.txt (override with
+$GAS_SENSOR_FILE). Source: UCI "Gas sensor array under dynamic gas mixtures"
+(ethylene_methane.txt, 638 MB, tab-separated: Time, Methane_ppm, Ethylene_ppm,
+16 sensor channels).
 
 Samples every Nth row to keep a manageable subset (~500 rows) and classifies
 each reading into a hazard label (safe / methane_low / methane_high /
 ethylene_low / ethylene_high / combined_hazard).
 """
 
+import os
 import sys
 import json
 import itertools
 from pathlib import Path
 
-GAS_FILE = Path(r"C:\Users\HP\Downloads\ethylene_methane.txt\ethylene_methane.txt")
-OUT = Path(__file__).resolve().parent.parent / "config" / "seed" / "gas_sensors_seed.jsonl"
+ROOT = Path(__file__).resolve().parent.parent
+GAS_FILE = Path(os.getenv("GAS_SENSOR_FILE", ROOT / "config" / "seed" / "gas_sensor_raw.txt"))
+OUT = ROOT / "config" / "seed" / "gas_sensors_seed.jsonl"
 
 # Thresholds (ppm)
 METHANE_LOW = 250

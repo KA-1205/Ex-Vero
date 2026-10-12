@@ -31,6 +31,8 @@ RUN pip install --no-cache-dir \
       "fastapi>=0.141.1" \
       "fastembed>=0.8.1" \
       "httpx>=0.28.1" \
+      "pillow>=10.0.0" \
+      "python-multipart>=0.0.20" \
       "pyyaml>=6.0.3" \
       "qdrant-edge-py==0.8.0" \
       "uvicorn>=0.54.0"

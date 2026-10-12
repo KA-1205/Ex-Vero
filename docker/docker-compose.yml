@@ -46,7 +46,9 @@ services:
       dockerfile: cloud-gateway/Dockerfile
     environment:
       # The gateway reaches Qdrant Server over the compose network by service name.
-      QDRANT_URL: "http://qdrant:6333"
+      # Override via a `.env` file / environment: see docs/deployment.md.
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_API_KEY: "${QDRANT_API_KEY:-}"
     ports:
       - "8088:8088"
     depends_on:
@@ -71,8 +73,9 @@ services:
       context: ..
       dockerfile: docker/edge.Dockerfile
     environment:
-      EDGE_CONFIG_PATH: /app/config/tiny-edge.yaml
-      EDGE_HUB_URL: "http://gateway:8088"
+      EDGE_CONFIG_PATH: "${EDGE_CONFIG_PATH:-/app/config/tiny-edge.yaml}"
+      EDGE_HUB_URL: "${EDGE_HUB_URL:-http://gateway:8088}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
     ports:
       - "8000:8000"
     depends_on:
@@ -89,7 +92,8 @@ services:
       context: ..
       dockerfile: docker/edge.Dockerfile
     environment:
-      EDGE_HUB_URL: "http://gateway:8088"
+      EDGE_HUB_URL: "${EDGE_HUB_URL:-http://gateway:8088}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
     ports:
       - "8001:8000"
     depends_on:
@@ -107,7 +111,8 @@ services:
       context: ..
       dockerfile: docker/edge.Dockerfile
     environment:
-      EDGE_HUB_URL: "http://gateway:8088"
+      EDGE_HUB_URL: "${EDGE_HUB_URL:-http://gateway:8088}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
     ports:
       - "8002:8000"
     depends_on:

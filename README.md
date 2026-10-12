@@ -107,7 +107,7 @@ This is the offline-first design, not a bug. A capture is stored **on the device
 curl -sX POST localhost:8000/devices/dev-01/push
 ```
 
-Refresh the Qdrant dashboard and the point appears in `facts` (and in `fact_events`, the append-only log). Device ids are `dev-01`…`dev-04` and `cam-01`…`cam-03`. Full route list: [`docs/API.md`](docs/API.md).
+Refresh the Qdrant dashboard and the point appears in `facts` (and in `fact_events`, the append-only log). Device ids are `dev-01`…`dev-04` and `cam-01`…`cam-03`.
 
 ### Prove the constraint is real
 
@@ -134,6 +134,9 @@ docker info >/dev/null && .venv/bin/python -m pytest tests/test_telemetry_contai
 docker compose -f docker/docker-compose.yml down       # keep data
 docker compose -f docker/docker-compose.yml down -v    # wipe volumes
 ```
+
+Seed data ships in the repo (nothing to download to run). The two large **raw** source dumps
+used only to regenerate it are linked in [`docs/deployment.md`](docs/deployment.md#seed-data).
 
 <details>
 <summary><b>Troubleshooting</b></summary>
@@ -188,26 +191,206 @@ Everything measured is real. Each device runs in a real CPU/RAM-limited containe
 
 ## Architecture
 
+Qdrant is the only datastore: **Qdrant Edge** on every device, **Qdrant Server** as the
+hub. There is no SQL and no second store anywhere in the runtime path. Everything below
+is real code — only the *device hardware* and the *link conditions* are emulated, and
+both produce measured effects.
+
+![Ex-Vero reference architecture](docs/architecture/ex-vero.visual-check.2048x1320.dark.png)
+
+The walkthrough below mirrors the rendered diagram above.
+
+<details open>
+<summary><b>1. System topology</b></summary>
+
+<br>
+
+Edge nodes hold local memory and reach the hub only through the network layer. The query
+and answer paths never cross it, which is what makes offline search instant rather than
+lucky.
+
 ```mermaid
 flowchart LR
-    subgraph EDGE["Edge Node: one process, CPU/RAM-limited container"]
-        CAP[Capture: text / image] --> ADPT[Model Adapter Registry]
-        ADPT --> MUT[mutable Edge Shard]
-        MUT --> DE[Decision Engine]
-        DE -->|verdict + plain-language reason| FEED[Live Decision Feed]
-        MUT --> QRY[Hybrid query: dense + BM25, RRF]
-        IMM[immutable Edge Shard] --> QRY
-        QRY --> RAG[On-device RAG: retrieve, augment, generate]
+    subgraph FLEET["Edge fleet — real processes, CPU/RAM-limited containers"]
+        A["Edge node A<br/>text + image memory"]
+        B["Edge node B"]
+        C["Edge node C"]
     end
-    MUT -->|delta push, mark-after-ack| GATE[Cloud Gateway]
-    GATE --> FOLD[Consensus Fold]
-    FOLD --> HUB[(Qdrant Server: fact_events, append-only)]
-    HUB -.partial snapshot pull.-> IMM
-    FOLD --> DASH[Command Dashboard]
-    FOLD --> THEATER[Conflict Theater]
+    NET{{"Network Layer<br/>latency · byte cap · loss · offline"}}
+    GW["Cloud Gateway (FastAPI)<br/>schema middleware + consensus fold"]
+    QS[("Qdrant Server<br/>collection: fact_events (append-only)")]
+    UI["Dashboard<br/>React · Vite · TypeScript"]
+
+    A -->|delta push (sync only)| NET
+    B -->|delta push| NET
+    C -->|delta push| NET
+    NET --> GW
+    GW -->|upsert + append event| QS
+    QS -.->|partial snapshot| NET
+    NET -.->|pull| A
+    UI -.->|REST + WS| A
+    UI -.->|GET /cloud/state| GW
 ```
 
-See [`docs/20-architecture.md`](docs/20-architecture.md) for the full design.
+</details>
+
+<details>
+<summary><b>2. Inside one edge node</b></summary>
+
+<br>
+
+One process per node, two Qdrant Edge shards. Queries read both and dedupe by point ID.
+The outbox is a filtered `scroll` over the mutable shard (`synced == 0`), not a second
+queue.
+
+```mermaid
+flowchart LR
+    CAP["Capture<br/>text · image"] --> REG["Model Adapter Registry<br/>text_dense · CLIP · BM25"]
+    REG --> MUT[("mutable shard<br/>local writes")]
+    MUT --> DE["Decision Engine<br/>novelty · urgency · sensitivity · completeness"]
+    DE -->|verdict + plain-language reason| FEED["Decision Feed (WS)"]
+    MUT --> QRY["Hybrid query<br/>dense + BM25 → RRF"]
+    IMM[("immutable shard<br/>hub mirror · HNSW")] --> QRY
+    QRY --> RAG["Answer layer (on-device RAG)<br/>Ollama offline · cloud online"]
+    RAG --> OUT["answer + sources + path"]
+    MUT -->|scroll synced == 0| OBX["Outbox (a view, not a store)"]
+    OBX -->|delta push · mark after ack| NET{{"Network Layer"}}
+```
+
+</details>
+
+<details>
+<summary><b>3. Sync loop (edge ↔ real Qdrant Server)</b></summary>
+
+<br>
+
+Mark-after-ack is what makes a crash mid-push harmless: the point stays pending and stays
+on the device, and the upsert is idempotent on re-push.
+
+```mermaid
+sequenceDiagram
+    participant D as Edge device
+    participant N as Network Layer
+    participant G as Cloud Gateway
+    participant S as Qdrant Server
+
+    Note over D: offline — outbox accumulates, device fully queryable
+    D->>D: capture → decide → store (mutable shard)
+    Note over D,N: connectivity returns (degraded / full)
+    D->>N: push delta (client_sequence > hub max), priority-ordered
+    N->>G: forward (real latency · cap · possible failure)
+    G->>S: upsert points + append OBSERVED to fact_events
+    S-->>G: ack
+    G-->>D: ack
+    D->>D: mark synced (only now)
+    G->>S: fold events for corroboration_key
+    D->>S: snapshot_manifest → partial snapshot
+    S-->>D: partial snapshot
+    D->>D: update immutable shard, dedupe mutable by timestamp
+    Note over D: device now knows facts it never captured
+```
+
+</details>
+
+<details>
+<summary><b>4. Consensus fold (the trust layer)</b></summary>
+
+<br>
+
+Trust is derived from the log (agreement rate, recency-decayed), never stored beside it,
+so it cannot drift out of sync with history. Retraction is an append, so it cannot ghost
+back. The fold is pure: shuffle the event order and the output is identical.
+
+```mermaid
+flowchart TB
+    EV[("fact_events<br/>OBSERVED / RETRACTED / CONFLICT_OPENED<br/>append-only")]
+    EV --> SEL["select live events for corroboration_key<br/>ordered by hub sequence"]
+    SEL --> N1{"how many devices?"}
+    N1 -->|one| LWW["LWW fast path"]
+    N1 -->|agree| CONF["CONFIRMED<br/>confidence = f(count × trust)"]
+    N1 -->|disagree| DIS["weighted vote"]
+    DIS -->|below threshold| DISP["DISPUTED<br/>show both values"]
+    DIS -->|above threshold| CONF
+    SEL --> SEM["semantic detector<br/>hybrid-query hub, zone/entity guard"]
+    SEM --> PC["POSSIBLE_CONFLICT<br/>(review, never auto-merge)"]
+    CONF --> STATE["/cloud/state<br/>the trusted picture"]
+    DISP --> STATE
+```
+
+</details>
+
+<details>
+<summary><b>5. Fact lifecycle</b></summary>
+
+<br>
+
+A capture is decided locally first (keep / queue / drop, with a readable reason), then
+syncs, then is reconciled across the fleet.
+
+```mermaid
+stateDiagram-v2
+    [*] --> CAPTURED
+    CAPTURED --> QUEUED: decision engine: syncable
+    CAPTURED --> REJECTED: below the value gate
+    CAPTURED --> LOCAL_ONLY: sensitive / local
+    QUEUED --> SYNCED: hub ack (mark after ack)
+    SYNCED --> UNCORROBORATED: single observer
+    UNCORROBORATED --> CONFIRMED: corroborated (count × trust)
+    UNCORROBORATED --> DISPUTED: disagreement below threshold
+    DISPUTED --> CONFIRMED: agreement above threshold
+    SYNCED --> RETRACTED: retraction event
+    RETRACTED --> [*]
+```
+
+</details>
+
+<details>
+<summary><b>6. Reference deployment</b></summary>
+
+<br>
+
+The kernel is portable; this is one way to place it. Edge nodes and the hub run as
+long-lived containers (the edge node needs an on-disk shard and WebSockets, so it is
+never serverless). The dashboard is a static build.
+
+```mermaid
+flowchart TB
+    subgraph HOST["Host (Docker Compose · e.g. one small VM)"]
+        ET["edge-tiny :8000<br/>1 CPU / 512 MB · text"]
+        ES["edge-standard :8001<br/>text + CLIP"]
+        GW["cloud-gateway :8088<br/>single sequencer"]
+        QS[("qdrant :6333")]
+        OL["ollama :11434"]
+    end
+    UI["Dashboard (static build)"]
+
+    UI -->|REST + WS| ET
+    UI -->|REST + WS| ES
+    ET --> GW
+    ES --> GW
+    GW --> QS
+    ET --> OL
+    ES --> OL
+```
+
+The gateway is the fleet's **single sequencer** (it assigns the monotonic hub `seq` from
+one in-process counter), so it runs as exactly one instance — never an auto-scaling
+serverless function. See [Deploying to Vercel](#deploying-to-vercel).
+
+</details>
+
+### What is emulated (and what is measured)
+
+| Physical thing | Emulated by | Measured as |
+| --- | --- | --- |
+| Device compute / RAM | Docker container with `--cpus` / `--memory` limits | real cgroup CPU %, RSS MB |
+| Slow / lossy link | Network Layer token bucket + latency + failure injection | real bytes-over-wire, retries, duration |
+| Going offline / reconnect | global `POST /network/mode` flip | outbox depth, drain events |
+| Clock drift | per-device skew knob (metadata only) | fold result unchanged (test) |
+
+Only the *device* and the *link conditions* stand in for hardware we do not have yet.
+Everything in the runtime path above is real code, and every number on screen is read
+from the running system.
 
 ## Measured, not typed in
 
@@ -218,9 +401,9 @@ Every number below comes from real code run against labelled fixtures. No figure
 | Constrained target | 1 CPU / 512 MB container, label read from real limits | `docker inspect` + `/telemetry` |
 | CPU under load | **0.19%** idle, **100.2%** under load | real cgroup stats |
 | Memory | RSS **~296 MB** | real cgroup stats |
-| Hybrid search recall | <!-- TODO: paste from your benchmark output --> | labelled fixtures |
-| Bytes sent vs sync-everything | <!-- TODO: paste from your benchmark output --> | benchmark run |
-| Consensus / conflict resolver accuracy | <!-- TODO: paste from your benchmark output --> | labelled pairs |
+| Hybrid search recall | <!-- bench:recall -->dense **0.62** → hybrid **0.75** (recall@5, 32 labeled queries)<!-- /bench:recall --> | labelled fixtures, `/benchmark/recall` |
+| Bytes sent vs sync-everything | delta-only push + value-per-KB gate send only syncable facts, newest-value-per-byte first (not a single committed figure) | `sync_gate.select_batch`, decision engine `syncable` |
+| Consensus / conflict resolver accuracy | <!-- bench:resolver -->resolver **0.56** vs LWW **0.12** (32 labeled dispute scenarios)<!-- /bench:resolver --> | labelled pairs, `/benchmark/resolver-vs-lww` |
 | Crash safety | **50/50 facts recovered** after SIGKILL + restart (0 lost) | `tools/crash_test.py` → `results/crash_safety.json` |
 
 Recall and resolver margins are deliberately narrower than the original hardcoded claims, and per-shape results are returned so a reader can see where each number comes from.
@@ -229,7 +412,7 @@ Recall and resolver margins are deliberately narrower than the original hardcode
 
 ## Deploying to Vercel
 
-`vercel.json` defines two services: `frontend` at `/` and `cloud-gateway` at `/gateway/*`. Everything else stays local.
+`vercel.json` defines two services: `frontend` at `/` and `cloud-gateway` at `/gateway/*`, plus `/node/*` and `/thumbnails/*` rewrites that proxy the dashboard's API and asset calls through to a node running elsewhere (e.g. an edge node on a host or VM).
 
 > **Gateway deployment model — single instance, not serverless.** The gateway is the fleet's **single sequencer**: it assigns every `fact_events` row a monotonic hub `seq` from one in-process counter (resumed on restart from a dedicated meta point, so a restart never re-issues an old `seq`). Two instances running at once would each hand out their own `seq` stream and corrupt the global order the consensus fold depends on. **Deploy it as a single long-running container** (the `gateway` service in `docker/docker-compose.yml`) — not as an auto-scaling serverless function. If you must run it serverless, cap it to one concurrent instance, or move the sequencer to a database sequence (e.g. a Qdrant/DB-backed counter) first. The Vercel wiring below is for the demo UI only; a production hub should run as a container next to its Qdrant Server.
 
@@ -237,14 +420,30 @@ Recall and resolver margins are deliberately narrower than the original hardcode
 
 | Piece | Where | Talks to |
 | --- | --- | --- |
-| `frontend` | Vercel, `/` | the local node |
+| `frontend` | Vercel, `/` | the edge node, via the `/node/*` proxy |
 | `cloud-gateway` | Vercel, `/gateway/*` | Qdrant |
-| edge node | local Docker, `:8000` | the deployed gateway |
+| edge node | long-running container (`:8000`/`:8001`) | the deployed gateway |
+
+> **Why the frontend needs a proxy.** Vercel serves the dashboard over HTTPS. A browser
+> on an HTTPS page cannot call a plain-HTTP node (mixed-content block) or a `ws://`
+> socket. `vercel.json` therefore rewrites `/node/*` and `/thumbnails/*` to the node, so
+> the browser only ever talks to `https://<project>.vercel.app` and Vercel reaches the
+> node server-side. Set the frontend to use the relative base in the Vercel env:
+>
+> ```
+> VITE_API_BASE_URL=/node
+> ```
+>
+> This proxies REST and assets (devices, `/cloud/state`, thumbnails). **Live WebSocket
+> updates do not proxy** through Vercel — the dashboard still shows current state from
+> REST but will not stream new events. For full live behaviour, front the node with TLS
+> (e.g. a reverse proxy with a certificate) and point `VITE_API_BASE_URL` /
+> `VITE_WS_BASE_URL` at the `https://` / `wss://` origin instead.
 
 <details>
 <summary><b>Setup steps</b></summary>
 
-**1. Let the deployed UI through the node's CORS.** The node reads `ALLOWED_ORIGINS` as a comma-separated list:
+**1. Let the deployed UI through the node's CORS.** The node reads `ALLOWED_ORIGINS` as a comma-separated list (`https://ex-vero.vercel.app` is already allowed by default):
 
 ```bash
 ALLOWED_ORIGINS="https://your-project.vercel.app" \
@@ -261,6 +460,11 @@ QDRANT_API_KEY="..."   # if your Qdrant requires auth
 
 `OLLAMA_ENDPOINT` is a third optional override, for when Ollama is not on the same machine as the node.
 
+**3. Point the proxy at your node.** Edit the `/node/*` and `/thumbnails/*` rewrite
+destinations in `vercel.json` (or add them as project-level routing rules in the Vercel
+dashboard, which take effect without a redeploy), then set `VITE_API_BASE_URL=/node` and
+redeploy so the relative base is baked into the build.
+
 Run `vercel dev` to exercise all services together before deploying.
 
 </details>
@@ -275,30 +479,39 @@ Live UI: [ex-vero.vercel.app](https://ex-vero.vercel.app)
 - **Frontend:** React + Vite + TypeScript + Tailwind, no component library. A thin renderer over the backend contract.
 - **Constrained target:** a real 1-CPU / 512 MB container today, swappable for a Raspberry Pi later with zero code change.
 
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?style=for-the-badge&logo=qdrant&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white)
+
+## Project structure
+
+```text
+edge-node/
+├── src/edge_node/          # FastAPI service: capture, registry, decision engine, sync, consensus, RAG
+├── cloud-gateway/          # schema middleware + consensus fold (the hub's front door)
+├── frontend/               # React · Vite · TypeScript · Tailwind dashboard (thin renderer)
+├── config/                 # per-vertical YAML (disaster-response.yaml, ...) — the kernel stays generic
+├── docker/                 # Qdrant Server, gateway, Ollama, constrained edge-node containers
+├── tests/                  # invariant + acceptance suite (offline, FakeEmbedder)
+├── tools/                  # probes, dataset loaders, benchmarks, crash/telemetry harnesses
+├── docs/                   # deployment guide + rendered architecture
+└── env.example             # every environment override, with defaults
+```
+
 ## Project status
 
 All ten backend build phases are complete and audited: capture, hybrid search, decision engine, outbox/push, snapshot pull, consensus fold, semantic conflict detection, network layer, on-device RAG, measured benchmarks, and telemetry from real cgroup stats. The React dashboard is built and wired to the live backend contract.
 
 ## Docs
 
-- [`docs/00-problem-statement.md`](docs/00-problem-statement.md): the sponsor brief and acceptance bar per goal
-- [`docs/10-prd.md`](docs/10-prd.md): product and software requirements, personas, traceability
-- [`docs/20-architecture.md`](docs/20-architecture.md): context, single-node, sync loop and consensus-fold diagrams
-- [`docs/backend.md`](docs/backend.md): engineering spec (model registry, decision engine, sync, consensus, answer layer)
-- [`docs/frontend.md`](docs/frontend.md): UI spec, screens, data contract
-- [`docs/API.md`](docs/API.md): REST/WebSocket route contract
-- [`docs/AGENTS.md`](docs/AGENTS.md): verified Qdrant Edge facts, silent traps, correctness invariants
-
-## Contributing
-
-```bash
-git clone https://github.com/KA-1205/Ex-Vero.git
-cd Ex-Vero
-uv sync            # or: pip install -e ".[dev]"
-.venv/bin/python -m pytest -q
-```
-
-Issues and PRs welcome. Good first areas: new vertical configs in `config/`, new model adapters in the registry, and additional conflict-resolver test fixtures.
+- [`docs/deployment.md`](docs/deployment.md): clone, run the full stack locally (Docker + env vars), and deploy
+- `docs/architecture/`: the rendered architecture diagram (the image above)
 
 ## Team
 
