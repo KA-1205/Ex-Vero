@@ -221,15 +221,15 @@ flowchart LR
     QS[("Qdrant Server<br/>collection: fact_events (append-only)")]
     UI["Dashboard<br/>React · Vite · TypeScript"]
 
-    A -->|delta push (sync only)| NET
+    A -->|"delta push (sync only)"| NET
     B -->|delta push| NET
     C -->|delta push| NET
     NET --> GW
-    GW -->|upsert + append event| QS
+    GW -->|"upsert + append event"| QS
     QS -.->|partial snapshot| NET
     NET -.->|pull| A
-    UI -.->|REST + WS| A
-    UI -.->|GET /cloud/state| GW
+    UI -.->|"REST + WS"| A
+    UI -.->|"GET /cloud/state"| GW
 ```
 
 </details>
@@ -248,13 +248,13 @@ flowchart LR
     CAP["Capture<br/>text · image"] --> REG["Model Adapter Registry<br/>text_dense · CLIP · BM25"]
     REG --> MUT[("mutable shard<br/>local writes")]
     MUT --> DE["Decision Engine<br/>novelty · urgency · sensitivity · completeness"]
-    DE -->|verdict + plain-language reason| FEED["Decision Feed (WS)"]
+    DE -->|"verdict + plain-language reason"| FEED["Decision Feed (WS)"]
     MUT --> QRY["Hybrid query<br/>dense + BM25 → RRF"]
     IMM[("immutable shard<br/>hub mirror · HNSW")] --> QRY
     QRY --> RAG["Answer layer (on-device RAG)<br/>Ollama offline · cloud online"]
     RAG --> OUT["answer + sources + path"]
-    MUT -->|scroll synced == 0| OBX["Outbox (a view, not a store)"]
-    OBX -->|delta push · mark after ack| NET{{"Network Layer"}}
+    MUT -->|"scroll synced == 0"| OBX["Outbox (a view, not a store)"]
+    OBX -->|"delta push · mark after ack"| NET{{"Network Layer"}}
 ```
 
 </details>
@@ -364,8 +364,8 @@ flowchart TB
     end
     UI["Dashboard (static build)"]
 
-    UI -->|REST + WS| ET
-    UI -->|REST + WS| ES
+    UI -->|"REST + WS"| ET
+    UI -->|"REST + WS"| ES
     ET --> GW
     ES --> GW
     GW --> QS
