@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useNetworkMode } from '../context/NetworkModeContext'
+import { USE_MOCKS } from '../api/mock'
 import type { NetworkMode } from '../types'
 
 const MODES: { mode: NetworkMode; label: string }[] = [
@@ -67,7 +68,18 @@ export function TopBar() {
         </nav>
       </div>
       <div className="relative z-10 mt-auto flex flex-col items-start gap-2 px-3 py-4 border-t border-[#163751]">
-        <span className="text-[12px] text-[#9FB4C8] font-mono">NETWORK SIM</span>
+        <div className="flex items-center justify-between w-full">
+          <span className="text-[12px] text-[#9FB4C8] font-mono">NETWORK SIM</span>
+          <span
+            className={`font-mono text-[9px] px-1.5 py-0.5 border rounded ${
+              USE_MOCKS
+                ? 'border-pending text-pending bg-pending/10'
+                : 'border-good text-good bg-good/10'
+            }`}
+          >
+            {USE_MOCKS ? 'MOCK' : 'LIVE'}
+          </span>
+        </div>
         <div className="flex flex-col w-full gap-1">
           {MODES.map((m) => (
             <button
