@@ -49,7 +49,13 @@ export function ConflictTheater() {
 
   async function reconnect() {
     setResolving(true)
-    try { setMode('full') } catch (error) { setMessage(error instanceof Error ? error.message : 'Reconnect failed') }
+    try {
+      setMode('full')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Reconnect failed')
+      setResolving(false)
+      return
+    }
     setReconnected(true)
     if (pendingConsensus) {
       setResolved(pendingConsensus)
@@ -110,7 +116,20 @@ export function ConflictTheater() {
         <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
         <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>
-      {message && <div role="status" className="text-xs font-mono text-ink-dim">{message}</div>}
+      {message && (
+        <div role="status" className="text-xs font-mono text-ink-dim flex items-center justify-between border border-line bg-base-sunken/40 px-3 py-1.5 rounded">
+          <span>{message}</span>
+          {(message.toLowerCase().includes('failed') || message.toLowerCase().includes('error')) && (
+            <button
+              type="button"
+              onClick={() => void reconnect()}
+              className="underline text-ink hover:text-good ml-3 font-semibold cursor-pointer"
+            >
+              Retry Reconnect
+            </button>
+          )}
+        </div>
+      )}
 
       <Panel title="CONSENSUS FOLD RESULT" className="flex-1">
         <div className="p-4">
