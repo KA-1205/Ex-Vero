@@ -522,3 +522,14 @@ All ten backend build phases are complete and audited: capture, hybrid search, d
 <!-- TODO: add a LICENSE file to the repo, then name it here (e.g. MIT or Apache 2.0) -->
 
 If Ex-Vero helps you, a ⭐ helps other edge and Qdrant builders find it.
+
+
+## Verification and benchmark scope
+
+[CI runs](https://github.com/KA-1205/Ex-Vero/actions) publish JUnit results for the named deterministic backend subset and a raw wiring benchmark. The full pretrained-model suite is a separate manual workflow option. See [benchmark methodology and limitations](docs/BENCHMARKS.md) before reusing the historical numbers above.
+
+The current backend separates API routers (`src/edge_node/api/`) from sync orchestration (`src/edge_node/services/sync_orchestration.py`), while preserving the existing runtime state and OpenAPI contract.
+
+## My contributions
+
+See [the contribution record](docs/CONTRIBUTIONS.md) for authored implementation, testing, and debugging changes.

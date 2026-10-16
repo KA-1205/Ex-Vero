@@ -1,0 +1,170 @@
+{
+  "schema": "ex-vero.local-benchmark.v1",
+  "generated_at": "2026-10-16T21:03:52.294037+00:00",
+  "source_commit": "10287174d9e705eb5d8c7a5afc4055f5301d923d",
+  "working_tree_dirty": true,
+  "mode": "offline_hash_wiring_only",
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+    "cpu_count": 9,
+    "dependencies": {
+      "fastapi": "0.141.1",
+      "qdrant-edge-py": "0.8.0",
+      "qdrant-client": "1.12.1",
+      "httpx": "0.28.1"
+    }
+  },
+  "workload": {
+    "samples": 30,
+    "warmup_excluded": 3,
+    "stored_facts": 33,
+    "concurrency": 1,
+    "answer_generation": false,
+    "transport": "in-process ASGI TestClient",
+    "models": {
+      "embedders": [
+        {
+          "name": "text",
+          "modality": "text",
+          "provider": "fake",
+          "dim": 64,
+          "version": "hash-bench-v1"
+        }
+      ]
+    }
+  },
+  "fixtures": {
+    "recall_corpus.jsonl": {
+      "sha256": "3a02a7d56782283be3d24d3b9897bb77e13a2313a05ccf6b5db0bed76c632076",
+      "rows": 1000
+    },
+    "recall_queries.jsonl": {
+      "sha256": "e017cec3cd1998fc599b4cfa23d295b023885f702cbb2808d9bdff17c111bfaa",
+      "rows": 32
+    },
+    "conflict_facts.jsonl": {
+      "sha256": "2f3d7ceb350054b0b18ab8cc2ed98e799e950f422eaed062ace7d0962be7bd60",
+      "rows": 32
+    }
+  },
+  "raw_ms": {
+    "capture": [
+      20.005005000029996,
+      20.461379999971996,
+      20.59007399998336,
+      18.85146300003271,
+      21.728231999986747,
+      17.838142000016433,
+      25.42354100000921,
+      22.927713000001404,
+      22.484015999964413,
+      20.38946200002556,
+      21.42771100000118,
+      21.333845000015117,
+      33.85566399998652,
+      23.639552000020103,
+      17.238101000032202,
+      17.929669000011472,
+      20.607880000000023,
+      22.406319999959123,
+      21.867661999976917,
+      18.535789000054592,
+      18.091932000004363,
+      21.037835000015548,
+      41.13045199994758,
+      32.21687899997505,
+      19.90848000002643,
+      22.540712000022722,
+      29.064125999980206,
+      24.245691999965402,
+      23.2672280000088,
+      25.030710000010004
+    ],
+    "query": [
+      1.5065110000023196,
+      1.3636570000130632,
+      1.553001999980097,
+      1.4665510000213544,
+      1.46222600000101,
+      1.3638279999668157,
+      2.3502480000274772,
+      2.059401999986221,
+      2.0692169999847465,
+      1.7902280000043902,
+      1.9376790000364963,
+      2.2242089999622294,
+      2.067484000008335,
+      1.6543830000159687,
+      1.518208999982562,
+      1.8002730000148404,
+      1.6702180000152111,
+      1.4687350000031074,
+      1.6901970000162692,
+      1.475445000039599,
+      1.7155159999902025,
+      1.731470000038371,
+      2.2540639999988343,
+      2.071089999958531,
+      2.2949049999851923,
+      2.081806000035158,
+      2.313582999988739,
+      2.1742739999695004,
+      2.8075449999960256,
+      2.4028919999636855
+    ]
+  },
+  "summary_ms": {
+    "capture": {
+      "p50": 21.577971499993964,
+      "p95": 32.21687899997505,
+      "min": 17.238101000032202,
+      "max": 41.13045199994758
+    },
+    "query": {
+      "p50": 1.7952505000096153,
+      "p95": 2.3502480000274772,
+      "min": 1.3636570000130632,
+      "max": 2.8075449999960256
+    }
+  },
+  "resolver": {
+    "scenarios": 32,
+    "resolver_correct": 18,
+    "lww_correct": 4,
+    "resolver_accuracy": 0.5625,
+    "lww_accuracy": 0.125,
+    "accuracy_delta": 0.4375,
+    "resolver_abstained": 10,
+    "by_shape": {
+      "minority_late_wrong": {
+        "scenarios": 18,
+        "resolver_correct": 18,
+        "lww_correct": 0
+      },
+      "contested": {
+        "scenarios": 6,
+        "resolver_correct": 0,
+        "lww_correct": 0
+      },
+      "late_correction": {
+        "scenarios": 4,
+        "resolver_correct": 0,
+        "lww_correct": 4
+      },
+      "corroboration_foiled": {
+        "scenarios": 4,
+        "resolver_correct": 0,
+        "lww_correct": 0
+      }
+    },
+    "threshold": 0.66,
+    "fixture": "tests/fixtures/conflict_facts.jsonl"
+  },
+  "semantic_recall": null,
+  "limitations": [
+    "No CPU/RAM constraint imposed; not a physical-device result.",
+    "Excludes gateway, Qdrant Server, network transport, Ollama and answer generation.",
+    "Sequential synthetic workload; offline hash embeddings do not measure semantic quality."
+  ]
+}
