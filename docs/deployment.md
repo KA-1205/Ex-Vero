@@ -98,6 +98,26 @@ Everything you need to seed the fleet **ships in the repo** — no download requ
 | `config/seed/conflicts_*.jsonl`, `image_conflicts.jsonl` | small | consensus / conflict fixtures |
 | `config/seed/images/` + `images_manifest.jsonl` | small | image-memory fixtures |
 
+### Run in demo mode (frontend only)
+
+If you want to explore the dashboard interface without launching the full kernel:
+
+```bash
+cd frontend && npm install && npm run dev
+# open http://localhost:5173
+```
+
+The frontend includes a built-in mock simulation layer. Open <http://localhost:5173> — all pages render with realistic sample data. You can toggle between live backend and mock data by setting `USE_MOCKS = true` in `frontend/src/api/mock.ts`.
+
+To verify and test the frontend:
+
+```bash
+cd frontend
+npm test        # run Vitest unit test suite (devices, conflict reconnect, metrics)
+npm run lint    # fast oxlint validation
+npm run build   # typecheck (tsc -b) and Vite production bundle
+```
+
 The two **raw** source dumps are large and are deliberately **not committed**. Download them
 only if you want to regenerate the derived seed files:
 
