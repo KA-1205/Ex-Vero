@@ -30,3 +30,8 @@
   .ev-page-title { font-family:Georgia,serif; font-size:clamp(28px,3vw,42px); font-weight:400; letter-spacing:-.04em; line-height:1.15; }
 }
 @layer utilities { .font-tabular { font-variant-numeric:tabular-nums; } }
+
+.ev-panel-heading { min-height:55px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); border-radius:14px 14px 0 0; background:linear-gradient(100deg,#f8faf6,#e8eeeb); }
+.ev-panel-number { display:grid; place-items:center; width:25px; height:25px; border-radius:7px; background:#236a700d; color:#236a70; font:11px ui-monospace,monospace; }
+.ev-panel-heading h2 { letter-spacing:.025em; }
+.ev-badge { display:inline-flex; align-items:center; gap:5px; border-radius:6px; background:#ffffff65; line-height:1.3; }
