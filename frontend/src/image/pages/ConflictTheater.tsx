@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
@@ -159,8 +160,9 @@ export function ConflictTheater() {
   })()
 
   return (
-    <div className="p-4 flex flex-col gap-4 h-full min-h-0 overflow-y-auto">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-conflict-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives.<br />One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
+      <div className="ev-conflict-toolbar flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-sm font-mono font-bold text-ink tracking-wide">
             CONFLICT THEATER — VISION DISPUTE RESOLUTION
@@ -169,7 +171,7 @@ export function ConflictTheater() {
             Key: <span className="text-ink">server_room_A.fire_status</span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={reset}
             className="px-3 py-1.5 text-xs font-mono border border-line text-ink-dim hover:text-ink rounded"
@@ -205,7 +207,7 @@ export function ConflictTheater() {
       </div>
 
       {/* Consensus Fold Result Panel */}
-      <Panel title="CONSENSUS FOLD RESULT" className="flex-1">
+      <Panel title="CONSENSUS FOLD RESULT" className="ev-resolution-panel flex-1">
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
@@ -220,7 +222,7 @@ export function ConflictTheater() {
           )}
 
           {resolved && (
-            <div className="space-y-4">
+            <div className="ev-resolution-reveal space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-base-sunken/60 rounded-md border border-line">
                 <div className="flex items-center gap-3">
                   <span

@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
@@ -84,10 +85,11 @@ export function ConflictTheater() {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4 h-full">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-conflict-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives.<br />One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
+      <div className="ev-conflict-toolbar flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-sm font-mono text-ink-dim tracking-wide">CONFLICT THEATER</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={reset}
             className="px-3 py-1.5 text-xs font-mono border border-line text-ink-dim hover:text-ink"
@@ -106,13 +108,13 @@ export function ConflictTheater() {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
         <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>
       {message && <div role="status" className="text-xs font-mono text-ink-dim">{message}</div>}
 
-      <Panel title="CONSENSUS FOLD RESULT" className="flex-1">
+      <Panel title="CONSENSUS FOLD RESULT" className="ev-resolution-panel flex-1">
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
@@ -125,7 +127,7 @@ export function ConflictTheater() {
             </div>
           )}
           {resolved && (
-            <div className="space-y-4">
+            <div className="ev-resolution-reveal space-y-4">
               <div className="flex items-center gap-3">
                 <span
                   className={`font-mono text-xs px-2 py-1 border ${
