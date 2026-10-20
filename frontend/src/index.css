@@ -48,3 +48,5 @@
 
 .ev-fleet-map { border-radius:0 0 14px 14px; }.ev-fleet-map select,.ev-fleet-map [class*=right-3] { border-radius:8px; }.ev-map-popover { border-radius:10px; box-shadow:0 10px 28px #23323914; }.ev-fleet-map button:hover { background:#f9fcf7; }.ev-fleet-map button:focus-visible { outline-width:3px; }
 @media(prefers-reduced-motion:no-preference) { .ev-map-marker { animation:ev-report-pulse 2s ease-out; } @keyframes ev-report-pulse { from { outline:12px solid #236a7025; outline-offset:0; } to { outline:0 solid #236a7000; outline-offset:16px; } } }
+
+.ev-device-tile { position:relative; min-height:220px; background:radial-gradient(ellipse at 100% 0,#d5c5ac24,transparent 55%),linear-gradient(130deg,#fbfcf7,#e9efeb); }.ev-device-tile>div:first-child>div>div:first-child { font:21px/1.2 Georgia,serif; letter-spacing:-.025em; }.ev-device-tile>div:last-child { margin-top:auto; padding-top:12px; border-top:1px solid #cfdbd7; }.ev-device-tile:hover { border-color:#7fa7a5; box-shadow:0 9px 22px #236a7012; }.ev-device-tile:focus-visible { outline:3px solid #236a70; outline-offset:4px; }

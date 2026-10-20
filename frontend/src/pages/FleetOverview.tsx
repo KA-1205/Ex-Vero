@@ -24,7 +24,7 @@ export function DeviceTile({ device, onOpen }: { device: DeviceSummary; onOpen: 
   return (
     <button
       onClick={onOpen}
-      className="glass-card text-left p-3 hover:border-[#315C86] transition-colors flex flex-col gap-2"
+      className="glass-card ev-device-tile text-left p-5 hover:border-good transition-colors flex flex-col gap-4"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -41,9 +41,9 @@ export function DeviceTile({ device, onOpen }: { device: DeviceSummary; onOpen: 
           </MonoValue>
           <span className="text-[11px] text-ink-faint font-mono">points ({pct}%)</span>
         </div>
-        <div className="h-1 bg-base-sunken mt-1">
+        <div className="h-1.5 overflow-hidden rounded-full bg-base-sunken mt-3">
           <div
-            className={`h-1 ${pct > 85 ? 'bg-alert' : pct > 60 ? 'bg-pending' : 'bg-good'}`}
+            className={`h-1.5 rounded-full ${pct > 85 ? 'bg-alert' : pct > 60 ? 'bg-pending' : 'bg-good'}`}
             style={{ width: `${pct}%` }}
           />
         </div>
