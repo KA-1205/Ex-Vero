@@ -28,6 +28,7 @@ export function QAPanel({ deviceId }: { deviceId: string }) {
       <div className="flex flex-col h-full min-h-0">
         <div className="p-2 border-b border-line flex gap-2">
           <input
+            aria-label="Question for this device"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}

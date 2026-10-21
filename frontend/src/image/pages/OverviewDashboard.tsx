@@ -250,7 +250,7 @@ function StatePill({ state }: { state: string }) {
 }
 
 function Thumb({ src, alt, className = '' }: { src?: string | null; alt: string; className?: string }) {
-  return <div className={`overflow-hidden border border-line bg-base-sunken ${className}`}>{src ? <img src={assetUrl(src) ?? undefined} alt={alt} className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center font-mono text-[9px] text-ink-faint">NO THUMBNAIL</div>}</div>
+  return <div className={`ev-evidence-frame overflow-hidden border border-line bg-base-sunken ${className}`}>{src ? <img src={assetUrl(src) ?? undefined} alt={alt} className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center font-mono text-[9px] text-ink-faint">NO THUMBNAIL</div>}</div>
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
