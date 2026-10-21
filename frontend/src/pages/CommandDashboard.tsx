@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { fetchCloudDashboard, fetchMemoryRecords, fetchRecallBenchmark, fetchResolverBenchmark, retractPoint } from '../api/client'
 import { USE_MOCKS } from '../api/mock'
@@ -44,7 +45,8 @@ export function CommandDashboard() {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-3 h-full">
+    <div className="ev-page ev-reports-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">REPORTS / SHARED MEMORY</div><h1 className="ev-page-title">The bigger picture.</h1><p>Fleet facts, source agreement, and the evidence behind shared understanding.</p></div><FieldGraphic kind="consensus" /></header>
       <div className="flex items-center gap-4 text-xs font-mono">
         <span className="text-ink-dim">TRUSTED FACTS</span>
         <MonoValue className="text-good">{confirmed.length} confirmed</MonoValue>
