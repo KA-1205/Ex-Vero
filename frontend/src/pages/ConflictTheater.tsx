@@ -25,7 +25,7 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
           {reconnected ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
-      <div className="rounded-md border border-[#AABBC8] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
+      <div className="rounded-md border border-[#C1CFCC] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
     </div>
   )
 }

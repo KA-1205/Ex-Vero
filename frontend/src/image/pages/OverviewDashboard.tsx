@@ -202,7 +202,7 @@ function ZoneTile({ keyName, fact, records, onOpen }: { keyName: string; fact?: 
   const latest = records[0]
   const state = fact?.status ?? (latest ? 'DISPUTED' : 'NO DATA')
   return (
-    <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#315C86]">
+    <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#236A70]">
       <div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-xs font-semibold">{fact?.zone ?? zoneLabel(keyName)}</span><StatePill state={state} /></div>
       <Thumb src={latest?.thumbnail_url ?? fact?.thumbnail_url} alt={latest?.content_preview ?? fact?.summary ?? keyName} className="mt-2 aspect-video" />
       <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[10px] text-ink-dim"><span>{fact?.confidence != null ? `${Math.round(fact.confidence * 100)}% confidence` : '—'}</span><span>{fact ? `${fact.corroborating_devices.length} cameras` : '—'}</span></div>
@@ -221,7 +221,7 @@ function EvidenceCard({ entry }: { entry: DecisionFeedEntry }) {
 }
 
 function CameraHealth({ device, latest, sync, trust, onOpen }: { device: DeviceSummary; latest?: MemoryRecord; sync: SyncStatus | null; trust?: number; onOpen: () => void }) {
-  return <button onClick={onOpen} className="border border-line bg-white/30 p-2 text-left hover:border-[#315C86]"><div className="flex items-center justify-between gap-2"><span className="font-mono text-xs font-semibold">{device.id}</span><ConnectivityPill state={device.connectivity} /></div><div className="mt-2 flex gap-2"><Thumb src={latest?.thumbnail_url} alt={latest?.content_preview ?? device.id} className="h-12 w-20 shrink-0" /><div className="min-w-0 space-y-1 text-[10px] text-ink-dim"><div>memory <MonoValue>{device.memory_used}/{device.memory_cap}</MonoValue></div><div>pending <MonoValue>{sync ? Object.values(sync.pending_by_priority).reduce((a, b) => a + b, 0) : '—'}</MonoValue></div><div>trust <MonoValue>{trust == null ? '—' : trust.toFixed(2)}</MonoValue></div></div></div><div className="mt-2 border-t border-line pt-1 font-mono text-[9px] text-ink-faint">last sync {formatTime(device.last_sync_at)}</div></button>
+  return <button onClick={onOpen} className="border border-line bg-white/30 p-2 text-left hover:border-[#236A70]"><div className="flex items-center justify-between gap-2"><span className="font-mono text-xs font-semibold">{device.id}</span><ConnectivityPill state={device.connectivity} /></div><div className="mt-2 flex gap-2"><Thumb src={latest?.thumbnail_url} alt={latest?.content_preview ?? device.id} className="h-12 w-20 shrink-0" /><div className="min-w-0 space-y-1 text-[10px] text-ink-dim"><div>memory <MonoValue>{device.memory_used}/{device.memory_cap}</MonoValue></div><div>pending <MonoValue>{sync ? Object.values(sync.pending_by_priority).reduce((a, b) => a + b, 0) : '—'}</MonoValue></div><div>trust <MonoValue>{trust == null ? '—' : trust.toFixed(2)}</MonoValue></div></div></div><div className="mt-2 border-t border-line pt-1 font-mono text-[9px] text-ink-faint">last sync {formatTime(device.last_sync_at)}</div></button>
 }
 
 function Pipeline({ pipeline, sync, mode }: { pipeline: { URGENT: number; ROUTINE: number; HELD: number }; sync: SyncStatus[]; mode: string | null }) {

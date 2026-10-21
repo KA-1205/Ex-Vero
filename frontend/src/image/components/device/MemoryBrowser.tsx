@@ -193,11 +193,6 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                   >
                     {/* Thumbnail Image Container */}
                     <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Inspect ${primary.content_preview}`}
-                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail(primary.id) } }}
-                      onClick={() => openDetail(primary.id)}
                       className="relative w-full aspect-square rounded overflow-hidden bg-black/10 border border-line cursor-pointer"
                     >
                       {primary.thumbnail_url ? (
@@ -216,8 +211,9 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                         </div>
                       )}
 
+                      <button type="button" className="absolute inset-0 rounded focus-visible:outline-2" aria-label={`Inspect ${primary.content_preview}`} onClick={() => openDetail(primary.id)} />
                       {/* State Badge Overlay */}
-                      <div className="absolute top-1.5 left-1.5">
+                      <div className="pointer-events-none absolute top-1.5 left-1.5">
                         <StateBadge state={primary.state} />
                       </div>
 

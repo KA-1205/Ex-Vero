@@ -127,7 +127,7 @@ export function OverviewDashboard() {
         <Panel number="05" title="FIELD CONDITIONS" className="lg:col-span-3 min-h-0 overflow-hidden">
           <div className="relative flex h-full min-h-0 flex-col overflow-y-auto p-3">
             <div aria-hidden="true" className="absolute inset-0 bg-[url('/delhi.png')] bg-cover bg-[center_65%] opacity-25" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#E1EBEB]/10 via-[#E1EBEB]/45 to-[#E1EBEB]/35" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#E5E7E9]/10 via-[#E5E7E9]/45 to-[#E5E7E9]/35" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="text-[11px] font-medium text-ink">New Delhi, India</div>
               {weather && <MonoValue className="text-[9px] text-ink">Updated {formatTime(weather.observed_at)}</MonoValue>}
@@ -170,7 +170,7 @@ function MetricRow({ label, value, samples, chart }: { label: string; value: str
   const values = samples.slice(-20)
   const points = values.map((sample, index) => `${values.length < 2 ? 50 : index / (values.length - 1) * 100},${27 - sample / max * 22}`).join(' ')
   return (
-    <div className="flex flex-1 min-h-0 items-center gap-2 border-b border-[#AABBC8]/60 last:border-b-0">
+    <div className="flex flex-1 min-h-0 items-center gap-2 border-b border-[#C1CFCC]/60 last:border-b-0">
       <span className="w-[92px] shrink-0 text-[10px] text-ink-dim">{label}</span>
       <div className="flex h-5 min-w-0 flex-1 items-center" aria-hidden="true">
         {chart === 'line' ? (
@@ -195,7 +195,7 @@ function Loading({ children }: { children: string }) {
 function WeatherIcon({ code }: { code: number }) {
   const isClear = code === 0 || code === 1
   return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-12 w-12 shrink-0 text-[#102A43]" aria-hidden="true">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-12 w-12 shrink-0 text-[#233239]" aria-hidden="true">
       {isClear ? <><circle cx="25" cy="23" r="8" /><path d="M25 3v5m0 30v5M5 23h5m30 0h5M11 9l4 4m20 20 4 4m0-28-4 4M15 33l-4 4" /></> : <><path d="M13 34h22a8 8 0 0 0 .5-16A12 12 0 0 0 12 21a6.5 6.5 0 0 0 1 13Z" /><path d="M18 9v4m-8-1 3 3m19-6-2 4" /></>}
     </svg>
   )

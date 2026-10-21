@@ -212,7 +212,7 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
           <Legend state="DEGRADED" color={statusColor('DEGRADED')} />
           <Legend state="OFFLINE" color={statusColor('OFFLINE')} />
         </div>
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} className="text-[9px] text-[#315C86] underline">© OpenStreetMap contributors</a>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} className="text-[9px] text-[#236A70] underline">© OpenStreetMap contributors</a>
       </div>
     </div>
   )
