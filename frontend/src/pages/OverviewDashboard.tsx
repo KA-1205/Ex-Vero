@@ -86,7 +86,7 @@ export function OverviewDashboard() {
 
   return (
     <div className="ev-page ev-numeric-overview text-ink">
-      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">NUMERIC / FLEET INTELLIGENCE</div><h1 className="ev-page-title">Every signal. A clearer picture.</h1><p>Real-time monitoring of your fleet and the observations it remembers.</p><span className="ev-hero-stamp">{now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {devices ? `${total} devices in fleet` : 'Loading nodes'}</span></div><FieldGraphic /></header>
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">NUMERIC / FLEET INTELLIGENCE · {now.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div><h1 className="ev-page-title">Every signal. A clearer picture.</h1><p>Real-time monitoring of your fleet and the observations it remembers.</p></div><FieldGraphic /></header>
 
       <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-4">
         <Kpi icon="devices" value={devices ? String(total) : '—'} label="TOTAL DEVICES" detail={`${offline} offline · ${online} online${degraded ? ` · ${degraded} degraded` : ''}`} />

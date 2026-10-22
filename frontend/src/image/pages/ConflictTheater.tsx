@@ -161,7 +161,7 @@ export function ConflictTheater() {
 
   return (
     <div className="ev-page ev-conflict-page">
-      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives.<br />One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives. One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
       <div className="ev-conflict-toolbar flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-sm font-mono font-bold text-ink tracking-wide">

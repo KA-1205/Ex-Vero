@@ -9,6 +9,14 @@ Silver (`#E5E7E9`), muted petrol teal (`#236A70`), and warm champagne (`#D5C5AC`
 
 The landing page follows observations through memory and consensus. Numeric and Image dashboards share a workspace switcher, navigation, panel styles, and a motion toggle. The Image fleet query sits near the top. Device cards, console tabs, local memory, decision timelines, evidence capture, conflict comparison, and Reports use the same visual language. Sync and resource strips remain in normal document flow instead of covering console content.
 
+## Compact workspace layout
+
+Workspace headers are compact strips rather than hero sections. Dashboard metrics, query controls, evidence, and monitoring panels share the first screen. On desktop, long device lists, record lists, reports, and query results scroll within their panels instead of extending the entire workspace. Narrow mobile layouts retain natural page scrolling.
+
+At 1366 × 768, browser measurements confirmed document height and scroll height both equal 768px for Numeric and Image dashboards, Numeric device list, both Reports and Conflict Theater views, and both device consoles. Document widths also matched the viewport. Motion behavior was not expanded in this revision.
+
+The favicon uses the existing signal-star shape in silver on teal with a warm champagne node. SVG, ICO, 32px PNG, and Apple touch formats are provided.
+
 ## Motion
 
 - Decorative signal traces travel over contour geometry.

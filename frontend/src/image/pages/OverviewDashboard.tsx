@@ -130,8 +130,22 @@ export function OverviewDashboard() {
 
   return (
     <div className="ev-page ev-visual-overview text-ink">
-      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">IMAGE / VISUAL INTELLIGENCE</div><h1 className="ev-page-title">See the evidence.<br />Understand the decision.</h1><p>What the cameras see, whether they agree, and what reached the cloud.</p><span className="ev-hero-stamp">{networkMode ? `NETWORK ${networkMode.toUpperCase()}` : 'NETWORK —'}</span></div><FieldGraphic kind="vision" /></header>
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">IMAGE / VISUAL INTELLIGENCE · {networkMode ? networkMode.toUpperCase() : 'NETWORK —'}</div><h1 className="ev-page-title">See the evidence. Understand the decision.</h1><p>What the cameras see, whether they agree, and what reached the cloud.</p></div><FieldGraphic kind="vision" /></header>
 
+
+
+      {error && <div className="border border-alert bg-alert/10 px-3 py-2 font-mono text-[11px] text-alert">Edge node unavailable: {error}</div>}
+      {camerasMissing && <EmptyState>NO CAMERAS PROVISIONED. Run <span className="text-ink">python tools/seed_fleet.py</span>.</EmptyState>}
+      {noFrames && <EmptyState>NO FRAMES CAPTURED YET. Run <span className="text-ink">python tools/load_image_dataset.py</span>.</EmptyState>}
+
+      <div className="ev-image-summary">
+      <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-5">
+        <Kpi value={devices === null ? '—' : `${online}/${cameras.length || '—'}`} label="CAMERAS ONLINE" detail={devices === null ? '—' : `${offline} offline · ${degraded} degraded`} />
+        <Kpi value={devices === null ? '—' : `${photos}/${memoryCap || '—'}`} label="PHOTOS IN MEMORY" detail="vision points / local cap" />
+        <Kpi value={facts.length ? String(confirmedFacts.length) : '—'} label="ZONES WITH ACTIVE HAZARD" detail="confirmed visual facts" />
+        <Kpi value={facts.length ? String(disputedFacts.length) : '—'} label="OPEN VISUAL DISPUTES" detail="disputed visual facts" alert />
+        <Kpi value={bytesSent ? formatBytes(bytesSent) : '—'} label="BYTES SENT TO CLOUD" detail={networkMode ? networkMode.toUpperCase() : '—'} />
+      </section>
         <Panel title="ASK THE FLEET" className="ev-fleet-query">
           <div className="flex h-full flex-col gap-3 p-3">
             <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void submitQuery() }}>
@@ -141,19 +155,9 @@ export function OverviewDashboard() {
             {queryState ? <QueryResultView result={queryState} /> : <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />}
           </div>
         </Panel>
+      </div>
 
-      {error && <div className="border border-alert bg-alert/10 px-3 py-2 font-mono text-[11px] text-alert">Edge node unavailable: {error}</div>}
-      {camerasMissing && <EmptyState>NO CAMERAS PROVISIONED. Run <span className="text-ink">python tools/seed_fleet.py</span>.</EmptyState>}
-      {noFrames && <EmptyState>NO FRAMES CAPTURED YET. Run <span className="text-ink">python tools/load_image_dataset.py</span>.</EmptyState>}
-
-      <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-5">
-        <Kpi value={devices === null ? '—' : `${online}/${cameras.length || '—'}`} label="CAMERAS ONLINE" detail={devices === null ? '—' : `${offline} offline · ${degraded} degraded`} />
-        <Kpi value={devices === null ? '—' : `${photos}/${memoryCap || '—'}`} label="PHOTOS IN MEMORY" detail="vision points / local cap" />
-        <Kpi value={facts.length ? String(confirmedFacts.length) : '—'} label="ZONES WITH ACTIVE HAZARD" detail="confirmed visual facts" />
-        <Kpi value={facts.length ? String(disputedFacts.length) : '—'} label="OPEN VISUAL DISPUTES" detail="disputed visual facts" alert />
-        <Kpi value={bytesSent ? formatBytes(bytesSent) : '—'} label="BYTES SENT TO CLOUD" detail={networkMode ? networkMode.toUpperCase() : '—'} />
-      </section>
-
+      <div className="ev-image-main">
       <section className="grid min-h-[300px] grid-cols-1 gap-5 xl:grid-cols-5">
         <Panel number="01" title="ZONE SITUATION BOARD" className="min-h-0 xl:col-span-3">
           <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2">
@@ -179,8 +183,9 @@ export function OverviewDashboard() {
           {allFeed.length === 0 && <LoadingRow text="Waiting for camera decisions…" />}
         </div>
       </Panel>
+      </div>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="ev-image-bottom grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Panel number="04" title="CAMERA HEALTH" className="min-h-[250px]">
           <div className="grid gap-2 p-3 sm:grid-cols-2">
             {cameras.map(({ device, records, sync }) => <CameraHealth key={device.id} device={device} latest={records[0]} sync={sync} trust={trust[device.id]} onOpen={() => navigate(`/image/overview/devices/${device.id}`)} />)}
