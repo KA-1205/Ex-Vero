@@ -1,5 +1,6 @@
 /** Open an optional live event stream without taking down its page when unavailable. */
 export function openEventSocket(baseUrl: string, path: string): WebSocket | null {
+  if (!baseUrl) return null
   try {
     const url = new URL(`${baseUrl.replace(/\/+$/, '')}${path}`)
     if (location.protocol === 'https:' && url.protocol === 'ws:') {

@@ -9,15 +9,10 @@ import type {
 } from '../types'
 import * as mock from './mock'
 import { openEventSocket } from '../../api/eventSocket'
+import { resolveApiBaseUrl } from '../../api/apiBase'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (() => {
-  if (BASE_URL) {
-    const apiUrl = new URL(BASE_URL, location.origin)
-    return `${apiUrl.protocol === 'https:' ? 'wss' : 'ws'}://${apiUrl.host}`
-  }
-  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8000`
-})()
+const BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, '')
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (location.protocol === 'https:' ? '' : 'ws://localhost:8000')
 
 export function assetUrl(path: string | null | undefined): string | null {
   if (!path) return null
