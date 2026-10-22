@@ -8,6 +8,7 @@ import type {
   RecallBenchmark, ResolverBenchmark,
 } from '../types'
 import * as mock from './mock'
+import { openEventSocket } from './eventSocket'
 
 // The edge node runs locally on :8000 and is deliberately not deployed (its
 // facts live in an on-disk shard, which a serverless function cannot persist).
@@ -170,7 +171,8 @@ export function subscribeDeviceEvents(deviceId: string, onEvent: (frame: DeviceE
     const interval = setInterval(() => { const e = seed[i++ % seed.length]; onEvent({ type: 'decision', data: { device_id: deviceId, point_id: Number(e.point_id) || i, value_preview: e.content_preview, modality: e.modality, thumbnail_url: e.thumbnail_url ?? null, verdict: e.verdict, reason: e.reason, timestamp: new Date().toISOString() } }) }, 3500)
     return () => clearInterval(interval)
   }
-  const ws = new WebSocket(`${WS_BASE_URL}/devices/${encodeURIComponent(deviceId)}/events`)
+  const ws = openEventSocket(WS_BASE_URL, `/devices/${encodeURIComponent(deviceId)}/events`)
+  if (!ws) return () => undefined
   ws.onmessage = (msg) => { try {
     const frame = JSON.parse(msg.data) as DeviceEventFrame
     if (frame.type === 'decision') frame.data.thumbnail_url = apiAsset(frame.data.thumbnail_url)
@@ -197,7 +199,8 @@ export function mapConsensusEvent(event: ApiConsensusEvent): ConsensusEvent {
 export async function setRogueMode(deviceId: string, rogue: boolean) { if (mock.USE_MOCKS) return { id: deviceId, rogue }; return postJSON(`/devices/${encodeURIComponent(deviceId)}/rogue`, { rogue }) }
 export function subscribeConsensusEvents(onEvent: (entry: ConsensusEvent) => void): () => void {
   if (mock.USE_MOCKS) return () => undefined
-  const ws = new WebSocket(`${WS_BASE_URL}/consensus/events`)
+  const ws = openEventSocket(WS_BASE_URL, '/consensus/events')
+  if (!ws) return () => undefined
   ws.onmessage = (msg) => { try {
     const event = JSON.parse(msg.data) as import('../types').ApiConsensusEvent
     onEvent({ id: `${event.corroboration_key}-${event.timestamp}`, corroboration_key: event.corroboration_key, timestamp: event.timestamp, outcome: event.state === 'RESOLVED_LWW' ? 'LWW' : event.state === 'RETRACTED' ? 'DISPUTED' : event.state, confidence: event.confidence, claims: event.candidates.flatMap((candidate) => candidate.devices.map((device_id) => ({ device_id, value: candidate.value, trust_score: candidate.weight, reported_at: event.timestamp }))), resolution_summary: event.explanation })

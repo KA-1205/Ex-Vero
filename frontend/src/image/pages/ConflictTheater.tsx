@@ -84,6 +84,7 @@ export function ConflictTheater() {
   const [devices, setDevices] = useState<DeviceSummary[]>([])
   const [camARecords, setCamARecords] = useState<MemoryRecord[]>([])
   const [camBRecords, setCamBRecords] = useState<MemoryRecord[]>([])
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     void fetchDevices()
@@ -91,10 +92,10 @@ export function ConflictTheater() {
         setDevices(devs)
         const c1 = devs.find((d) => d.id === 'cam-01') || devs[0]
         const c2 = devs.find((d) => d.id === 'cam-02') || devs[1]
-        if (c1) void fetchMemoryRecords(c1.id, { modality: 'vision' }).then(setCamARecords)
-        if (c2) void fetchMemoryRecords(c2.id, { modality: 'vision' }).then(setCamBRecords)
+        if (c1) void fetchMemoryRecords(c1.id, { modality: 'vision' }).then(setCamARecords).catch(() => setMessage('Camera evidence is unavailable while the edge node is offline.'))
+        if (c2) void fetchMemoryRecords(c2.id, { modality: 'vision' }).then(setCamBRecords).catch(() => setMessage('Camera evidence is unavailable while the edge node is offline.'))
       })
-      .catch((error) => console.error('Unable to load image fleet', error))
+      .catch((error) => { console.error('Unable to load image fleet', error); setMessage('The edge node is unavailable. Camera data and resolution need a live connection.') })
 
     return subscribeConsensusEvents((event) => {
       setResolved(event)
@@ -109,6 +110,7 @@ export function ConflictTheater() {
   const thumbB = camBRecords[0]?.thumbnail_url ?? DEFAULT_CAM_B.thumbnail_url
 
   async function reconnect() {
+    setMessage('')
     setResolving(true)
     try {
       // Reconnect and push real conflict for server_room_A.fire_status
@@ -130,6 +132,7 @@ export function ConflictTheater() {
       }
     } catch (error) {
       console.error('Unable to inject conflict', error)
+      setMessage('Could not reach the edge node to resolve this conflict.')
       setResolving(false)
     }
   }
@@ -187,6 +190,8 @@ export function ConflictTheater() {
           </button>
         </div>
       </div>
+
+      {message && <div role="status" className="text-xs font-mono text-alert">{message}</div>}
 
       {/* 2 Camera Thumbnails Side-by-Side (Task A7) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

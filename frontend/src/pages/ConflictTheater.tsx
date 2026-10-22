@@ -41,7 +41,7 @@ export function ConflictTheater() {
   const [pendingConsensus, setPendingConsensus] = useState<ConsensusEvent | null>(null)
 
   useEffect(() => {
-    void fetchDevices().then(setDevices).catch((error) => console.error('Unable to load conflict devices', error))
+    void fetchDevices().then(setDevices).catch((error) => { console.error('Unable to load conflict devices', error); setMessage('The edge node is unavailable. Device data and resolution need a live connection.') })
     return subscribeConsensusEvents((event) => { setResolved(event); setResolving(false) })
   }, [])
 
