@@ -6,10 +6,10 @@ import { fetchDevices, injectConflict, mapConsensusEvent, setRogueMode, subscrib
 import type { ConsensusEvent, DeviceSummary } from '../types'
 import { MonoValue, Panel } from '../components/primitives'
 
-const DEVICE_A = { id: 'dev-01', name: 'Paramedic Tablet 01', value: 'Zone C — gas leak, active, evacuate' }
-const DEVICE_B = { id: 'dev-03', name: 'Field Pi Node 03', value: 'Zone C — gas leak, contained, monitor only' }
+const DEVICE_A = { id: 'dev-01', name: 'Paramedic Tablet 01', value: 'Zone C — gas leak, active, evacuate', connectivity: 'ONLINE' as const }
+const DEVICE_B = { id: 'dev-03', name: 'Field Pi Node 03', value: 'Zone C — gas leak, contained, monitor only', connectivity: 'ONLINE' as const }
 
-function DeviceSide({ name, id, value, reconnected }: { name: string; id: string; value: string; reconnected: boolean }) {
+function DeviceSide({ name, id, value, online }: { name: string; id: string; value: string; online: boolean }) {
   return (
     <div className="glass-card flex-1 p-3">
       <div className="flex items-center justify-between mb-2">
@@ -19,10 +19,10 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
         </div>
         <span
           className={`font-mono text-[11px] px-1.5 py-0.5 border ${
-            reconnected ? 'border-good text-good' : 'border-alert text-alert'
+            online ? 'border-good text-good' : 'border-alert text-alert'
           }`}
         >
-          {reconnected ? 'ONLINE' : 'OFFLINE'}
+          {online ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
       <div className="rounded-md border border-[#C1CFCC] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
@@ -31,7 +31,7 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
 }
 
 export function ConflictTheater() {
-  const { setMode } = useNetworkMode()
+  const { mode, setMode } = useNetworkMode()
   const [devices, setDevices] = useState<DeviceSummary[]>([])
   const [reconnected, setReconnected] = useState(false)
   const [resolved, setResolved] = useState<ConsensusEvent | null>(null)
@@ -47,6 +47,9 @@ export function ConflictTheater() {
 
   const deviceA = devices[0] ?? DEVICE_A
   const deviceB = devices.find((device) => device.id !== deviceA.id) ?? DEVICE_B
+
+  const isDevAOnline = reconnected || (mode !== 'offline' && deviceA.connectivity !== 'OFFLINE')
+  const isDevBOnline = reconnected || (mode !== 'offline' && deviceB.connectivity !== 'OFFLINE')
 
   async function reconnect() {
     setResolving(true)
@@ -115,8 +118,8 @@ export function ConflictTheater() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
-        <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
+        <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} online={isDevAOnline} />
+        <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} online={isDevBOnline} />
       </div>
       {message && (
         <div role="status" className="text-xs font-mono text-ink-dim flex items-center justify-between border border-line bg-base-sunken/40 px-3 py-1.5 rounded">
@@ -147,7 +150,9 @@ export function ConflictTheater() {
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
-              both devices offline, disagreeing on zone_c.hazard_status — press RECONNECT
+              {mode === 'offline'
+                ? 'both devices offline, disagreeing on zone_c.hazard_status — press RECONNECT'
+                : 'both devices online. Click RESET (GO OFFLINE) to simulate a partitioned dispute, or inject a conflict.'}
             </div>
           )}
           {resolving && (

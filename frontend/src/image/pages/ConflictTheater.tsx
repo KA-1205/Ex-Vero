@@ -12,6 +12,7 @@ const DEFAULT_CAM_A = {
   value: 'fire',
   thumbnail_url: '/thumbnails/thumb_1.jpg',
   corroboration_key: 'server_room_A.fire_status',
+  connectivity: 'ONLINE' as const,
 }
 
 const DEFAULT_CAM_B = {
@@ -20,6 +21,7 @@ const DEFAULT_CAM_B = {
   value: 'none',
   thumbnail_url: '/thumbnails/thumb_9.jpg',
   corroboration_key: 'server_room_A.fire_status',
+  connectivity: 'ONLINE' as const,
 }
 
 function CameraSide({
@@ -27,13 +29,13 @@ function CameraSide({
   id,
   value,
   thumbnailUrl,
-  reconnected,
+  online,
 }: {
   name: string
   id: string
   value: string
   thumbnailUrl?: string | null
-  reconnected: boolean
+  online: boolean
 }) {
   return (
     <div className="glass-card flex-1 p-3 rounded-lg border border-line bg-white/40 backdrop-blur-md">
@@ -44,10 +46,10 @@ function CameraSide({
         </div>
         <span
           className={`font-mono text-[10px] px-2 py-0.5 border rounded-sm font-medium ${
-            reconnected ? 'border-good text-good bg-good/10' : 'border-alert text-alert bg-alert/10'
+            online ? 'border-good text-good bg-good/10' : 'border-alert text-alert bg-alert/10'
           }`}
         >
-          {reconnected ? 'ONLINE' : 'OFFLINE'}
+          {online ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
 
@@ -77,7 +79,7 @@ function CameraSide({
 }
 
 export function ConflictTheater() {
-  const { setMode } = useNetworkMode()
+  const { mode, setMode } = useNetworkMode()
   const [reconnected, setReconnected] = useState(false)
   const [resolved, setResolved] = useState<ConsensusEvent | null>(null)
   const [resolving, setResolving] = useState(false)
@@ -105,6 +107,9 @@ export function ConflictTheater() {
 
   const devA = devices.find((d) => d.id === 'cam-01') ?? devices[0] ?? DEFAULT_CAM_A
   const devB = devices.find((d) => d.id === 'cam-02') ?? devices[1] ?? DEFAULT_CAM_B
+
+  const isDevAOnline = reconnected || (mode !== 'offline' && devA.connectivity !== 'OFFLINE')
+  const isDevBOnline = reconnected || (mode !== 'offline' && devB.connectivity !== 'OFFLINE')
 
   const thumbA = camARecords[0]?.thumbnail_url ?? DEFAULT_CAM_A.thumbnail_url
   const thumbB = camBRecords[0]?.thumbnail_url ?? DEFAULT_CAM_B.thumbnail_url
@@ -200,14 +205,14 @@ export function ConflictTheater() {
           id={devA.id}
           value="fire"
           thumbnailUrl={thumbA}
-          reconnected={reconnected}
+          online={isDevAOnline}
         />
         <CameraSide
           name={devB.name || 'Zone B Vision 02'}
           id={devB.id}
           value="none"
           thumbnailUrl={thumbB}
-          reconnected={reconnected}
+          online={isDevBOnline}
         />
       </div>
 
@@ -216,7 +221,11 @@ export function ConflictTheater() {
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
-              Both cameras offline, disagreeing on <span className="text-ink">server_room_A.fire_status</span> — press RECONNECT & RESOLVE
+              {mode === 'offline' ? (
+                <>Both cameras offline, disagreeing on <span className="text-ink">server_room_A.fire_status</span> — press RECONNECT & RESOLVE</>
+              ) : (
+                <>Cameras live on <span className="text-ink">server_room_A.fire_status</span>. Click <span className="text-ink">RESET (GO OFFLINE)</span> to simulate edge partition, or <span className="text-ink">RECONNECT & RESOLVE</span> to trigger consensus fold.</>
+              )}
             </div>
           )}
 
