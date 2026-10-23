@@ -133,19 +133,27 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
       onWheel={handleWheel}
       aria-label="Interactive map of fleet devices in New Delhi"
     >
-      {tiles.map((tile) => (
-        <img
-          key={`${zoom}/${tile.x}/${tile.y}`}
-          src={`https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${zoom}/${tile.x}/${tile.y}.png`}
-          alt=""
-          draggable={false}
-          className="pointer-events-none absolute h-64 w-64 max-w-none"
-          style={{ left: tile.left, top: tile.top, filter: 'saturate(.4) contrast(.94)' }}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'
-          }}
-        />
-      ))}
+      {tiles.map((tile) => {
+        const sub = ['a', 'b', 'c', 'd'][(tile.x + tile.y) % 4]
+        return (
+          <img
+            key={`${zoom}/${tile.x}/${tile.y}`}
+            src={`https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${tile.x}/${tile.y}.png`}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute h-64 w-64 max-w-none"
+            style={{ left: tile.left, top: tile.top, filter: 'saturate(.5) contrast(.95)' }}
+            onError={(e) => {
+              const img = e.currentTarget as HTMLImageElement
+              if (!img.src.includes('openstreetmap.org')) {
+                img.src = `https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`
+              } else {
+                img.style.visibility = 'hidden'
+              }
+            }}
+          />
+        )
+      })}
 
       {visibleDevices.map((device) => {
         const point = project(device.latitude!, device.longitude!, zoom)
