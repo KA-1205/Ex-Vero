@@ -10,14 +10,13 @@ import type {
 import * as mock from './mock'
 import { openEventSocket } from '../../api/eventSocket'
 import { resolveApiBaseUrl } from '../../api/apiBase'
+import { resolveAssetUrl } from './assetUrl'
 
 const BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, '')
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? (location.protocol === 'https:' ? '' : 'ws://localhost:8000')
 
 export function assetUrl(path: string | null | undefined): string | null {
-  if (!path) return null
-  if (/^https?:\/\//.test(path)) return path
-  return `${BASE_URL}${path}`
+  return resolveAssetUrl(path, BASE_URL)
 }
 
 async function getJSON<T>(path: string): Promise<T> {
