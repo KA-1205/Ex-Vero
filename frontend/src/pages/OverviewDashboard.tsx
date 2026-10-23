@@ -91,7 +91,7 @@ export function OverviewDashboard() {
       <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-4">
         <Kpi icon="devices" value={devices ? String(total) : '—'} label="TOTAL DEVICES" detail={`${offline} offline · ${online} online${degraded ? ` · ${degraded} degraded` : ''}`} />
         <Kpi icon="alert" value={facts.length ? String(disputed) : '—'} label="DISPUTED FACTS" detail={`${facts.length} fleet facts in cloud state`} />
-        <Kpi icon="wifi" value="96.4%" label="MEASURED SYNC RATE" detail="from latest device push measurements" />
+        <Kpi icon="wifi" value="—" label="SYNC SUCCESS RATE" detail="No verified fleet-wide rate available" />
         <Kpi icon="health" value={onlinePct == null ? '—' : `${onlinePct}%`} label="DEVICES ONLINE" detail={`${online} online of ${total} devices`} />
       </section>
 

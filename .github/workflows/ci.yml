@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, updates]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -12,6 +12,24 @@ on:
 permissions:
   contents: read
 jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: cd frontend && npm ci
+      - name: Lint frontend
+        run: cd frontend && npm run lint
+      - name: Run frontend tests
+        run: cd frontend && npm test
+      - name: Build frontend bundle
+        run: cd frontend && npm run build
   deterministic-backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15

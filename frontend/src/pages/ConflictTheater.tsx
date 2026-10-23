@@ -50,7 +50,13 @@ export function ConflictTheater() {
 
   async function reconnect() {
     setResolving(true)
-    try { setMode('full') } catch (error) { setMessage(error instanceof Error ? error.message : 'Reconnect failed') }
+    try {
+      setMode('full')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Reconnect failed')
+      setResolving(false)
+      return
+    }
     setReconnected(true)
     if (pendingConsensus) {
       setResolved(pendingConsensus)
@@ -112,9 +118,32 @@ export function ConflictTheater() {
         <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
         <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>
-      {message && <div role="status" className="text-xs font-mono text-ink-dim">{message}</div>}
+      {message && (
+        <div role="status" className="text-xs font-mono text-ink-dim flex items-center justify-between border border-line bg-base-sunken/40 px-3 py-1.5 rounded">
+          <span>{message}</span>
+          {(message.toLowerCase().includes('failed') || message.toLowerCase().includes('error')) && (
+            <button
+              type="button"
+              onClick={() => void reconnect()}
+              className="underline text-ink hover:text-good ml-3 font-semibold cursor-pointer"
+            >
+              Retry Reconnect
+            </button>
+          )}
+        </div>
+      )}
 
-      <Panel title="CONSENSUS FOLD RESULT" className="ev-resolution-panel flex-1">
+      <Panel
+        title="CONSENSUS FOLD RESULT"
+        action={
+          resolved?.corroboration_key ? (
+            <span className="font-mono text-[10px] text-ink-dim px-2 py-0.5 border border-line bg-base-sunken rounded mr-2">
+              KEY: {resolved.corroboration_key}
+            </span>
+          ) : undefined
+        }
+        className="flex-1"
+      >
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
@@ -127,33 +156,71 @@ export function ConflictTheater() {
             </div>
           )}
           {resolved && (
-            <div className="ev-resolution-reveal space-y-4">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`font-mono text-xs px-2 py-1 border ${
-                    resolved.outcome === 'CONFIRMED'
-                      ? 'border-good text-good'
-                      : resolved.outcome === 'DISPUTED'
-                      ? 'border-alert text-alert'
-                      : 'border-pending text-pending'
-                  }`}
-                >
-                  {resolved.outcome}
-                </span>
-                <MonoValue className="text-sm">confidence {resolved.confidence.toFixed(2)}</MonoValue>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/60 pb-3">
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`font-mono text-xs px-2.5 py-1 border font-semibold ${
+                      resolved.outcome === 'CONFIRMED'
+                        ? 'border-good text-good bg-good/10'
+                        : resolved.outcome === 'DISPUTED'
+                        ? 'border-alert text-alert bg-alert/10'
+                        : 'border-pending text-pending bg-pending/10'
+                    }`}
+                  >
+                    {resolved.outcome}
+                  </span>
+                  <span className="text-xs font-mono text-ink-dim">
+                    {(resolved.confidence * 100).toFixed(0)}% confidence
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 w-48 sm:w-64">
+                  <div className="h-2 flex-1 bg-base-sunken border border-line rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        resolved.confidence >= 0.8
+                          ? 'bg-good'
+                          : resolved.confidence >= 0.5
+                          ? 'bg-pending'
+                          : 'bg-alert'
+                      }`}
+                      style={{ width: `${Math.round(resolved.confidence * 100)}%` }}
+                    />
+                  </div>
+                  <MonoValue className="text-xs font-mono text-ink-dim w-9 text-right">
+                    {resolved.confidence.toFixed(2)}
+                  </MonoValue>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {resolved.claims.map((c) => (
-                  <div key={c.device_id} className="glass-card p-2 text-xs">
-                    <div className="font-mono text-ink-faint">{c.device_id}</div>
-                    <div className="text-ink my-1">{c.value}</div>
-                    <div className="text-ink-dim">
-                      trust weight <MonoValue>{c.trust_score.toFixed(2)}</MonoValue>
+                  <div key={c.device_id} className="glass-card p-3 text-xs flex flex-col justify-between gap-2 border border-line/80">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-mono text-[11px] font-semibold text-ink-dim">{c.device_id}</span>
+                        {c.reported_at && (
+                          <span className="font-mono text-[10px] text-ink-faint">
+                            {new Date(c.reported_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-ink font-mono text-xs bg-base-sunken p-2 rounded border border-line/50">
+                        {c.value}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-line/30 text-ink-dim font-mono text-[11px]">
+                      <span>trust weight</span>
+                      <MonoValue className={c.trust_score >= 0.7 ? 'text-good' : c.trust_score >= 0.5 ? 'text-pending' : 'text-alert'}>
+                        {c.trust_score.toFixed(2)}
+                      </MonoValue>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-line pt-3 text-sm text-ink-dim">
+
+              <div className="border-t border-line pt-3 text-sm text-ink-dim leading-relaxed">
+                <span className="font-mono text-xs text-ink-faint block mb-1">RESOLUTION SUMMARY</span>
                 {resolved.resolution_summary}
               </div>
             </div>

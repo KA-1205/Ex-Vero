@@ -24,38 +24,53 @@ export function DeviceTile({ device, onOpen }: { device: DeviceSummary; onOpen: 
   return (
     <button
       onClick={onOpen}
-      className="glass-card ev-device-tile text-left p-5 hover:border-good transition-colors flex flex-col gap-4"
+      className="glass-card text-left p-3 hover:border-[#315C86] transition-colors flex flex-col gap-2 group cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium">{device.name}</div>
-          <div className="text-[11px] text-ink-faint font-mono">{device.id}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium truncate group-hover:text-ink">{device.name}</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[11px] text-ink-faint font-mono">{device.id}</span>
+            {device.kind && (
+              <span className="text-[9px] font-mono uppercase px-1 py-0.5 bg-base-sunken border border-line text-ink-dim rounded">
+                {device.kind}
+              </span>
+            )}
+          </div>
         </div>
         <ConnectivityPill state={device.connectivity} />
       </div>
       <div>
         <StatLabel>local memory</StatLabel>
-        <div className="flex items-center gap-2">
-          <MonoValue className="text-sm">
-            {device.memory_used}/{device.memory_cap}
-          </MonoValue>
-          <span className="text-[11px] text-ink-faint font-mono">points ({pct}%)</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <MonoValue className="text-sm font-semibold">
+              {device.memory_used}/{device.memory_cap}
+            </MonoValue>
+            <span className="text-[11px] text-ink-faint font-mono">pts ({pct}%)</span>
+          </div>
+          <span className="text-[10px] font-mono text-ink-dim">
+            {pct > 85 ? 'High' : pct > 60 ? 'Moderate' : 'Nominal'}
+          </span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-base-sunken mt-3">
+        <div className="h-1.5 bg-base-sunken mt-1.5 w-full rounded-full overflow-hidden">
           <div
-            className={`h-1.5 rounded-full ${pct > 85 ? 'bg-alert' : pct > 60 ? 'bg-pending' : 'bg-good'}`}
-            style={{ width: `${pct}%` }}
+            className={`h-full transition-all duration-300 ${pct > 85 ? 'bg-alert' : pct > 60 ? 'bg-pending' : 'bg-good'}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
           />
         </div>
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-1 border-t border-line/40">
         <div>
           <StatLabel>last sync</StatLabel>
           <MonoValue className="text-xs">
-            {device.last_sync_at ? new Date(device.last_sync_at).toLocaleTimeString() : '—'}
+            {device.last_sync_at ? new Date(device.last_sync_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—'}
           </MonoValue>
         </div>
-        <Sparkline values={device.activity_sparkline} />
+        <div className="flex flex-col items-end">
+          <span className="text-[9px] font-mono text-ink-faint mb-0.5">activity</span>
+          <Sparkline values={device.activity_sparkline} />
+        </div>
       </div>
     </button>
   )
@@ -76,6 +91,11 @@ export function FleetOverview() {
           {devices === null && (
             <div className="text-ink-faint text-sm font-mono col-span-full py-8 text-center">
               loading fleet state…
+            </div>
+          )}
+          {devices?.length === 0 && (
+            <div className="text-ink-faint text-sm font-mono col-span-full py-8 text-center">
+              No devices found.
             </div>
           )}
           {devices?.map((d) => (

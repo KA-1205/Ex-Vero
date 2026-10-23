@@ -1,6 +1,7 @@
 import { WorkspaceBar } from './WorkspaceBar'
 import { Outlet } from 'react-router-dom'
 import { TopBar } from './TopBar'
+import { DemoGuide } from './DemoGuide'
 
 export function DemoLayout() {
   return (
