@@ -27,8 +27,8 @@ export function DeviceConsole() {
   useEffect(() => { let active = true; void fetchDevice(deviceId).then((value) => { if (active) setDevice(value) }).catch((error) => console.error('Unable to load device header', error)); return () => { active = false } }, [deviceId])
 
   return (
-    <div className="p-4 flex flex-col gap-3 h-full min-h-0">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-device-console">
+      <div className="ev-console-heading">
         <div className="flex items-center gap-2 text-xs font-mono">
           <Link to="/numeric/overview" className="text-ink-dim hover:text-ink">
             FLEET
@@ -37,10 +37,11 @@ export function DeviceConsole() {
           <span className="text-ink">{device?.name ?? deviceId}</span>
           {device && <ConnectivityPill state={device.connectivity} />}
         </div>
-        <div className="flex gap-1">
+        <div className="ev-console-tabs" aria-label="Console sections">
           {TABS.map((t) => (
             <button
               key={t.id}
+              aria-pressed={tab === t.id}
               onClick={() => setTab(t.id)}
               className={`px-3 py-1 text-xs font-mono border ${
                 tab === t.id
@@ -56,7 +57,7 @@ export function DeviceConsole() {
 
       {tab === 'console' && (
         <div className="flex flex-col gap-3 flex-1 min-h-0">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1 min-h-0">
+          <div className="ev-console-grid grid grid-cols-1 xl:grid-cols-3 gap-5 min-h-0">
             <QAPanel deviceId={deviceId} />
             <DecisionFeed deviceId={deviceId} />
             <MemoryBrowser deviceId={deviceId} />
@@ -65,7 +66,7 @@ export function DeviceConsole() {
       )}
 
       {tab === 'console' && (
-        <div className="pointer-events-none fixed bottom-0 left-[calc(13rem+1rem)] right-4 z-40 flex flex-col gap-3">
+        <div className="ev-console-strips flex flex-col gap-3">
           <SyncStrip deviceId={deviceId} />
           <ResourceStrip deviceId={deviceId} />
         </div>

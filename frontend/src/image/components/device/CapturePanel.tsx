@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../../../components/FieldGraphic'
 import { useRef, useState } from 'react'
 import { captureFact } from '../../api/client'
 import { Panel } from '../primitives'
@@ -37,9 +38,11 @@ export function CapturePanel({ deviceId }: { deviceId: string }) {
   }
 
   return (
-    <Panel title="CAPTURE — MULTIMODAL INPUT">
+    <Panel title="CAPTURE — MULTIMODAL INPUT" className="ev-capture-panel">
+      <div className="ev-capture-intro"><div><div className="ev-eyebrow">NEW OBSERVATION</div><p>Add context to the evidence.</p></div><FieldGraphic kind="vision" /></div>
       <div className="p-3 space-y-3 max-w-xl">
         <textarea
+          aria-label="Observation content"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Describe what you observed…"
@@ -55,7 +58,7 @@ export function CapturePanel({ deviceId }: { deviceId: string }) {
             ATTACH IMAGE
           </label>
           {imagePreview && (
-            <img src={imagePreview} className="w-12 h-12 object-cover border border-line" />
+            <img src={imagePreview} alt="Selected capture preview" className="w-12 h-12 object-cover border border-line" />
           )}
         </div>
         <button

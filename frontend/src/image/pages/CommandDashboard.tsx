@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { fetchCloudDashboard } from '../api/client'
 import type { CloudFact } from '../types'
@@ -28,7 +29,8 @@ export function CommandDashboard() {
   const trustEntries = Object.entries(deviceTrust).sort((a, b) => b[1] - a[1])
 
   return (
-    <div className="p-4 flex flex-col gap-4 h-full min-h-0 overflow-y-auto">
+    <div className="ev-page ev-reports-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">REPORTS / SHARED MEMORY</div><h1 className="ev-page-title">The bigger picture.</h1><p>Fleet facts, source agreement, and the evidence behind shared understanding.</p></div><FieldGraphic kind="consensus" /></header>
       {/* Top Metric Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white/40 backdrop-blur-md p-3 rounded-lg border border-line">
         <div className="flex items-center gap-4 text-xs font-mono">
@@ -44,7 +46,7 @@ export function CommandDashboard() {
       </div>
 
       {/* Main Grid: Per-Zone Photo Tiles + Trust Bars */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-0">
         {/* Per-Zone Tiles (Task A8) */}
         <div className="lg:col-span-2 flex flex-col min-h-0">
           <Panel title="PER-ZONE INCIDENT MAP & VISUAL FACTS" className="h-full">
@@ -62,7 +64,7 @@ export function CommandDashboard() {
                     return (
                       <div
                         key={f.id}
-                        className="glass-card flex flex-col rounded-lg border border-line bg-white/35 p-3 hover:bg-white/50 transition-colors"
+                        className="glass-card ev-fact-card flex flex-col rounded-lg border border-line bg-white/35 p-4 hover:bg-white/50 transition-colors"
                       >
                         {/* Zone Header + State Pill */}
                         <div className="flex items-center justify-between mb-2">

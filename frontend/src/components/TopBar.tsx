@@ -1,4 +1,3 @@
-import { Link, NavLink } from 'react-router-dom'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { USE_MOCKS } from '../api/mock'
 import type { NetworkMode } from '../types'

@@ -1,3 +1,5 @@
+import { FieldGraphic } from '../components/FieldGraphic'
+import './overview.css'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchActivity, fetchCloudState, fetchDevices, fetchSyncStatus, fetchTelemetry, fetchWeather } from '../api/client'
@@ -83,35 +85,17 @@ export function OverviewDashboard() {
   const now = new Date()
 
   return (
-    <div className="h-full min-h-0 overflow-hidden p-4 lg:p-5 flex flex-col gap-3 text-ink">
-      <header className="relative flex min-h-[105px] flex-wrap items-center justify-between gap-4 pt-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">OVERVIEW</div>
-          <h1 className="mt-1 font-serif text-4xl xl:text-5xl leading-none tracking-tight text-ink">Field Command</h1>
-          <p className="mt-2 text-sm text-ink-dim">Real-time monitoring of your fleet and critical infrastructure.</p>
-        </div>
-        <div className="hidden md:flex min-w-[290px] flex-1 max-w-[520px] h-[88px] items-center border-l border-line pl-5">
-          <div className="w-[112px] shrink-0 font-mono text-[9px] font-semibold leading-5 tracking-[0.28em] text-ink-dim">REAL TIME<br />INSIGHT<br />SAFER<br />TOMORROW</div>
-          <div className="relative h-full flex-1 overflow-hidden border border-line bg-base-sunken">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/asset1.png')] bg-cover bg-center" />
-            <div className="absolute inset-0 bg-white/15" />
-            <div className="absolute inset-y-0 right-2 flex flex-col justify-center text-right font-mono text-[9px] leading-4 text-[#102A43]"><span>FLEET STATUS</span><span>{devices ? `${total} ACTIVE NODES` : 'LOADING NODES'}</span></div>
-          </div>
-        </div>
-        <div className="absolute right-0 top-0 hidden text-right font-mono text-[10px] text-ink-dim md:block">
-          {now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })} <span className="mx-2 text-line">|</span>
-          {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-        </div>
-      </header>
+    <div className="ev-page ev-numeric-overview text-ink">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">NUMERIC / FLEET INTELLIGENCE · {now.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div><h1 className="ev-page-title">Every signal. A clearer picture.</h1><p>Real-time monitoring of your fleet and the observations it remembers.</p></div><FieldGraphic /></header>
 
-      <section className="glass-card grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-[#AABBC8]">
+      <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-4">
         <Kpi icon="devices" value={devices ? String(total) : '—'} label="TOTAL DEVICES" detail={`${offline} offline · ${online} online${degraded ? ` · ${degraded} degraded` : ''}`} />
         <Kpi icon="alert" value={facts.length ? String(disputed) : '—'} label="DISPUTED FACTS" detail={`${facts.length} fleet facts in cloud state`} />
         <Kpi icon="wifi" value="—" label="SYNC SUCCESS RATE" detail="No verified fleet-wide rate available" />
         <Kpi icon="health" value={onlinePct == null ? '—' : `${onlinePct}%`} label="DEVICES ONLINE" detail={`${online} online of ${total} devices`} />
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-5 gap-3 flex-[1.15] min-h-0">
+      <section className="grid grid-cols-1 xl:grid-cols-5 gap-5 min-h-[340px]">
         <Panel number="01" title="LIVE FLEET MAP" className="xl:col-span-3 min-h-0 overflow-hidden">
           <FleetMap devices={devices ?? []} loading={devices === null} />
         </Panel>
@@ -124,7 +108,7 @@ export function OverviewDashboard() {
         </Panel>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-10 gap-3 flex-[0.8] min-h-[150px] max-h-[230px]">
+      <section className="grid grid-cols-1 lg:grid-cols-10 gap-5 min-h-[230px]">
         <Panel number="03" title="RECENT SYSTEM ACTIVITY" className="lg:col-span-4 min-h-0 overflow-hidden">
           <div className="h-full overflow-y-auto divide-y divide-line px-3">
             {recentRejects >= 3 && <div className="border-b border-line py-2 font-mono text-[10px] leading-4 text-ink-dim">Duplicate frames discarded automatically — not every capture needs to reach the cloud.</div>}
@@ -142,8 +126,8 @@ export function OverviewDashboard() {
         </Panel>
         <Panel number="05" title="FIELD CONDITIONS" className="lg:col-span-3 min-h-0 overflow-hidden">
           <div className="relative flex h-full min-h-0 flex-col overflow-y-auto p-3">
-            <div aria-hidden="true" className="absolute inset-0 bg-[url('/delhi.png')] bg-cover bg-[center_65%]" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#E1EBEB]/10 via-[#E1EBEB]/45 to-[#E1EBEB]/35" />
+            <div aria-hidden="true" className="absolute inset-0 bg-[url('/delhi.png')] bg-cover bg-[center_65%] opacity-25" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#E5E7E9]/10 via-[#E5E7E9]/45 to-[#E5E7E9]/35" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="text-[11px] font-medium text-ink">New Delhi, India</div>
               {weather && <MonoValue className="text-[9px] text-ink">Updated {formatTime(weather.observed_at)}</MonoValue>}
@@ -172,19 +156,13 @@ export function OverviewDashboard() {
 }
 
 function Kpi({ icon, value, label, detail }: { icon: 'devices' | 'alert' | 'wifi' | 'health'; value: string; label: string; detail: string }) {
-  const color = icon === 'alert' ? 'text-alert' : 'text-[#1F6FB2]'
-  return <div className="flex min-w-0 items-center gap-3 p-3 xl:p-4"><div className="hidden h-[52px] w-[52px] shrink-0 items-center justify-center border border-line bg-base-sunken sm:flex"><Icon name={icon} className={color} /></div><div className="min-w-0"><div className="font-mono text-2xl font-semibold leading-none text-ink xl:text-3xl">{value}</div><div className="mt-1 font-mono text-[9px] tracking-[0.2em] text-ink xl:text-[10px]">{label}</div><div className="mt-1 truncate text-[10px] text-ink-dim">{detail}</div></div></div>
+  const color = icon === 'alert' ? 'text-alert' : 'text-good'
+  return <div className="ev-kpi flex min-w-0 items-center gap-3 p-4"><div className="hidden h-[52px] w-[52px] shrink-0 items-center justify-center border border-line bg-base-sunken sm:flex"><Icon name={icon} className={color} /></div><div className="min-w-0"><div className="font-mono text-2xl font-semibold leading-none text-ink xl:text-3xl">{value}</div><div className="mt-1 text-[11px] tracking-wide text-ink">{label}</div><div className="mt-2 text-[11px] text-ink-dim">{detail}</div></div></div>
 }
 
 function Icon({ name, className }: { name: 'devices' | 'alert' | 'wifi' | 'health'; className: string }) {
-  const imageByName = {
-    devices: '/kpi-devices.png',
-    alert: '/kpi-danger.png',
-    health: '/kpi-health.png',
-    wifi: '/kpi-signal.png',
-  }
-  const accessibleName = { devices: 'Devices', alert: 'Disputed facts', health: 'Devices online', wifi: 'Measured sync rate' }
-  return <img src={imageByName[name]} alt={accessibleName[name]} className={`h-9 w-9 object-contain ${className}`} />
+  const paths = { devices: 'M5 5h14v14H5zM9 9h6v6H9z', alert: 'M12 3 2 20h20L12 3ZM12 9v5m0 3h.01', health: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3ZM8 12l3 3 5-6', wifi: 'M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0M12 20h.01' }
+  return <svg viewBox="0 0 24 24" className={`h-6 w-6 ${className}`} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>
 }
 
 function MetricRow({ label, value, samples, chart }: { label: string; value: string; samples: number[]; chart: 'line' | 'bars' }) {
@@ -192,16 +170,16 @@ function MetricRow({ label, value, samples, chart }: { label: string; value: str
   const values = samples.slice(-20)
   const points = values.map((sample, index) => `${values.length < 2 ? 50 : index / (values.length - 1) * 100},${27 - sample / max * 22}`).join(' ')
   return (
-    <div className="flex flex-1 min-h-0 items-center gap-2 border-b border-[#AABBC8]/60 last:border-b-0">
+    <div className="flex flex-1 min-h-0 items-center gap-2 border-b border-[#C1CFCC]/60 last:border-b-0">
       <span className="w-[92px] shrink-0 text-[10px] text-ink-dim">{label}</span>
       <div className="flex h-5 min-w-0 flex-1 items-center" aria-hidden="true">
         {chart === 'line' ? (
             <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="h-5 w-full overflow-visible">
-            {values.length > 1 && <polyline points={points} fill="none" stroke="#2878D0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+            {values.length > 1 && <polyline points={points} fill="none" stroke="#236a70" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
           </svg>
         ) : (
           <div className="flex h-5 w-full items-end justify-between gap-[2px]">
-            {values.map((sample, index) => <span key={index} className="w-[3px] shrink-0 bg-[#4385D1]" style={{ height: `${Math.max(10, sample / max * 100)}%` }} />)}
+            {values.map((sample, index) => <span key={index} className="w-[3px] shrink-0 bg-good" style={{ height: `${Math.max(10, sample / max * 100)}%` }} />)}
           </div>
         )}
       </div>
@@ -217,7 +195,7 @@ function Loading({ children }: { children: string }) {
 function WeatherIcon({ code }: { code: number }) {
   const isClear = code === 0 || code === 1
   return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-12 w-12 shrink-0 text-[#102A43]" aria-hidden="true">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-12 w-12 shrink-0 text-[#233239]" aria-hidden="true">
       {isClear ? <><circle cx="25" cy="23" r="8" /><path d="M25 3v5m0 30v5M5 23h5m30 0h5M11 9l4 4m20 20 4 4m0-28-4 4M15 33l-4 4" /></> : <><path d="M13 34h22a8 8 0 0 0 .5-16A12 12 0 0 0 12 21a6.5 6.5 0 0 0 1 13Z" /><path d="M18 9v4m-8-1 3 3m19-6-2 4" /></>}
     </svg>
   )

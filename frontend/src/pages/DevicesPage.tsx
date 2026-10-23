@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchDevices } from '../api/client'
@@ -25,7 +26,8 @@ export function DevicesPage() {
   }, [])
 
   return (
-    <div className="p-4">
+    <div className="ev-page ev-devices-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">FLEET / DEVICE CONSOLES</div><h1 className="ev-page-title">Intelligence at the edge.</h1><p>Open a device to inspect its observations, decisions, and local memory.</p></div><FieldGraphic /></header>
       <Panel title={`DEVICES — ${devices?.length ?? 0} TOTAL`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 p-3">
           {error && (

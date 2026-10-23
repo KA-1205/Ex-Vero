@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
@@ -83,6 +84,7 @@ export function ConflictTheater() {
   const [devices, setDevices] = useState<DeviceSummary[]>([])
   const [camARecords, setCamARecords] = useState<MemoryRecord[]>([])
   const [camBRecords, setCamBRecords] = useState<MemoryRecord[]>([])
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     void fetchDevices()
@@ -90,10 +92,10 @@ export function ConflictTheater() {
         setDevices(devs)
         const c1 = devs.find((d) => d.id === 'cam-01') || devs[0]
         const c2 = devs.find((d) => d.id === 'cam-02') || devs[1]
-        if (c1) void fetchMemoryRecords(c1.id, { modality: 'vision' }).then(setCamARecords)
-        if (c2) void fetchMemoryRecords(c2.id, { modality: 'vision' }).then(setCamBRecords)
+        if (c1) void fetchMemoryRecords(c1.id, { modality: 'vision' }).then(setCamARecords).catch(() => setMessage('Camera evidence is unavailable while the edge node is offline.'))
+        if (c2) void fetchMemoryRecords(c2.id, { modality: 'vision' }).then(setCamBRecords).catch(() => setMessage('Camera evidence is unavailable while the edge node is offline.'))
       })
-      .catch((error) => console.error('Unable to load image fleet', error))
+      .catch((error) => { console.error('Unable to load image fleet', error); setMessage('The edge node is unavailable. Camera data and resolution need a live connection.') })
 
     return subscribeConsensusEvents((event) => {
       setResolved(event)
@@ -108,6 +110,7 @@ export function ConflictTheater() {
   const thumbB = camBRecords[0]?.thumbnail_url ?? DEFAULT_CAM_B.thumbnail_url
 
   async function reconnect() {
+    setMessage('')
     setResolving(true)
     try {
       // Reconnect and push real conflict for server_room_A.fire_status
@@ -129,6 +132,7 @@ export function ConflictTheater() {
       }
     } catch (error) {
       console.error('Unable to inject conflict', error)
+      setMessage('Could not reach the edge node to resolve this conflict.')
       setResolving(false)
     }
   }
@@ -159,8 +163,9 @@ export function ConflictTheater() {
   })()
 
   return (
-    <div className="p-4 flex flex-col gap-4 h-full min-h-0 overflow-y-auto">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-conflict-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives. One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
+      <div className="ev-conflict-toolbar flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-sm font-mono font-bold text-ink tracking-wide">
             CONFLICT THEATER — VISION DISPUTE RESOLUTION
@@ -169,7 +174,7 @@ export function ConflictTheater() {
             Key: <span className="text-ink">server_room_A.fire_status</span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={reset}
             className="px-3 py-1.5 text-xs font-mono border border-line text-ink-dim hover:text-ink rounded"
@@ -185,6 +190,8 @@ export function ConflictTheater() {
           </button>
         </div>
       </div>
+
+      {message && <div role="status" className="text-xs font-mono text-alert">{message}</div>}
 
       {/* 2 Camera Thumbnails Side-by-Side (Task A7) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -205,7 +212,7 @@ export function ConflictTheater() {
       </div>
 
       {/* Consensus Fold Result Panel */}
-      <Panel title="CONSENSUS FOLD RESULT" className="flex-1">
+      <Panel title="CONSENSUS FOLD RESULT" className="ev-resolution-panel flex-1">
         <div className="p-4">
           {!resolved && !resolving && (
             <div className="text-ink-faint text-sm font-mono text-center py-10">
@@ -220,7 +227,7 @@ export function ConflictTheater() {
           )}
 
           {resolved && (
-            <div className="space-y-4">
+            <div className="ev-resolution-reveal space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-base-sunken/60 rounded-md border border-line">
                 <div className="flex items-center gap-3">
                   <span

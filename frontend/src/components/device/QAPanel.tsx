@@ -23,10 +23,11 @@ export function QAPanel({ deviceId }: { deviceId: string }) {
   }
 
   return (
-    <Panel title="INSTANT Q&A" className="h-full">
+    <Panel title="ASK THIS DEVICE" className="ev-query-panel h-full">
       <div className="flex flex-col h-full">
         <div className="p-2 border-b border-line flex gap-2">
           <input
+            aria-label="Question for this device"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -38,7 +39,7 @@ export function QAPanel({ deviceId }: { deviceId: string }) {
             disabled={pending}
             className="px-3 py-1.5 text-xs font-mono border border-line hover:border-good hover:text-good disabled:opacity-50"
           >
-            {pending ? '…' : 'RUN'}
+            {pending ? '…' : 'Ask'}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-3">

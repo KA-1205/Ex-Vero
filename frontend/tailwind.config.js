@@ -4,21 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Ex-Vero light field-console palette
+        // Silver, petrol teal, and warm champagne.
         base: {
-          DEFAULT: '#E1EBEB', // page background
-          raised: '#FFFFFF',  // panels
-          sunken: '#E7F0F7',  // inputs and inset areas
+          DEFAULT: '#E5E7E9', // page background
+          raised: '#F8F9F5',  // panels
+          sunken: '#E8EEEC',  // inputs and inset areas
         },
         ink: {
-          DEFAULT: '#102A43', // deep navy text
-          dim: '#45627C',     // secondary text
-          faint: '#7890A5',   // tertiary / disabled
+          DEFAULT: '#233239', // deep navy text
+          dim: '#596C70',     // secondary text
+          faint: '#6E7D80',   // tertiary / disabled
         },
-        line: '#C9D7E2',      // cool blue-gray border
+        line: '#CDD6D7',      // cool blue-gray border
         alert: '#D64545',     // urgent / critical
-        good: '#147D91',      // verified / synced
-        pending: '#C47A12',   // queued / pending
+        good: '#236A70',      // verified / synced
+        pending: '#9B701F',   // queued / pending
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', '"IBM Plex Mono"', 'ui-monospace', 'monospace'],

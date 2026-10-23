@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../FieldGraphic'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchMemoryDetail, fetchMemoryRecords, retractPoint } from '../../api/client'
 import type { MemoryRecord, MemoryState } from '../../types'
@@ -41,18 +42,20 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
   )
 
   return (
-    <Panel title="LOCAL MEMORY BROWSER" className="h-full">
+    <Panel title="LOCAL MEMORY" className="ev-memory-browser h-full">
+      <div className="ev-memory-illustration"><FieldGraphic kind="memory" /><span>Observations → local memory</span></div>
       <div className="flex flex-col h-full">
         <div className="p-2 border-b border-line grid grid-cols-2 gap-1.5">
           <input
+            aria-label="Filter local memory"
             className="col-span-2 w-full bg-base-sunken border border-line px-2 py-1 text-xs outline-none focus-visible:border-good"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="filter…"
           />
-          <select value={syncState} onChange={(e) => setSyncState(e.target.value)} className="bg-base-sunken border border-line px-1 py-1 text-[10px] font-mono"><option value="">all sync states</option><option value="local_only">local only</option><option value="pending">pending</option><option value="synced">synced</option></select>
-          <select value={modality} onChange={(e) => setModality(e.target.value)} className="bg-base-sunken border border-line px-1 py-1 text-[10px] font-mono"><option value="">all modalities</option><option value="text">text</option><option value="vision">image</option></select>
-          <input value={zone} onChange={(e) => setZone(e.target.value)} placeholder="zone" className="col-span-2 bg-base-sunken border border-line px-2 py-1 text-xs outline-none focus-visible:border-good" />
+          <select aria-label="Filter by sync state" value={syncState} onChange={(e) => setSyncState(e.target.value)} className="bg-base-sunken border border-line px-1 py-1 text-[10px] font-mono"><option value="">all sync states</option><option value="local_only">local only</option><option value="pending">pending</option><option value="synced">synced</option></select>
+          <select aria-label="Filter by modality" value={modality} onChange={(e) => setModality(e.target.value)} className="bg-base-sunken border border-line px-1 py-1 text-[10px] font-mono"><option value="">all modalities</option><option value="text">text</option><option value="vision">image</option></select>
+          <input aria-label="Filter by zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="zone" className="col-span-2 bg-base-sunken border border-line px-2 py-1 text-xs outline-none focus-visible:border-good" />
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-line">
           {filtered.map((r) => {
@@ -60,6 +63,7 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
             return (
               <div key={r.id}>
                 <button
+                  aria-expanded={isOpen}
                   onClick={() => {
                     if (isOpen) { setExpanded(null); return }
                     setExpanded(r.id)
@@ -72,7 +76,7 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                 >
                   {r.thumbnail_url ? <img src={r.thumbnail_url} alt="Captured field report" className="h-10 w-10 shrink-0 border border-line object-cover" /> : <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center border border-line font-mono text-[9px] text-ink-faint">{r.modality === 'vision' ? 'IMG' : 'TXT'}</span>}
                   <div className="min-w-0">
-                    <div className="text-sm truncate">{r.content_preview}</div>
+                    <div className="text-sm leading-relaxed">{r.content_preview}</div>
                     <div className="text-[11px] text-ink-faint font-mono">{r.zone}</div>
                   </div>
                   <StateBadge state={r.state} />

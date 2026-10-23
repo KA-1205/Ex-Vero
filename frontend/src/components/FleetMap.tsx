@@ -36,9 +36,9 @@ function formatLastSync(value: string | null) {
 }
 
 function statusColor(state: ConnectivityState) {
-  if (state === 'ONLINE') return '#10A77A'
-  if (state === 'DEGRADED') return '#D98B18'
-  return '#8296AA'
+  if (state === 'ONLINE') return '#236A70'
+  if (state === 'DEGRADED') return '#A9823F'
+  return '#7B8C8E'
 }
 
 export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loading: boolean }) {
@@ -125,7 +125,7 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
   return (
     <div
       ref={mapRef}
-      className="relative h-full min-h-[220px] w-full overflow-hidden bg-[#E7F0F7] select-none touch-none"
+      className="ev-fleet-map relative h-full min-h-[320px] w-full overflow-hidden bg-[#E7F0F7] select-none touch-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -140,7 +140,7 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
           alt=""
           draggable={false}
           className="pointer-events-none absolute h-64 w-64 max-w-none"
-          style={{ left: tile.left, top: tile.top, filter: 'saturate(.55) sepia(.08) hue-rotate(165deg)' }}
+          style={{ left: tile.left, top: tile.top, filter: 'saturate(.4) contrast(.94)' }}
         />
       ))}
 
@@ -160,13 +160,14 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
               className="-translate-x-1/2 -translate-y-1/2 rounded-full p-1 focus-visible:outline-2"
             >
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border-[3px] bg-white shadow-[0_1px_6px_rgba(16,42,67,0.35)] ${selected ? 'ring-2 ring-[#1F6FB2]' : ''}`}
+                key={device.last_sync_at ?? undefined}
+                className={`ev-map-marker flex h-8 w-8 items-center justify-center rounded-full border-[3px] bg-white shadow-[0_1px_6px_rgba(16,42,67,0.35)] ${selected ? 'ring-2 ring-good' : ''}`}
                 style={{ borderColor: color, boxShadow: `0 0 0 4px ${color}33, 0 1px 6px rgba(16,42,67,0.35)` }}
               >
                 <StatusGlyph state={device.connectivity} color={color} />
               </span>
             </button>
-            <div className={`${selected ? 'block' : 'hidden group-hover:block group-focus-within:block'} absolute bottom-5 left-1/2 z-30 w-52 -translate-x-1/2 border border-line bg-white/95 p-2.5 text-ink shadow-lg`}>
+            <div className={`${selected ? 'block' : 'hidden group-hover:block group-focus-within:block'} ev-map-popover absolute bottom-5 left-1/2 z-30 w-52 -translate-x-1/2 border border-line bg-white/95 p-2.5 text-ink shadow-lg`}>
               <div className="text-xs font-semibold">{device.id.toUpperCase()}</div>
               <div className="text-[11px] text-ink-dim">{device.name}</div>
               <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color }}><span>●</span>{device.connectivity}<span className="ml-auto text-ink-dim">{percentage}% memory</span></div>
@@ -211,7 +212,7 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
           <Legend state="DEGRADED" color={statusColor('DEGRADED')} />
           <Legend state="OFFLINE" color={statusColor('OFFLINE')} />
         </div>
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} className="text-[9px] text-[#315C86] underline">© OpenStreetMap contributors</a>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" onPointerDown={(event) => event.stopPropagation()} className="text-[9px] text-[#236A70] underline">© OpenStreetMap contributors</a>
       </div>
     </div>
   )

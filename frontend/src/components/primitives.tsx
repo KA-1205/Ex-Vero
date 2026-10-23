@@ -15,13 +15,12 @@ export function Panel({
   className?: string
 }) {
   return (
-    <div className={`glass-card flex flex-col ${className}`}>
+    <div className={`glass-card ev-panel flex flex-col ${className}`}>
       {title && (
-        <div className={`flex items-center justify-between border-b border-[#AABBC8] ${number ? 'min-h-[36px] px-0 py-0' : 'px-3 py-2'}`}>
-          <div className="flex h-full min-w-0 items-stretch">
-            {number && <span className="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] text-ink">{number}</span>}
-            {number && <span className="w-2 shrink-0 bg-[#234C7D]" />}
-            <h2 className={`flex items-center text-xs font-semibold tracking-wide text-ink-dim ${number ? 'px-3' : ''}`}>{title}</h2>
+        <div className="ev-panel-heading">
+          <div className="flex min-w-0 items-center gap-3">
+            {number && <span className="ev-panel-number">{number}</span>}
+            <h2 className="min-w-0 text-[13px] font-semibold text-ink">{title}</h2>
           </div>
           {action}
         </div>
@@ -40,7 +39,7 @@ const CONNECTIVITY_STYLES: Record<string, string> = {
 export function ConnectivityPill({ state }: { state: 'ONLINE' | 'DEGRADED' | 'OFFLINE' }) {
   return (
     <span
-      className={`font-mono text-[11px] px-1.5 py-0.5 border ${CONNECTIVITY_STYLES[state]} whitespace-nowrap`}
+      className={`ev-badge font-mono text-[11px] px-2 py-1 border ${CONNECTIVITY_STYLES[state]} whitespace-nowrap`}
     >
       {state}
     </span>
@@ -62,7 +61,7 @@ const VERDICT_STYLES: Record<string, string> = {
 export function VerdictBadge({ verdict }: { verdict: string }) {
   return (
     <span
-      className={`font-mono text-[10px] px-1.5 py-0.5 border ${
+      className={`ev-badge font-mono text-[11px] px-2 py-1 border ${
         VERDICT_STYLES[verdict] ?? 'text-ink-dim border-line'
       } whitespace-nowrap`}
     >

@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../../../components/FieldGraphic'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchMemoryDetail, fetchMemoryRecords } from '../../api/client'
 import type { MemoryRecord, MemoryState } from '../../types'
@@ -152,10 +153,12 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
   }
 
   return (
-    <Panel title="LOCAL MEMORY BROWSER (PHOTOS)" className="h-full">
+    <Panel title="VISUAL MEMORY" className="ev-memory-browser h-full">
+      <div className="ev-memory-illustration"><FieldGraphic kind="memory" /><span>Observations → local memory</span></div>
       <div className="flex flex-col h-full min-h-0">
         <div className="p-2 border-b border-line flex items-center justify-between gap-2">
           <input
+            aria-label="Filter local memory"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Search photos, zone, or key…"
@@ -172,7 +175,7 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
               No vision points captured yet
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-3">
               {groups.map((group) => {
                 const primary = group.records[0]
                 const stackCount = group.records.length
@@ -190,7 +193,6 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                   >
                     {/* Thumbnail Image Container */}
                     <div
-                      onClick={() => openDetail(primary.id)}
                       className="relative w-full aspect-square rounded overflow-hidden bg-black/10 border border-line cursor-pointer"
                     >
                       {primary.thumbnail_url ? (
@@ -209,8 +211,9 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                         </div>
                       )}
 
+                      <button type="button" className="absolute inset-0 rounded focus-visible:outline-2" aria-label={`Inspect ${primary.content_preview}`} onClick={() => openDetail(primary.id)} />
                       {/* State Badge Overlay */}
-                      <div className="absolute top-1.5 left-1.5">
+                      <div className="pointer-events-none absolute top-1.5 left-1.5">
                         <StateBadge state={primary.state} />
                       </div>
 
@@ -223,7 +226,7 @@ export function MemoryBrowser({ deviceId }: { deviceId: string }) {
                             setExpandedStackKey(isStackOpen ? null : group.key)
                           }}
                           className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-ink text-base shadow hover:scale-105"
-                          title="Click to view stack of similar captures"
+                          aria-expanded={isStackOpen} aria-label={`View ${stackCount - 1} similar captures`}
                         >
                           +{stackCount - 1} similar
                         </button>

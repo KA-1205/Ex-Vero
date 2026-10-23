@@ -1,3 +1,6 @@
+import { FieldGraphic } from '../../components/FieldGraphic'
+import '../../pages/overview.css'
+import './visual-overview.css'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -126,29 +129,36 @@ export function OverviewDashboard() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4 text-ink lg:p-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="font-mono text-[10px] tracking-[0.35em] text-ink-dim">IMAGE FLEET / OVERVIEW</div>
-          <h1 className="mt-1 font-serif text-4xl leading-none tracking-tight">Visual Situation Board</h1>
-          <p className="mt-2 text-sm text-ink-dim">What the cameras see, whether they agree, and what reached the cloud.</p>
-        </div>
-        <div className="font-mono text-[10px] text-ink-dim">{networkMode ? `NETWORK ${networkMode.toUpperCase()}` : 'NETWORK —'}</div>
-      </header>
+    <div className="ev-page ev-visual-overview text-ink">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">IMAGE / VISUAL INTELLIGENCE · {networkMode ? networkMode.toUpperCase() : 'NETWORK —'}</div><h1 className="ev-page-title">See the evidence. Understand the decision.</h1><p>What the cameras see, whether they agree, and what reached the cloud.</p></div><FieldGraphic kind="vision" /></header>
+
+
 
       {error && <div className="border border-alert bg-alert/10 px-3 py-2 font-mono text-[11px] text-alert">Edge node unavailable: {error}</div>}
       {camerasMissing && <EmptyState>NO CAMERAS PROVISIONED. Run <span className="text-ink">python tools/seed_fleet.py</span>.</EmptyState>}
       {noFrames && <EmptyState>NO FRAMES CAPTURED YET. Run <span className="text-ink">python tools/load_image_dataset.py</span>.</EmptyState>}
 
-      <section className="glass-card grid grid-cols-2 divide-x divide-y divide-[#AABBC8] xl:grid-cols-5 xl:divide-y-0">
+      <div className="ev-image-summary">
+      <section className="ev-kpi-grid grid grid-cols-2 xl:grid-cols-5">
         <Kpi value={devices === null ? '—' : `${online}/${cameras.length || '—'}`} label="CAMERAS ONLINE" detail={devices === null ? '—' : `${offline} offline · ${degraded} degraded`} />
         <Kpi value={devices === null ? '—' : `${photos}/${memoryCap || '—'}`} label="PHOTOS IN MEMORY" detail="vision points / local cap" />
         <Kpi value={facts.length ? String(confirmedFacts.length) : '—'} label="ZONES WITH ACTIVE HAZARD" detail="confirmed visual facts" />
         <Kpi value={facts.length ? String(disputedFacts.length) : '—'} label="OPEN VISUAL DISPUTES" detail="disputed visual facts" alert />
         <Kpi value={bytesSent ? formatBytes(bytesSent) : '—'} label="BYTES SENT TO CLOUD" detail={networkMode ? networkMode.toUpperCase() : '—'} />
       </section>
+        <Panel title="ASK THE FLEET" className="ev-fleet-query">
+          <div className="flex h-full flex-col gap-3 p-3">
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void submitQuery() }}>
+              <input aria-label="Ask the fleet" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask about visual evidence in local memory…" disabled={!cameras.length} className="min-w-0 flex-1 border border-line bg-base-sunken px-2 py-2 text-xs outline-none focus:border-good" />
+              <button type="submit" disabled={!cameras.length || queryPending} className="border border-line px-3 font-mono text-[10px] hover:border-good disabled:opacity-50">{queryPending ? '…' : 'ASK'}</button>
+            </form>
+            {queryState ? <QueryResultView result={queryState} /> : <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />}
+          </div>
+        </Panel>
+      </div>
 
-      <section className="grid min-h-[360px] grid-cols-1 gap-3 xl:grid-cols-5">
+      <div className="ev-image-main">
+      <section className="grid min-h-[300px] grid-cols-1 gap-5 xl:grid-cols-5">
         <Panel number="01" title="ZONE SITUATION BOARD" className="min-h-0 xl:col-span-3">
           <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2">
             {zones.map((key) => <ZoneTile key={key} keyName={key} fact={facts.find((item) => item.corroboration_key === key)} records={latestByKey.get(key) ?? []} onOpen={() => navigate('/image/overview/command')} />)}
@@ -168,13 +178,14 @@ export function OverviewDashboard() {
       </section>
 
       <Panel number="03" title="LIVE EVIDENCE STREAM" className="min-h-[190px]">
-        <div className="flex gap-3 overflow-x-auto p-3">
+        <div className="flex gap-4 overflow-x-auto p-4">
           {allFeed.slice(0, 12).map((entry) => <EvidenceCard key={`${entry.device_id}-${entry.id}`} entry={entry} />)}
           {allFeed.length === 0 && <LoadingRow text="Waiting for camera decisions…" />}
         </div>
       </Panel>
+      </div>
 
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+      <section className="ev-image-bottom grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Panel number="04" title="CAMERA HEALTH" className="min-h-[250px]">
           <div className="grid gap-2 p-3 sm:grid-cols-2">
             {cameras.map(({ device, records, sync }) => <CameraHealth key={device.id} device={device} latest={records[0]} sync={sync} trust={trust[device.id]} onOpen={() => navigate(`/image/overview/devices/${device.id}`)} />)}
@@ -184,15 +195,7 @@ export function OverviewDashboard() {
         <Panel number="05" title="EDGE → CLOUD PIPELINE" className="min-h-[250px]">
           <Pipeline pipeline={pipeline} sync={allSync} mode={networkMode} />
         </Panel>
-        <Panel number="06" title="ASK THE FLEET" className="min-h-[250px]">
-          <div className="flex h-full flex-col gap-3 p-3">
-            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void submitQuery() }}>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="fire near the server racks" disabled={!cameras.length} className="min-w-0 flex-1 border border-line bg-base-sunken px-2 py-2 text-xs outline-none focus:border-good" />
-              <button type="submit" disabled={!cameras.length || queryPending} className="border border-line px-3 font-mono text-[10px] hover:border-good disabled:opacity-50">{queryPending ? '…' : 'ASK'}</button>
-            </form>
-            {queryState ? <QueryResultView result={queryState} /> : <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />}
-          </div>
-        </Panel>
+
       </section>
 
       <TelemetryFooter samples={latestTelemetry} />
@@ -204,7 +207,7 @@ function ZoneTile({ keyName, fact, records, onOpen }: { keyName: string; fact?: 
   const latest = records[0]
   const state = fact?.status ?? (latest ? 'DISPUTED' : 'NO DATA')
   return (
-    <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#315C86]">
+    <button onClick={onOpen} className="flex min-w-0 flex-col border border-line bg-white/30 p-2 text-left hover:border-[#236A70]">
       <div className="flex items-center justify-between gap-2"><span className="truncate font-mono text-xs font-semibold">{fact?.zone ?? zoneLabel(keyName)}</span><StatePill state={state} /></div>
       <Thumb src={latest?.thumbnail_url ?? fact?.thumbnail_url} alt={latest?.content_preview ?? fact?.summary ?? keyName} className="mt-2 aspect-video" />
       <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[10px] text-ink-dim"><span>{fact?.confidence != null ? `${Math.round(fact.confidence * 100)}% confidence` : '—'}</span><span>{fact ? `${fact.corroborating_devices.length} cameras` : '—'}</span></div>
@@ -219,11 +222,11 @@ function DisputeCard({ fact, records, explanation }: { fact: CloudFact; records:
 }
 
 function EvidenceCard({ entry }: { entry: DecisionFeedEntry }) {
-  return <div className="w-[170px] shrink-0 border border-line bg-white/30 p-2"><Thumb src={entry.thumbnail_url} alt={entry.content_preview} className="aspect-video" /><div className="mt-2 flex items-center justify-between gap-1"><span className="truncate font-mono text-[9px] text-ink-dim">{entry.device_id}</span><VerdictBadge verdict={entry.verdict} /></div><div className="mt-1 line-clamp-2 text-[10px] text-ink-dim">{entry.reason || '—'}</div></div>
+  return <div className="ev-evidence-card w-[220px] shrink-0 border border-line bg-white/30 p-3"><Thumb src={entry.thumbnail_url} alt={entry.content_preview} className="aspect-video" /><div className="mt-2 flex items-center justify-between gap-1"><span className="truncate font-mono text-[9px] text-ink-dim">{entry.device_id}</span><VerdictBadge verdict={entry.verdict} /></div><div className="mt-1 line-clamp-2 text-[10px] text-ink-dim">{entry.reason || '—'}</div></div>
 }
 
 function CameraHealth({ device, latest, sync, trust, onOpen }: { device: DeviceSummary; latest?: MemoryRecord; sync: SyncStatus | null; trust?: number; onOpen: () => void }) {
-  return <button onClick={onOpen} className="border border-line bg-white/30 p-2 text-left hover:border-[#315C86]"><div className="flex items-center justify-between gap-2"><span className="font-mono text-xs font-semibold">{device.id}</span><ConnectivityPill state={device.connectivity} /></div><div className="mt-2 flex gap-2"><Thumb src={latest?.thumbnail_url} alt={latest?.content_preview ?? device.id} className="h-12 w-20 shrink-0" /><div className="min-w-0 space-y-1 text-[10px] text-ink-dim"><div>memory <MonoValue>{device.memory_used}/{device.memory_cap}</MonoValue></div><div>pending <MonoValue>{sync ? Object.values(sync.pending_by_priority).reduce((a, b) => a + b, 0) : '—'}</MonoValue></div><div>trust <MonoValue>{trust == null ? '—' : trust.toFixed(2)}</MonoValue></div></div></div><div className="mt-2 border-t border-line pt-1 font-mono text-[9px] text-ink-faint">last sync {formatTime(device.last_sync_at)}</div></button>
+  return <button onClick={onOpen} className="border border-line bg-white/30 p-2 text-left hover:border-[#236A70]"><div className="flex items-center justify-between gap-2"><span className="font-mono text-xs font-semibold">{device.id}</span><ConnectivityPill state={device.connectivity} /></div><div className="mt-2 flex gap-2"><Thumb src={latest?.thumbnail_url} alt={latest?.content_preview ?? device.id} className="h-12 w-20 shrink-0" /><div className="min-w-0 space-y-1 text-[10px] text-ink-dim"><div>memory <MonoValue>{device.memory_used}/{device.memory_cap}</MonoValue></div><div>pending <MonoValue>{sync ? Object.values(sync.pending_by_priority).reduce((a, b) => a + b, 0) : '—'}</MonoValue></div><div>trust <MonoValue>{trust == null ? '—' : trust.toFixed(2)}</MonoValue></div></div></div><div className="mt-2 border-t border-line pt-1 font-mono text-[9px] text-ink-faint">last sync {formatTime(device.last_sync_at)}</div></button>
 }
 
 function Pipeline({ pipeline, sync, mode }: { pipeline: { URGENT: number; ROUTINE: number; HELD: number }; sync: SyncStatus[]; mode: string | null }) {
@@ -243,7 +246,7 @@ function TelemetryFooter({ samples }: { samples: TelemetrySample[] }) {
 }
 
 function Kpi({ value, label, detail, alert = false }: { value: string; label: string; detail: string; alert?: boolean }) {
-  return <div className="min-w-0 p-3 xl:p-4"><div className={`font-mono text-2xl font-semibold leading-none ${alert ? 'text-alert' : 'text-ink'}`}>{value}</div><div className="mt-1 font-mono text-[9px] tracking-[0.16em] text-ink">{label}</div><div className="mt-1 truncate text-[10px] text-ink-dim">{detail}</div></div>
+  return <div className="ev-kpi min-w-0 p-4"><div className={`font-mono text-2xl font-semibold leading-none ${alert ? 'text-alert' : 'text-ink'}`}>{value}</div><div className="mt-1 text-[11px] tracking-wide text-ink">{label}</div><div className="mt-2 text-[11px] text-ink-dim">{detail}</div></div>
 }
 
 function StatePill({ state }: { state: string }) {
@@ -252,7 +255,7 @@ function StatePill({ state }: { state: string }) {
 }
 
 function Thumb({ src, alt, className = '' }: { src?: string | null; alt: string; className?: string }) {
-  return <div className={`overflow-hidden border border-line bg-base-sunken ${className}`}>{src ? <img src={assetUrl(src) ?? undefined} alt={alt} className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center font-mono text-[9px] text-ink-faint">NO THUMBNAIL</div>}</div>
+  return <div className={`ev-evidence-frame overflow-hidden border border-line bg-base-sunken ${className}`}>{src ? <img src={assetUrl(src) ?? undefined} alt={alt} className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center font-mono text-[9px] text-ink-faint">NO THUMBNAIL</div>}</div>
 }
 
 function EmptyState({ children }: { children: ReactNode }) {

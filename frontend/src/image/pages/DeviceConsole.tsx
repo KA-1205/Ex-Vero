@@ -22,8 +22,8 @@ export function DeviceConsole() {
   const [tab, setTab] = useState<Tab>('console')
 
   return (
-    <div className="p-4 flex flex-col gap-3 h-full min-h-0">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-device-console">
+      <div className="ev-console-heading">
         <div className="flex items-center gap-2 text-xs font-mono">
           <Link to="/image/overview" className="text-ink-dim hover:text-ink">
             FLEET
@@ -31,10 +31,11 @@ export function DeviceConsole() {
           <span className="text-ink-faint">/</span>
           <span className="text-ink">{deviceId}</span>
         </div>
-        <div className="flex gap-1">
+        <div className="ev-console-tabs" aria-label="Console sections">
           {TABS.map((t) => (
             <button
               key={t.id}
+              aria-pressed={tab === t.id}
               onClick={() => setTab(t.id)}
               className={`px-3 py-1 text-xs font-mono border ${
                 tab === t.id
@@ -51,7 +52,7 @@ export function DeviceConsole() {
       {tab === 'console' && (
         <div className="flex flex-col gap-3 flex-1 min-h-0">
           <TrendStrip deviceId={deviceId} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1 min-h-0">
+          <div className="ev-console-grid grid grid-cols-1 xl:grid-cols-3 gap-5 min-h-0">
             <QAPanel deviceId={deviceId} />
             <DecisionFeed deviceId={deviceId} />
             <MemoryBrowser deviceId={deviceId} />
@@ -60,7 +61,7 @@ export function DeviceConsole() {
       )}
 
       {tab === 'console' && (
-        <div className="pointer-events-none fixed bottom-0 left-[calc(13rem+1rem)] right-4 z-40 flex flex-col gap-3">
+        <div className="ev-console-strips flex flex-col gap-3">
           <SyncStrip deviceId={deviceId} />
           <ResourceStrip deviceId={deviceId} />
         </div>

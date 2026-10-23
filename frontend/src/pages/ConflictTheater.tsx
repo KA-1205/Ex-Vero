@@ -1,3 +1,4 @@
+import { FieldGraphic } from '../components/FieldGraphic'
 import { useEffect, useState } from 'react'
 import { useNetworkMode } from '../context/NetworkModeContext'
 import { mockConsensusEvents, USE_MOCKS } from '../api/mock'
@@ -24,7 +25,7 @@ function DeviceSide({ name, id, value, reconnected }: { name: string; id: string
           {reconnected ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
-      <div className="rounded-md border border-[#AABBC8] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
+      <div className="rounded-md border border-[#C1CFCC] bg-white/25 p-2 text-sm backdrop-blur-sm">{value}</div>
     </div>
   )
 }
@@ -40,7 +41,7 @@ export function ConflictTheater() {
   const [pendingConsensus, setPendingConsensus] = useState<ConsensusEvent | null>(null)
 
   useEffect(() => {
-    void fetchDevices().then(setDevices).catch((error) => console.error('Unable to load conflict devices', error))
+    void fetchDevices().then(setDevices).catch((error) => { console.error('Unable to load conflict devices', error); setMessage('The edge node is unavailable. Device data and resolution need a live connection.') })
     return subscribeConsensusEvents((event) => { setResolved(event); setResolving(false) })
   }, [])
 
@@ -90,10 +91,11 @@ export function ConflictTheater() {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4 h-full">
-      <div className="flex items-center justify-between">
+    <div className="ev-page ev-conflict-page">
+      <header className="ev-hero"><div className="ev-hero-copy"><div className="ev-eyebrow">CONFLICT THEATER / EVIDENCE COMPARISON</div><h1 className="ev-page-title">Two perspectives. One shared decision.</h1><p>Compare the sources, inspect their trust, and follow the resolution.</p></div><FieldGraphic kind="consensus" /></header>
+      <div className="ev-conflict-toolbar flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-sm font-mono text-ink-dim tracking-wide">CONFLICT THEATER</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={reset}
             className="px-3 py-1.5 text-xs font-mono border border-line text-ink-dim hover:text-ink"
@@ -112,7 +114,7 @@ export function ConflictTheater() {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} reconnected={reconnected} />
         <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} reconnected={reconnected} />
       </div>

@@ -1,3 +1,5 @@
+import { FieldGraphic } from '../components/FieldGraphic'
+import './access.css'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -33,7 +35,7 @@ export function Login() {
   }
 
   return (
-    <div className="relative isolate flex min-h-screen flex-col overflow-hidden bg-[#C5D9E0] text-ink">
+    <div className="ev-access-page relative isolate flex min-h-screen flex-col overflow-hidden text-ink">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 bg-[url('/Contour-Map-navbar.svg')] bg-cover bg-[center_65%] opacity-[0.08]"
@@ -46,10 +48,11 @@ export function Login() {
         <span className="font-mono text-[11px] text-ink-faint">SECURE ACCESS</span>
       </header>
 
-      <main className="relative z-10 flex flex-1 items-center justify-center px-5 py-4">
-        <section className="glass-card w-full max-w-[410px] self-center px-5 pt-5 pb-[15px]">
+      <main className="ev-access-layout relative z-10">
+        <div className="ev-access-intro"><div className="ev-eyebrow">EX–VERO / FIELD WORKSPACE</div><h2>Your evidence.<br />In perspective.</h2><p>Choose a workspace to follow the signals, inspect local memory, and explore the decision trail.</p><FieldGraphic /><span className="ev-eyebrow">NUMERIC SIGNALS / VISUAL EVIDENCE</span></div>
+        <section className="glass-card ev-access-form">
           <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-500">FIELD COMMAND</p>
-          <h1 className="mt-1 text-2xl font-serif font-medium text-[#0B2239] leading-tight sm:whitespace-nowrap">FIELD COMMAND - Secure Access</h1>
+          <h1 className="ev-page-title mt-2">Enter your workspace</h1>
           <p className="mt-1 text-sm text-slate-700">Choose a data workspace to continue.</p>
 
           <form onSubmit={handleLogin}>
@@ -60,7 +63,7 @@ export function Login() {
               autoFocus
               value={userId}
               onChange={(event) => setUserId(event.target.value)}
-              className="w-full h-10 px-3 rounded-md bg-slate-50 border-2 border-[#0B3556] ring-2 ring-[#0B3556]/20 outline-none text-sm placeholder:text-slate-400 focus:border-[#0B3556] focus:ring-2 focus:ring-[#0B3556]/20"
+              className="w-full h-10 px-3 rounded-md bg-slate-50 border-2 border-good ring-2 ring-good/20 outline-none text-sm placeholder:text-slate-400 focus:border-good focus:ring-2 focus:ring-good/20"
               placeholder="Operator / User ID"
               required
             />
@@ -72,13 +75,13 @@ export function Login() {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full h-10 px-3 rounded-md bg-slate-50 border border-slate-300 text-sm focus:border-2 focus:border-[#0B3556] focus:ring-2 focus:ring-[#0B3556]/20 outline-none"
+              className="w-full h-10 px-3 rounded-md bg-slate-50 border border-slate-300 text-sm focus:border-2 focus:border-good focus:ring-2 focus:ring-good/20 outline-none"
               placeholder="••••••••••"
               required
             />
 
-            <button type="submit" className="mt-5 w-full h-10 inline-flex items-center justify-center gap-2 rounded-md bg-[#0B3556] hover:bg-[#0A2C47] text-white text-sm font-bold uppercase tracking-wide">
-              AUTHENTICATE SESSION
+            <button type="submit" className="mt-5 w-full h-10 inline-flex items-center justify-center gap-2 rounded-md bg-good hover:bg-[#1d5960] text-white text-sm font-bold uppercase tracking-wide">
+              Open workspace
               <svg aria-label="Lock" role="img" viewBox="0 0 16 16" className="h-[14px] w-[14px] fill-current">
                 <path d="M12 6h-1V4a3 3 0 0 0-6 0v2H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1ZM6.5 4a1.5 1.5 0 0 1 3 0v2h-3V4Zm2.25 6.72V12h-1.5v-1.28a1.5 1.5 0 1 1 1.5 0Z" />
               </svg>
@@ -87,7 +90,7 @@ export function Login() {
 
           <p aria-live="polite" className={`text-xs text-slate-600 ${message ? 'mt-1' : 'hidden'}`}>{message}</p>
           <div className="mt-3 border-t border-slate-200" />
-          <p className="mb-3 text-[11px] uppercase tracking-widest text-slate-500">QUICK DEMO ACCESS (SELECT DATASET)</p>
+          <p className="mb-3 text-[11px] uppercase tracking-widest text-slate-500">CHOOSE A DEMO WORKSPACE</p>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white/55 border border-white/80 rounded-lg shadow-lg ring-1 ring-white/50 backdrop-blur-md p-3 flex flex-col gap-3">
@@ -99,8 +102,8 @@ export function Login() {
                 </span>
                 <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-slate-900">NUMERIC DATA</span>
               </div>
-              <button type="button" aria-pressed={dataMode === 'numeric'} onClick={() => chooseMode('numeric')} className="w-full py-1.5 rounded-md border border-slate-800 bg-white hover:bg-slate-50 text-[9px] font-medium uppercase tracking-wide text-slate-900">
-                AUTO-FILL DEMO CREDENTIALS
+              <button type="button" aria-pressed={dataMode === 'numeric'} aria-label="Select Numeric workspace" onClick={() => chooseMode('numeric')} className="w-full py-1.5 rounded-md border border-slate-800 bg-white hover:bg-slate-50 text-[9px] font-medium uppercase tracking-wide text-slate-900">
+                Select workspace
               </button>
             </div>
 
@@ -115,8 +118,8 @@ export function Login() {
                 </span>
                 <span className="text-xs font-medium uppercase tracking-wide text-slate-900">IMAGE DATA</span>
               </div>
-              <button type="button" aria-pressed={dataMode === 'image'} onClick={() => chooseMode('image')} className="w-full py-1.5 rounded-md border border-slate-800 bg-white hover:bg-slate-50 text-[9px] font-medium uppercase tracking-wide text-slate-900">
-                AUTO-FILL DEMO CREDENTIALS
+              <button type="button" aria-pressed={dataMode === 'image'} aria-label="Select Image workspace" onClick={() => chooseMode('image')} className="w-full py-1.5 rounded-md border border-slate-800 bg-white hover:bg-slate-50 text-[9px] font-medium uppercase tracking-wide text-slate-900">
+                Select workspace
               </button>
             </div>
           </div>
