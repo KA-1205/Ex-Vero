@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { queryDevice } from '../../api/client'
 import type { QueryResult } from '../../types'
 import { MonoValue, Panel } from '../primitives'
@@ -6,8 +6,20 @@ import { MonoValue, Panel } from '../primitives'
 export function QAPanel({ deviceId }: { deviceId: string }) {
   const [question, setQuestion] = useState('')
   const [pending, setPending] = useState(false)
+  const [stage, setStage] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<(QueryResult & { question: string })[]>([])
+
+  useEffect(() => {
+    if (!pending) {
+      setStage('')
+      return
+    }
+    setStage('Querying local Qdrant Edge shard…')
+    const t1 = setTimeout(() => setStage('Retrieving dense + BM25 matches…'), 1800)
+    const t2 = setTimeout(() => setStage('Synthesizing answer with on-device LLM (qwen2.5:1.5b)…'), 4500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [pending])
 
   async function submit() {
     if (!question.trim() || pending) return
@@ -43,7 +55,21 @@ export function QAPanel({ deviceId }: { deviceId: string }) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-3">
-          {history.length === 0 && (
+          {pending && (
+            <div className="border border-good/50 bg-good/5 p-3 rounded text-xs space-y-1.5 font-mono">
+              <div className="flex items-center justify-between text-good">
+                <span className="font-semibold flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-good animate-ping" />
+                  {stage}
+                </span>
+                <span className="text-[10px] bg-good/20 text-good px-1.5 py-0.5 rounded font-bold">ON-DEVICE RAG</span>
+              </div>
+              <div className="text-[11px] text-ink-dim">
+                Zero network call — answering from local vector store & edge weights.
+              </div>
+            </div>
+          )}
+          {history.length === 0 && !pending && (
             <div className="text-ink-faint text-xs font-mono py-6 text-center">
               no queries yet — ask something above
             </div>

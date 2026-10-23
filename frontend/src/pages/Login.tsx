@@ -86,6 +86,15 @@ export function Login() {
                 <path d="M12 6h-1V4a3 3 0 0 0-6 0v2H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1ZM6.5 4a1.5 1.5 0 0 1 3 0v2h-3V4Zm2.25 6.72V12h-1.5v-1.28a1.5 1.5 0 1 1 1.5 0Z" />
               </svg>
             </button>
+            <div className="mt-2.5 text-center">
+              <button
+                type="button"
+                onClick={() => navigate('/numeric/overview')}
+                className="text-[11px] font-mono text-slate-500 hover:text-good underline cursor-pointer"
+              >
+                Or skip login and launch demo directly →
+              </button>
+            </div>
           </form>
 
           <p aria-live="polite" className={`text-xs text-slate-600 ${message ? 'mt-1' : 'hidden'}`}>{message}</p>

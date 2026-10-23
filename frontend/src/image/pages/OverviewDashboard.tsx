@@ -152,7 +152,18 @@ export function OverviewDashboard() {
               <input aria-label="Ask the fleet" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask about visual evidence in local memory…" disabled={!cameras.length} className="min-w-0 flex-1 border border-line bg-base-sunken px-2 py-2 text-xs outline-none focus:border-good" />
               <button type="submit" disabled={!cameras.length || queryPending} className="border border-line px-3 font-mono text-[10px] hover:border-good disabled:opacity-50">{queryPending ? '…' : 'ASK'}</button>
             </form>
-            {queryState ? <QueryResultView result={queryState} /> : <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />}
+            {queryPending ? (
+              <div className="border border-good/50 bg-good/5 p-2.5 rounded text-xs space-y-1 font-mono text-good animate-pulse">
+                <div className="font-semibold flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-good animate-ping" />
+                  Searching cross-modal visual embeddings across camera shards…
+                </div>
+              </div>
+            ) : queryState ? (
+              <QueryResultView result={queryState} />
+            ) : (
+              <LoadingRow text={cameras.length ? 'Ask for visual evidence from the local fleet.' : '—'} />
+            )}
           </div>
         </Panel>
       </div>

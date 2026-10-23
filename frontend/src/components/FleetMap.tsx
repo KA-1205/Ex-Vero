@@ -136,11 +136,14 @@ export function FleetMap({ devices, loading }: { devices: DeviceSummary[]; loadi
       {tiles.map((tile) => (
         <img
           key={`${zoom}/${tile.x}/${tile.y}`}
-          src={`https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`}
+          src={`https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${zoom}/${tile.x}/${tile.y}.png`}
           alt=""
           draggable={false}
           className="pointer-events-none absolute h-64 w-64 max-w-none"
           style={{ left: tile.left, top: tile.top, filter: 'saturate(.4) contrast(.94)' }}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'
+          }}
         />
       ))}
 

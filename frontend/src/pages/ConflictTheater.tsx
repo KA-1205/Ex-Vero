@@ -117,6 +117,15 @@ export function ConflictTheater() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 p-2.5 bg-base-sunken/60 border border-line rounded text-[11px] font-mono">
+        <span className="font-bold text-good">DEMO SEQUENCE:</span>
+        <span className={`px-2 py-0.5 rounded ${mode === 'offline' ? 'bg-alert/15 text-alert font-bold' : 'text-ink-dim'}`}>1. Disconnect (RESET)</span>
+        <span className="text-ink-faint">→</span>
+        <span className={`px-2 py-0.5 rounded ${pendingConsensus ? 'bg-pending/20 text-pending font-bold' : 'text-ink-dim'}`}>2. Inject Disagreement</span>
+        <span className="text-ink-faint">→</span>
+        <span className={`px-2 py-0.5 rounded ${resolved ? 'bg-good/20 text-good font-bold' : 'text-ink-dim'}`}>3. Reconnect & Bayesian Fold</span>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <DeviceSide name={deviceA.name} id={deviceA.id} value={DEVICE_A.value} online={isDevAOnline} />
         <DeviceSide name={deviceB.name} id={deviceB.id} value={DEVICE_B.value} online={isDevBOnline} />
@@ -214,11 +223,19 @@ export function ConflictTheater() {
                         {c.value}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-line/30 text-ink-dim font-mono text-[11px]">
-                      <span>trust weight</span>
-                      <MonoValue className={c.trust_score >= 0.7 ? 'text-good' : c.trust_score >= 0.5 ? 'text-pending' : 'text-alert'}>
-                        {c.trust_score.toFixed(2)}
-                      </MonoValue>
+                    <div className="pt-1.5 border-t border-line/30 space-y-1">
+                      <div className="flex items-center justify-between text-ink-dim font-mono text-[11px]">
+                        <span>trust weight</span>
+                        <MonoValue className={c.trust_score >= 0.7 ? 'text-good font-semibold' : c.trust_score >= 0.5 ? 'text-pending font-semibold' : 'text-alert font-semibold'}>
+                          {c.trust_score.toFixed(2)}
+                        </MonoValue>
+                      </div>
+                      <div className="h-1.5 w-full bg-base-sunken rounded-full overflow-hidden border border-line/40">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${c.trust_score >= 0.7 ? 'bg-good' : c.trust_score >= 0.5 ? 'bg-pending' : 'bg-alert'}`}
+                          style={{ width: `${Math.min(100, Math.max(8, c.trust_score * 100))}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
