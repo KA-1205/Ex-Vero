@@ -62,7 +62,8 @@ describe('OverviewDashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('0 ACTIVE NODES')).toBeInTheDocument()
+      expect(screen.getByText('TOTAL DEVICES')).toBeInTheDocument()
+      expect(screen.getByText('0 offline · 0 online')).toBeInTheDocument()
     })
   })
 })
