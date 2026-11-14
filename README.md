@@ -26,14 +26,9 @@ and a <b>walkie-talkie</b> that disputes and converges with the fleet when it re
   <a href="#docs">Docs</a>
 </p>
 
-<!-- TODO: add a short demo GIF at docs/assets/ex-vero-demo.gif -->
-<p align="center">
-  <img src="docs/assets/ex-vero-demo.gif" alt="Devices answer offline, disagree, then converge into one trusted answer on reconnect">
-</p>
-<p align="center">
-Devices answer offline, disagree, then converge into one trusted answer with a visible confidence score.
-Runs locally with Docker: <a href="#quick-start">quick start</a>.
-</p>
+[Demo walkthrough](docs/demo-flow.md) · [Contribution record](docs/CONTRIBUTIONS.md) · [Benchmark methodology](docs/BENCHMARKS.md) · [CI runs](https://github.com/KA-1205/Ex-Vero/actions)
+
+**Validation scope:** a collaborative prototype tested with deterministic fixtures and emulated device/network constraints. The offline wiring benchmark uses hash embeddings; it does not measure semantic retrieval quality or physical edge hardware. Historical metrics below have separate reproduction requirements.
 
 *Built for Qdrant, Problem Statement 03: AI-Powered Edge Memory & Intelligence Platform.*
 
@@ -122,6 +117,8 @@ curl -s localhost:8000/devices/dev-01/telemetry
 ### Tests
 
 ```bash
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt pytest==9.1.1
 .venv/bin/python -m pytest -q
 
 # the container acceptance test needs a Docker daemon
@@ -187,7 +184,7 @@ Devices can't hear each other while offline. Each one just remembers what it saw
 
 ### 3. Only the hardware and network are emulated
 
-Everything measured is real. Each device runs in a real CPU/RAM-limited container, telemetry is read from the real cgroup, and the network layer injects real latency, a real byte cap, and real failures. The network layer sits on the sync transport only, never on the query or answer path (enforced by a test). That makes "instant offline search" an architectural guarantee rather than lucky timing.
+The Docker setup applies CPU/RAM limits, reads cgroup telemetry, and injects latency, byte caps, and failures in the sync transport. These are emulated device/link conditions; see the benchmark methodology for which components each run exercises. The network layer sits on the sync transport only, never on the query or answer path (enforced by a test). Offline queries avoid this sync transport; their latency still depends on the model, workload, and host.
 
 ## Architecture
 
@@ -389,12 +386,11 @@ serverless function. See [Deploying to Vercel](#deploying-to-vercel).
 | Clock drift | per-device skew knob (metadata only) | fold result unchanged (test) |
 
 Only the *device* and the *link conditions* stand in for hardware we do not have yet.
-Everything in the runtime path above is real code, and every number on screen is read
-from the running system.
+The architecture describes the runtime implementation. Dashboard output and deterministic test fixtures are not substitutes for a measured deployment benchmark.
 
 ## Measured, not typed in
 
-Every number below comes from real code run against labelled fixtures. No figure is stored.
+These are historical, workload-specific observations, not newly reproduced results. The [methodology](docs/BENCHMARKS.md) distinguishes saved artifacts from figures that require a new run.
 
 | Measured | Result | How |
 | --- | --- | --- |
@@ -506,7 +502,7 @@ edge-node/
 
 ## Project status
 
-All ten backend build phases are complete and audited: capture, hybrid search, decision engine, outbox/push, snapshot pull, consensus fold, semantic conflict detection, network layer, on-device RAG, measured benchmarks, and telemetry from real cgroup stats. The React dashboard is built and wired to the live backend contract.
+The repository implements capture, hybrid search, sync, consensus, on-device answers, a React dashboard, and benchmark/telemetry harnesses. CI exercises a named deterministic subset; pretrained-model and external-service checks have separate requirements. This is a prototype, with physical-device and production validation still open.
 
 ## Docs
 
@@ -515,11 +511,13 @@ All ten backend build phases are complete and audited: capture, hybrid search, d
 
 ## Team
 
-<!-- TODO: add names / GitHub handles -->
+Kartik Arora’s documented work includes cited-answer implementation and validation, plus gateway packaging and its regression guard. See [authored commits and supporting tests](docs/CONTRIBUTIONS.md).
+
+TODO(Kartik): confirm the complete team roster and each teammate’s responsibilities.
 
 ## License
 
-<!-- TODO: add a LICENSE file to the repo, then name it here (e.g. MIT or Apache 2.0) -->
+No repository license has been selected. TODO(Kartik): confirm a license with the collaborators before adding one.
 
 If Ex-Vero helps you, a ⭐ helps other edge and Qdrant builders find it.
 
