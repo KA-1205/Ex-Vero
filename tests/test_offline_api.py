@@ -72,6 +72,12 @@ def test_capture_search_views_and_offline_mode(client):
     )
 
 
+def test_memory_pagination_rejects_out_of_range_values(client):
+    for query in ("limit=0", "limit=1001", "offset=-1"):
+        response = client.get(f"/devices/test/memory?{query}")
+        assert response.status_code == 422, (query, response.text)
+
+
 def test_missing_hub_errors_and_demo_gate(client):
     for action in ["push", "pull"]:
         r = client.post("/devices/test/" + action)
